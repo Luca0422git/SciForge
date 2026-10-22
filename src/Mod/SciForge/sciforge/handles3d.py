@@ -20,7 +20,7 @@ import time
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import drag_guard, handle_look, increments, warn
+from . import drag_guard, handle_look, increments, taskui, warn
 from .compat import QtCore
 from .taskui import BoxCarrier
 
@@ -199,6 +199,7 @@ class _Handle(BoxCarrier):
             ("SoLocation2Event", self.view.addEventCallback("SoLocation2Event", self._moved)),
         ]
         self._timer.start()
+        self._move_poll = taskui.poll_on_move(self._poll)  # dragged: polled on every mouse move
 
     def _paint(self):
         state = self._hover or self._drag
@@ -307,6 +308,7 @@ class _Handle(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        taskui.drop_poll_on_move(self)
         for kind, callback in self.callbacks:
             try:
                 self.view.removeEventCallback(kind, callback)

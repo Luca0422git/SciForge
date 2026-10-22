@@ -1387,6 +1387,7 @@ class Panel:
     # the mouse paused or was let go. Never between two mouse moves (see schedule()).
     PAUSE_MS = 200
     SLOW_DRAG = 0.25
+    REST_FIRST = False  # every rebuild waits for the rest (a dialog with its own live picture)
 
     def __init__(self, doc, transaction):
         from . import ui_icon
@@ -1472,7 +1473,10 @@ class Panel:
         now = time.perf_counter()
         streaming = now - getattr(self, "_last_change", -1.0) < self.STREAM_GAP
         self._last_change = now
-        self._waits_rest = bool(settle) or self._slow()
+        if settle or self.REST_FIRST or self._slow():
+            self._waits_rest = True  # kept until the rebuild runs (another change may come)
+        elif not self._timer.isActive():
+            self._waits_rest = False
         if self._timer.isActive():
             return
         wait = self.PREVIEW_MS

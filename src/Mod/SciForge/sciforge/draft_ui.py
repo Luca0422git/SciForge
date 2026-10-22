@@ -148,6 +148,9 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     title = "Draft"
     icon = "draft"
     last = None  # the most recent panel (tests and diagnostics)
+    # the live picture follows every change at once (draft_live); the exact solid is built
+    # once the changes rest (taskui.Panel.schedule), never while the mouse drags something
+    REST_FIRST = True
 
     def __init__(self, doc, feature=None, picks=None, body=None):
         super().__init__(doc, "Draft" if feature is None else "Edit Draft")

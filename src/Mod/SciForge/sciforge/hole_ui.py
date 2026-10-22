@@ -21,7 +21,7 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, drag_guard, hole, log, preview, ui_icon_path, warn
+from . import commands, drag_guard, hole, log, preview, taskui, ui_icon_path, warn
 from . import hole_common as common
 from . import hole_tables
 from . import thread_tables as tables
@@ -92,6 +92,7 @@ class PointDragger(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        self._move_poll = taskui.poll_on_move(self._poll)  # dragged: polled on every mouse move
 
     @staticmethod
     def _disc(coin, radius, color):
@@ -167,6 +168,7 @@ class PointDragger(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        taskui.drop_poll_on_move(self)
         drag_guard.before_remove(self.dragger, self.root, self.view)
         try:
             self.view.getSceneGraph().removeChild(self.root)

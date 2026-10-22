@@ -24,6 +24,8 @@ picture's angle (drafting.draft_shape):
                                at the steepest one, said in the dialog
 """
 
+import time
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -81,14 +83,20 @@ def sides(f):
 
 
 def open_draft(names, plane=None):
+    """The Draft dialog with the pull direction (an origin plane, or a face of the part) and
+    `names` picked."""
     from sciforge import draft_ui
 
     Gui.Selection.clearSelection()
     body = S["b"].body
     tip = body.Tip
     plane = plane if plane is not None else (origin("XY_Plane"), "")
-    picks = [plane] + [(tip, n) for n in names]
+    whole = not plane[1]
+    picks = ([plane] if whole else []) + [(tip, n) for n in names]
     panel = draft_ui.DraftPanel(S["doc"], picks=picks, body=body)
+    if not whole:
+        panel._set_plane(plane)  # a face as the pull direction, as clicking it does
+        panel._picks_updated()
     Gui.Control.showDialog(panel)
     S["panel"] = panel
 
@@ -171,14 +179,14 @@ def exact_ok(label, volume=None):
         h.check("%s: its volume" % label, sd.close(got.Volume, volume), (got.Volume, volume))
 
 
-def drag(to_deg, label, hold_ms=600, moves=30):
+def drag(to_deg, label, hold_ms=600, moves=30, check=True):
     """Turn the angle disc to `to_deg` with the button held; samples after every move."""
     p = panel()
     if p is None or p.handle is None:
         h.check("%s: the angle handle" % label, False)
         return
     p._timer.stop()
-    S["rec"] = rec = {"samples": [], "builds": [], "label": label, "checked": False}
+    S["rec"] = rec = {"samples": [], "builds": [], "label": label, "checked": not check}
     old = p._preview
 
     def preview(*args, **kwargs):
@@ -202,9 +210,12 @@ def drag(to_deg, label, hold_ms=600, moves=30):
                 "live": live.angles[0] if shown and live.angles else None,
             }
         )
-        if index == moves // 2 + 2 and shown and not rec["checked"]:
+        angle = float(q.options.get("angle", 0.0))
+        if index >= moves // 2 and shown and not rec["checked"] and abs(angle) > 0.5:
             rec["checked"] = True
             picture_matches(label + ", while dragged", q)
+            # the check took a while with the mouse still: that is not a pause of the hand
+            q._last_motion = time.perf_counter()
 
     here, there = p.handle.screen_points(to_deg)
     S["drag"] = a.HeldDrag(
@@ -283,9 +294,10 @@ def four_sides():
     p = panel()
     if p is None:
         return
-    tip = S["b"].body.Tip
-    for name in faces_where(sides):
-        p._add_face(tip, name)
+    base = p.base  # the part before the step (the body's Tip is the preview now)
+    for i, face in enumerate(base.Shape.Faces, 1):
+        if sides(face):
+            p._add_face(base, "Face%d" % i)
     p._picks_updated()
 
 
@@ -533,7 +545,7 @@ EDITED = parts.BOX + [
     {
         "op": "fillet",
         "id": "f1",
-        "edges": {"type": "line", "parallel": [0, 0, 1], "at": {"axis": "x", "value": "max"}, "count": 2},
+        "edges": {"type": "line", "parallel": [0, 0, 1], "at": {"axis": "y", "value": "max"}, "count": 2},
         "radius": 2,
     },
 ]
@@ -596,7 +608,9 @@ steep_open.wait_ms = 3000
 
 
 def steep_drag():
-    drag(20.0, "past the steepest angle", hold_ms=1500)
+    # past what fits, not known yet: the picture follows (nothing tells it apart before the
+    # exact solid is tried) until the mouse rests; the limit is looked for then
+    drag(20.0, "past the steepest angle", hold_ms=1500, check=False)
 
 
 def steep_dragged():
@@ -614,8 +628,8 @@ def steep_dragged():
     h.check("the picture is gone", p is not None and not (p._live and p._live.shown))
     exact_ok("held at the steepest angle")
     h.check("moved during the drag", len(rec.get("samples", [])) > 10)
-    # dragged past it again: the picture stops at the limit (it never shows what does not work)
-    drag(25.0, "past the steepest angle again", hold_ms=300)
+    # dragged past it again: the picture stops where the angles are known not to work
+    drag(25.0, "past the steepest angle again", hold_ms=300, check=False)
 
 
 steep_dragged.wait_ms = 2000
@@ -625,12 +639,20 @@ def steep_again():
     rec = S.get("rec") or {}
     p = panel()
     limit = float(p.options.get("angle", 0.0)) if p else 0.0
-    shown = [x["live"] for x in rec.get("samples", []) if x["shown"]]
+    wall = None
+    if p is not None:
+        found = p.limits.cache.get(p.limit_key("angle"), "hi+")
+        wall = found[2] if found else None
+    samples = rec.get("samples", [])
+    shown = [x["live"] for x in samples if x["shown"]]
+    angles = [x["angle"] for x in samples]
     h.check(
-        "dragged past it again: the picture stops at the limit",
-        bool(shown) and max(shown) <= limit + 1e-9,
-        (max(shown) if shown else None, limit),
+        "dragged past it again: the dialog and the picture stay before the angles known not "
+        "to work",
+        bool(angles) and wall is not None and max(angles + shown) < wall,
+        (max(angles) if angles else None, max(shown) if shown else None, limit, wall),
     )
+    h.check("held at the steepest angle again", 7.0 <= limit < 8.0, limit)
     if p is not None:
         try:
             del p._preview
