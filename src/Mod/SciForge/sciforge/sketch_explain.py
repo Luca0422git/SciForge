@@ -27,7 +27,7 @@ from . import sketch_explain_core as core
 
 HIGHLIGHT_MS = 2500
 PROBE_LIMIT = 150  # constraints switched off at most to find a redundancy's culprits
-PROBE_SECONDS = 1.5
+PROBE_SECONDS = 1.0  # in all, to find a redundancy's culprits (each try is a solve)
 
 
 # -- reading constraints ----------------------------------------------------------------------
@@ -121,12 +121,14 @@ def _neighbours(sketch, index):
 # -- finding the culprits ---------------------------------------------------------------------
 class Finding:
     """What is wrong with some new constraints: kind "conflict", "redundant" or "" (all
-    fine); `bad`: the new ones that do not fit; `culprits`: the existing ones they fight."""
+    fine); `bad`: the new ones that do not fit; `culprits`: the existing ones they fight;
+    `partial`: the culprits are only some of them (the search was cut short)."""
 
     def __init__(self, kind="", bad=(), culprits=()):
         self.kind = kind
         self.bad = list(bad)
         self.culprits = list(culprits)
+        self.partial = bool(getattr(culprits, "partial", False))
 
     def __bool__(self):
         return bool(self.kind)
@@ -149,43 +151,120 @@ def conflict_culprits(sketch, new):
     )
 
 
-def redundant_culprits(sketch, index, exclude=()):
+def _nearness(sketch, index, candidates):
+    """`candidates` (constraint indices) closest to constraint `index` first: the ones on its
+    own curves, then those one curve further, and so on; within a ring the directions and
+    relations (the usual reason a constraint is so already) before the dimensions, and the
+    joins last."""
+    cons = sketch.Constraints
+    by_geo = {}
+    for i, c in enumerate(cons):
+        for g in _geos(c):
+            by_geo.setdefault(g, []).append(i)
+    distance = {g: 0 for g in _geos(cons[index])}
+    ring = list(distance)
+    while ring:
+        following = []
+        for g in ring:
+            for j in by_geo.get(g, ()):
+                for h in _geos(cons[j]):
+                    if h not in distance:
+                        distance[h] = distance[g] + 1
+                        following.append(h)
+        ring = following
+    likely = {0: 1, 1: 0, 2: 0, 3: 2, 4: 3}  # meaning_rank -> probe order
+
+    def key(j):
+        geos = _geos(cons[j])
+        near = min((distance.get(g, 10**6) for g in geos), default=10**6)
+        info = {"type": cons[j].Type}
+        return (near, likely.get(core.meaning_rank(info), 3), j)
+
+    return sorted(candidates, key=key)
+
+
+class Culprits(list):
+    """Culprits found by switching constraints off; `partial`: the search was cut short."""
+
+    partial = False
+
+
+def _solves_itself(sketch):
+    """FreeCAD solves the sketch on every change of its constraints itself (setActive too)
+    while it is open for editing and the Sketcher's "Auto-update" is off (its default; its
+    task panel sets the sketch's noRecomputes then, which Python cannot read)."""
+    if not _in_edit(sketch):
+        return False
+    try:
+        group = App.ParamGet("User parameter:BaseApp/Preferences/Mod/Sketcher")
+        return not group.GetBool("AutoRecompute", False)
+    except Exception:
+        return False
+
+
+def redundant_culprits(sketch, index, exclude=(), solved=False):
     """The existing constraints that already say what constraint `index` says. FreeCAD names
-    only the one it would drop, so each constraint connected to it is switched off in turn:
-    the ones whose absence ends the redundancy are the culprits. The constraints are put
-    back as they were (and the curves, should the solver have nudged them)."""
+    only the one it would drop, so the constraints connected to it are switched off in turn,
+    the nearest first: the ones whose absence ends the redundancy are the culprits. Each try
+    is a solve of the whole sketch, so on a big sketch the search stops after PROBE_SECONDS
+    in all (the solves before and after included): then only the culprits found so far are
+    named (none: the message says it is so already, no guess). `solved`: the caller has
+    just solved the sketch as it is. The constraints are put back as they were (and the
+    curves, should the solver have nudged them)."""
+    started = time.time()
+    found = Culprits()
     cons = sketch.Constraints
     exclude = set(exclude) | {index}
     candidates = [
-        j for j in sorted(component(sketch, [index])) if j not in exclude and _nameable(cons[j])
-    ][:PROBE_LIMIT]
+        j for j in component(sketch, [index]) if j not in exclude and _nameable(cons[j])
+    ]
     if not candidates:
-        return []
-    sketch.solve()
+        return found
+    candidates = _nearness(sketch, index, candidates)[:PROBE_LIMIT]
+    if not solved:
+        sketch.solve()
     _conflicting, redundant = bad_sets(sketch)
     base = len(redundant)
     if index not in redundant or not base:
-        return []
+        return found
     geometry = sketch.Geometry
-    found = []
-    started = time.time()
+    itself = _solves_itself(sketch)  # then setActive solves: no second solve of ours
+    tries = 0
+    slowest = 0.0
+    complete = True
     try:
         for j in candidates:
-            if time.time() - started > PROBE_SECONDS:
-                log("explain: stopped looking for culprits after %d tries" % len(found))
+            # room left for this try (and for the solve that puts the sketch back, unless
+            # setActive does that)
+            if time.time() - started + (1 if itself else 2) * slowest > PROBE_SECONDS:
+                complete = False
+                log(
+                    "explain: stopped looking for culprits after %d of %d tries (%.1f s)"
+                    % (tries, len(candidates), time.time() - started)
+                )
                 break
+            tries += 1
+            began = time.time()
             sketch.setActive(j, False)
             try:
-                sketch.solve()
+                if not itself:
+                    sketch.solve()
                 _c, now = bad_sets(sketch)
                 if index not in now and len(now) < base:
                     found.append(j)
             finally:
                 sketch.setActive(j, True)
+            slowest = max(slowest, time.time() - began)
     finally:
-        sketch.solve()
+        if not itself:  # (else the last setActive solved the sketch as it is)
+            sketch.solve()
         _restore_geometry(sketch, geometry)
-    return found or _neighbours(sketch, index)
+    if found or not complete:
+        found.partial = not complete
+        return found
+    # every one tried, none alone ends it (it is said twice over): the ones on its curves
+    found.extend(_neighbours(sketch, index))
+    return found
 
 
 def _restore_geometry(sketch, geometry):
@@ -214,9 +293,35 @@ def _same_curve(a, b, tol=1e-9):
     return True
 
 
+FAILED = -1  # SketchObject.solve(): the solver found no solution
+REDUNDANT = -2  # SketchObject.solve(): redundant constraints (the others are worse)
+
+
+def _solve_without(sketch, new):
+    """(solve code, conflicting, redundant) of the sketch with the constraints `new`
+    switched off, then switched on again (the curves put back)."""
+    geometry = sketch.Geometry
+    try:
+        for i in new:
+            sketch.setActive(i, False)
+        code = sketch.solve()
+        conflicting, redundant = bad_sets(sketch)
+    finally:
+        for i in new:
+            sketch.setActive(i, True)
+        sketch.solve()
+        _restore_geometry(sketch, geometry)
+    return code, conflicting, redundant
+
+
 def check_new(sketch, new, probe=True):
-    """Solve and look at the constraints `new` (indices): a Finding (empty when they fit)."""
-    sketch.solve()
+    """Solve and look at the constraints `new` (indices): a Finding (empty when they fit).
+    FreeCAD does not always flag the new constraint itself: a redundancy can be pinned on
+    older constraints (a Symmetry that repeats a rectangle's Horizontal and Vertical), and
+    when the solver finds no solution at all it lists nothing (a corner pinned to the origin
+    of a rectangle centred elsewhere). Then the sketch is solved once without the new ones:
+    when it was fine (or better) before, they do not fit."""
+    code = sketch.solve()
     conflicting, redundant = bad_sets(sketch)
     new = [i for i in new if 0 <= i < len(sketch.Constraints)]
     bad = [i for i in new if i in conflicting]
@@ -224,15 +329,41 @@ def check_new(sketch, new, probe=True):
         return Finding("conflict", bad, conflict_culprits(sketch, new))
     bad = [i for i in new if i in redundant]
     if bad:
-        culprits = redundant_culprits(sketch, bad[0], exclude=new) if probe else []
+        culprits = (
+            redundant_culprits(sketch, bad[0], exclude=new, solved=True) if probe else []
+        )
         return Finding("redundant", bad, culprits)
-    return Finding()
+    if code == 0 or not new:
+        return Finding()
+    partial = {i - 1 for i in getattr(sketch, "PartiallyRedundantConstraints", ())}
+    before, conflicting_before, redundant_before = _solve_without(sketch, new)
+    worse = (
+        before == 0
+        or len(conflicting) > len(conflicting_before)
+        or len(redundant) > len(redundant_before)
+        or (before == REDUNDANT and code != REDUNDANT)
+    )
+    if not worse:
+        return Finding()  # it was so before the new ones: not theirs
+    near = component(sketch, new)
+    cons = sketch.Constraints
+
+    def named(indices):
+        return sorted(
+            i for i in indices if i not in new and i in near and _nameable(cons[i])
+        )
+
+    if code == REDUNDANT:
+        # FreeCAD pinned the redundancy on older ones: with the new ones they say it twice
+        return Finding("redundant", new, named(redundant - redundant_before))
+    culprits = named(conflicting - conflicting_before) or named(partial)
+    return Finding("conflict", new, culprits)
 
 
 def refusal(sketch, title, finding):
     """The constraint tool's message for `finding` (sketch_explain_core.refused_constraint)."""
     text, count = words(sketch, finding.culprits)
-    return core.refused_constraint(title, finding.kind, text, count)
+    return core.refused_constraint(title, finding.kind, text, count, finding.partial)
 
 
 def log_finding(where, sketch, finding):
@@ -519,8 +650,8 @@ def _NextAction():
 
 # -- Fusion's padlock ------------------------------------------------------------------------------
 def fully_constrained(sketch):
-    """True when nothing in the sketch can move (Fusion's padlock): read from what the
-    solver last found, no solve."""
+    """True when nothing in the sketch can move and nothing is wrong with it (Fusion's
+    padlock): read from what the solver last found, no solve."""
     try:
         return core.is_fully_constrained(
             sketch.GeometryCount,
@@ -529,7 +660,30 @@ def fully_constrained(sketch):
             sketch.ConflictingConstraints,
             sketch.MalformedConstraints,
             sketch.RedundantConstraints,
+            broken=_broken(sketch),
         )
+    except Exception:
+        return False
+
+
+def _broken(sketch):
+    """The sketch's last recompute failed (FreeCAD: "Solving the sketch failed", redundant
+    or conflicting constraints). Not asked of the sketch open for editing: its solver has
+    been told of every change since, its State only of the last recompute."""
+    if not ({"Invalid", "Error"} & set(sketch.State)):
+        return False
+    return not _in_edit(sketch)
+
+
+def _in_edit(sketch):
+    if not App.GuiUp:
+        return False
+    try:
+        import FreeCADGui as Gui
+
+        gui_doc = Gui.getDocument(sketch.Document.Name)
+        vp = gui_doc.getInEdit() if gui_doc is not None else None
+        return vp is not None and vp.Object == sketch
     except Exception:
         return False
 
@@ -604,9 +758,6 @@ def inference_rank(sketch, c):
     return core.inference_rank(c.Type, c.FirstPos, c.SecondPos, lines, touching)
 
 
-FAILED = -1  # SketchObject.solve(): the solver found no solution
-
-
 def collapsed(g, tol=1e-6):
     """A sketch curve with no size left: a line of length 0, a circle or arc of radius 0."""
     if g.TypeId == "Part::GeomLineSegment":
@@ -625,81 +776,89 @@ def _collapsed_among(sketch, geos, geometry=None):
 
 
 def add_checked(sketch, constraints):
-    """Add inferred constraints and keep those that fit. Fast path: all at once; when one or
-    more turn out redundant or conflicting, they are taken out and tried again one by one,
-    strongest first (sketch_explain_core.inference_rank), each kept only if the sketch stays
-    clean, so a weak guess (parallel) never pushes out a strong one (a snapped corner).
-    "Clean" also means the solver still finds a real solution: guesses that only fit together
-    by collapsing a curve (upright and parallel to a level line) are no conflict to FreeCAD,
-    its solver squeezes the line to a point (or fails, -1). The curves are put back when a
-    try did that. Returns the constraints kept (as they are now in the sketch)."""
+    """Add inferred constraints and keep those that fit. Fast path: all at once, one solve
+    (as before this check existed). When the sketch is not clean then (a redundant or
+    conflicting constraint, no solution, or a curve squeezed to nothing: guesses that only
+    fit together by collapsing a line, upright and parallel to a level line, are no conflict
+    to FreeCAD), the weakest guesses are taken out until it is clean and the others tried
+    again, strongest first (sketch_explain_core.keep_strongest), so a weak guess (parallel)
+    never pushes out a strong one (a snapped corner). Each step is one solve; constraints
+    are taken out without FreeCAD's own extra solve, and the curves are put back only after
+    a collapse. Returns the constraints kept (as they are now in the sketch)."""
     constraints = [c for c in constraints if c is not None]
     if not constraints:
         return []
-    failed_before = sketch.solve() == FAILED
-    conflicting, redundant = bad_sets(sketch)
-    before = len(conflicting | redundant)
     touched = _curves_of(constraints)
-    geometry = sketch.Geometry
+    geometry = sketch.Geometry  # a cheap copy (only setting it back costs)
     flat_before = _collapsed_among(sketch, touched, geometry)
     first = len(sketch.Constraints)
-
-    def broke(new_indices):
-        """The constraints just added made the sketch worse."""
-        fails = sketch.solve() == FAILED and not failed_before
-        conflicting, redundant = bad_sets(sketch)
-        now = conflicting | redundant
-        return (
-            fails
-            or any(i in now for i in new_indices)
-            or len(now) > before
-            or bool(_collapsed_among(sketch, touched) - flat_before)
-        )
-
     sketch.addConstraint(constraints)
-    if not broke(range(first, len(sketch.Constraints))):
+    present = list(constraints)  # in the sketch from `first` on, in this order
+    state = {"collapsed": False, "stale": False, "code": 0}
+
+    def clean():
+        state["code"] = sketch.solve()
+        state["collapsed"] = bool(_collapsed_among(sketch, touched) - flat_before)
+        state["stale"] = False
+        return state["code"] == 0 and not state["collapsed"]
+
+    if clean():
         return list(sketch.Constraints[first:])
-    for i in reversed(range(first, len(sketch.Constraints))):
-        sketch.delConstraint(i)
-    _restore_geometry(sketch, geometry)
-    sketch.solve()
+
+    def remove(c):
+        at = next(k for k, x in enumerate(present) if x is c)
+        sketch.delConstraint(first + at, True)  # no solve: the next step solves
+        del present[at]
+        if state["collapsed"]:
+            sketch.Geometry = geometry  # the solver squeezed a curve: the curves go back
+            state["collapsed"] = False
+        state["stale"] = True
+
+    def drop(c):
+        remove(c)
+        return clean()
 
     def try_add(c):
-        saved = sketch.Geometry
-        index = sketch.addConstraint(c)
-        if broke([index]):
-            sketch.delConstraint(index)
-            _restore_geometry(sketch, saved)
-            sketch.solve()
-            return False
-        return True
+        sketch.addConstraint(c)
+        present.append(c)
+        if clean():
+            return True
+        remove(c)
+        return False
 
-    kept = core.add_in_order(constraints, lambda c: inference_rank(sketch, c), try_add)
-    if len(kept) < len(constraints):
-        log(
-            "sketch: inferred constraints tried one by one: kept %s, left out %d"
-            % (", ".join(c.Type for c in kept) or "none", len(constraints) - len(kept))
-        )
-    return list(sketch.Constraints[first:])
-    for i in reversed(range(first, len(sketch.Constraints))):
-        sketch.delConstraint(i)
-    sketch.solve()
-
-    def try_add(c):
-        index = sketch.addConstraint(c)
-        fails = sketch.solve() == FAILED and not failed_before
+    rank = lambda c: inference_rank(sketch, c)  # noqa: E731
+    kept = core.keep_strongest(constraints, rank, drop, try_add)
+    if kept is None:
+        # not clean even without them: it was not before. One by one, each kept when it
+        # makes the sketch no worse than it was
+        failed_before = state["code"] == FAILED
         conflicting, redundant = bad_sets(sketch)
-        now = conflicting | redundant
-        if fails or index in now or len(now) > before:
-            sketch.delConstraint(index)
-            sketch.solve()
-            return False
-        return True
+        before = len(conflicting | redundant)
 
-    kept = core.add_in_order(constraints, lambda c: inference_rank(sketch, c), try_add)
+        def no_worse(c):
+            index = sketch.addConstraint(c)
+            present.append(c)
+            code = sketch.solve()
+            state["collapsed"] = bool(_collapsed_among(sketch, touched) - flat_before)
+            state["stale"] = False
+            conflicting, redundant = bad_sets(sketch)
+            now = conflicting | redundant
+            if (
+                (code == FAILED and not failed_before)
+                or index in now
+                or len(now) > before
+                or state["collapsed"]
+            ):
+                remove(c)
+                return False
+            return True
+
+        kept = core.add_in_order(constraints, rank, no_worse)
+    if state["stale"]:
+        sketch.solve()
     if len(kept) < len(constraints):
         log(
-            "sketch: inferred constraints tried one by one: kept %s, left out %d"
+            "sketch: inferred constraints that did not all fit: kept %s, left out %d"
             % (", ".join(c.Type for c in kept) or "none", len(constraints) - len(kept))
         )
     return list(sketch.Constraints[first:])

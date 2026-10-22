@@ -165,10 +165,13 @@ def _is_line(geo, kinds):
 
 # FreeCAD's constraint tools name their undo step "Add horizontal constraint" and so on: the
 # Fusion title of the tool behind each (dimension steps are not here: a dimension that repeats
-# the sketch becomes a driven one instead, sketch_mode._make_driven_if_redundant).
+# the sketch becomes a driven one instead, sketch_mode._make_driven_if_redundant). BY_TYPE: the
+# step does not say which (Horizontal/Vertical): the title is the type of the constraint added.
+BY_TYPE = ""
 STEP_TITLES = {
     "horizontal": "Horizontal",
     "vertical": "Vertical",
+    "horizontal/vertical": BY_TYPE,
     "coincident": "Coincident",
     "point on object": "Coincident",
     "parallel": "Parallel",
@@ -182,15 +185,42 @@ STEP_TITLES = {
     "block": "Fix",
     "fixed": "Fix",
 }
+# the endings of those steps: "Add horizontal constraint", "Add vertical alignment" (two
+# points made level or upright), "Add tangent constraint point" (tangent through a new point)
+STEP_ENDINGS = (" constraint point", " constraint", " alignment")
+# Tangent on curves whose ends are already joined: FreeCAD swaps the join for an end-to-end
+# tangency in one step, so the number of constraints does not grow (the new one is the last)
+SWAP_STEPS = {
+    "swap coincident+tangency with ptp tangency": "Tangent",
+    "swap point on object and tangency with point to curve tangency": "Tangent",
+}
 
 
-def constraint_step_title(step):
+def constraint_step_title(step, types=()):
     """The Fusion title of the constraint tool whose undo step is called `step`, or None
-    when it is not a constraint tool's step."""
+    when it is not a constraint tool's step. `types`: the types of the constraints the step
+    added (names the Horizontal/Vertical tool's choice)."""
     text = (step or "").strip().lower()
-    if not (text.startswith("add ") and text.endswith(" constraint")):
+    if text in SWAP_STEPS:
+        return SWAP_STEPS[text]
+    if not text.startswith("add "):
         return None
-    return STEP_TITLES.get(text[len("add ") : -len(" constraint")].strip())
+    title = None
+    for ending in STEP_ENDINGS:
+        if text.endswith(ending):
+            title = STEP_TITLES.get(text[len("add ") : -len(ending)].strip())
+            break
+    if title == BY_TYPE:
+        for kind in types:
+            if kind in ("Horizontal", "Vertical"):
+                return kind
+        return "Horizontal/Vertical"
+    return title
+
+
+def is_swap_step(step):
+    """FreeCAD swapped a constraint for another in this step (the count stays the same)."""
+    return (step or "").strip().lower() in SWAP_STEPS
 
 
 # -- which culprits to name first -----------------------------------------------------------
@@ -245,13 +275,20 @@ def culprit_list(items, names, kinds=None, limit=3):
 SHOWN = " (highlighted in the sketch)"
 
 
-def refused_constraint(title, kind, culprits_text, count=1):
+def refused_constraint(title, kind, culprits_text, count=1, partial=False):
     """A constraint tool's refusal. kind "conflict": it fights others; "redundant": the
-    sketch already says it (`count` culprits make it so)."""
+    sketch already says it (`count` culprits make it so; `partial`: the search for them was
+    cut short on a big sketch, so they are only some of the reason)."""
     if kind == "conflict":
         if culprits_text:
             return "%s: not added, it conflicts with %s%s." % (title, culprits_text, SHOWN)
         return "%s: not added, it does not fit the sketch's other constraints." % title
+    if culprits_text and partial:
+        return "%s: not added, it is so already (%s, among others%s)." % (
+            title,
+            culprits_text,
+            SHOWN.replace(" (", "; ").rstrip(")"),
+        )
     if culprits_text:
         return "%s: not added, %s already make%s it so%s." % (
             title,
@@ -262,8 +299,10 @@ def refused_constraint(title, kind, culprits_text, count=1):
     return "%s: not added, it is so already." % title
 
 
-def driven_dimension(culprits_text):
+def driven_dimension(culprits_text, partial=False):
     """A dimension on a size the sketch already sets: it is added as a driven dimension."""
+    if culprits_text and partial:
+        culprits_text += ", among others,"
     if culprits_text:
         return (
             "That size is already set by %s%s: added as a driven dimension (it shows the "
@@ -324,23 +363,53 @@ def add_in_order(items, rank, try_add):
     return kept
 
 
+def keep_strongest(items, rank, drop, try_add):
+    """When the inferred constraints did not all fit: the weakest are taken out one at a time
+    until the sketch is clean (`drop(item)` takes one out and returns True when the sketch is
+    clean now), then the ones taken out before the last are tried again, strongest first
+    (`try_add(item)`: added and True when it fits, else it removes it itself). The last one
+    taken out is not tried again: it did not fit beside every stronger one. So a weak guess
+    never pushes out a strong one, and the usual case (one weak guess too many) costs one
+    try. Returns the items kept, strongest first, or None when the sketch is not clean even
+    with none of them (it was not before: the caller tries them one by one)."""
+    remaining = priority_order(items, rank)
+    dropped = []
+    clean = False
+    while remaining and not clean:
+        item = remaining.pop()
+        dropped.append(item)
+        clean = drop(item)
+    if not clean:
+        return None
+    dropped.pop()
+    kept = list(remaining)
+    for item in reversed(dropped):
+        if try_add(item):
+            kept.append(item)
+    return kept
+
+
 # -- fully constrained ---------------------------------------------------------------------------
-def is_fully_constrained(curves, flagged, dof, conflicting, malformed, redundant):
-    """Fusion's padlock: the sketch has curves and nothing can move. `flagged` is FreeCAD's
-    FullyConstrained (saved with the file, but not updated by a solve that only found
-    redundant constraints, and left True when the sketch goes into conflict); `dof` is the
-    solver's last count (0 before the first solve after opening a file)."""
-    if curves <= 0 or conflicting or malformed:
+def is_fully_constrained(curves, flagged, dof, conflicting, malformed, redundant, broken=False):
+    """Fusion's padlock: the sketch has curves, nothing can move and nothing is wrong with
+    it. `flagged` is FreeCAD's FullyConstrained (saved with the file; set only by a solve
+    that succeeded, and left True when the sketch goes into conflict or the solver fails);
+    `dof` is the solver's last count (0 before the first solve after opening a file). A
+    sketch with redundant constraints gets no padlock: FreeCAD marks it as an error (Fusion
+    never leaves one so); `broken`: its last recompute failed."""
+    if curves <= 0 or conflicting or malformed or redundant or broken:
         return False
     if dof != 0:
         return False
-    return bool(flagged) or bool(redundant)
+    return bool(flagged)
 
 
-def freedom_note(dof, locked, conflicting=False):
+def freedom_note(dof, locked, conflicting=False, redundant=False):
     """The Sketch Palette's note: "Fully constrained", "2 left to define"."""
     if conflicting:
         return "Conflicting constraints"
+    if redundant:
+        return "Redundant constraints"
     if locked:
         return "Fully constrained"
     if dof is None or dof <= 0:

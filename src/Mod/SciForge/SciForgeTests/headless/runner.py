@@ -560,7 +560,9 @@ SESSION = [
         "tool": "sketch_constraint",
         "expect": "error",
         "args": {"sketch": "$s_edit", "kind": "concentric", "items": [{"curve": 1}, {"curve": 2}]},
-        "contains": ["conflicts with"],
+        # both centres are already pinned to (30, 0): FreeCAD flags the old dimensions as the
+        # redundant ones, and the refusal names them (sketch_explain.check_new)
+        "contains": ["Concentric: not added", "already make it so"],
     },
     {
         "tool": "add_to_sketch",

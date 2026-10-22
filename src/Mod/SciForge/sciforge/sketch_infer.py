@@ -852,7 +852,8 @@ class Inference:
                 sketch.moveGeometry(geo, pos, App.Vector(point[0], point[1], 0), False)
             # all at once; if some do not fit, one by one, strongest first (sketch_explain)
             names = [c.Type for c in explain.add_checked(sketch, constraints)]
-            sketch.solve()
+            if not pins and all(c is None for c in constraints):
+                sketch.solve()  # (add_checked leaves the sketch solved)
             for i in reversed(range(first, first + pins)):  # the pins go again
                 sketch.delConstraint(i)
             if pins:

@@ -11,6 +11,12 @@ A  MODIFY > Change Parameters; double-click width's Expression, type 0, Enter: r
 B  Type 50: accepted, the part follows (10000 mm3), no message.
 C  The extrude's Distance (model parameters) typed 0: refused, the message names the
    extrude; the distance stays 10.
+B2 Type width2 (a typo: no such name): refused, the formula cannot be computed; width stays
+   50 with no formula.
+B3 Type -5: refused, and the message says the dimension would be -5 mm (FreeCAD holds a length
+   at 0: the message shows what was typed).
+C2 The sketch's height (model parameters) typed -3: refused like 0 (the profile would flip),
+   "would be -3 mm"; the height stays 20.
 D  OK: the dialog closes with width = 50.
 E  Edit the sketch from the timeline, double-click the 20 mm dimension, type =width - 50 mm
    (a formula giving 0): the box stays open and says the value must be more than 0 (the
@@ -173,6 +179,49 @@ def b_check():
 b_check.wait_ms = 1200
 
 
+# == B2, B3: a typo and a negative length ===========================================================
+def b2_type():
+    d = dialog()
+    row = user_row("width")
+    edit_cell(d.user, d.user.visualItemRect(d.user.item(row, 2)), "width2")
+    drain("B2")
+
+
+def b2_check():
+    from sciforge import parameters
+
+    d = dialog()
+    text = d.message.text() if d is not None else ""
+    h.check("B2: refused", "Not changed: with width = width2" in text, text)
+    h.check("B2: says the formula cannot be computed", "cannot be computed" in text, text)
+    h.check("B2: width stays 50", abs(width() - 50) < 1e-9, width())
+    container = parameters.container(doc())
+    h.check("B2: no formula kept", not dict(container.ExpressionEngine), container.ExpressionEngine)
+    h.check("B2: nothing is left broken", not broken(), broken())
+
+
+b2_check.wait_ms = 1200
+
+
+def b3_type():
+    d = dialog()
+    row = user_row("width")
+    edit_cell(d.user, d.user.visualItemRect(d.user.item(row, 2)), "-5")
+    drain("B3")
+
+
+def b3_check():
+    d = dialog()
+    text = d.message.text() if d is not None else ""
+    h.check("B3: refused", "Not changed: with width = -5" in text, text)
+    h.check("B3: shows the value typed", "would be -5 mm" in text, text)
+    h.check("B3: width stays 50", abs(width() - 50) < 1e-9, width())
+    h.check("B3: nothing is left broken", not broken(), broken())
+
+
+b3_check.wait_ms = 1200
+
+
 # == C: a model parameter ==========================================================================
 def _model_item(owner, label):
     d = dialog()
@@ -212,6 +261,33 @@ def c_check():
 
 
 c_check.wait_ms = 1200
+
+
+def c2_type():
+    d = dialog()
+    label = "d%d" % (s["h"] + 1)
+    item = _model_item(s["sk"].Label, label)
+    h.check("C2: the height is listed", item is not None)
+    if item is None:
+        return
+    d.model.scrollToItem(item)
+    rect = d.model.visualItemRect(item)
+    x = d.model.header().sectionPosition(2) + 10
+    edit_cell(d.model, QtCore.QRect(x, rect.top(), 20, rect.height()), "-3")
+    drain("C2")
+
+
+def c2_check():
+    d = dialog()
+    text = d.message.text() if d is not None else ""
+    h.check("C2: refused", "Not changed: with d%d = -3" % (s["h"] + 1) in text, text)
+    h.check("C2: like 0", "would be -3 mm" in text and "more than 0" in text, text)
+    h.check("C2: the height stays 20", abs(s["sk"].getDatum(s["h"]).Value - 20) < 1e-9)
+    h.check("C2: the part is unchanged", abs(volume() - 10000) < 1e-6, volume())
+    h.check("C2: nothing is left broken", not broken(), broken())
+
+
+c2_check.wait_ms = 1200
 
 
 # == D: OK =========================================================================================
@@ -280,8 +356,14 @@ h.run(
         a_check,
         b_type_50,
         b_check,
+        b2_type,
+        b2_check,
+        b3_type,
+        b3_check,
         c_type_0,
         c_check,
+        c2_type,
+        c2_check,
         d_ok,
         d_check,
         e_edit,
