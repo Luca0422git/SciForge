@@ -51,7 +51,8 @@ SciForge's tests in real FreeCAD.
 - The same single file is written by `sciforge-cli docs export FILE`, by
   `tools/sciforge/make_ai_docs.py --export FILE`, and by SciForge's **Add an AI app** dialog
   (**Save AI handbook...**), for AI apps that load files (Claude Desktop projects and the
-  like).
+  like). The dialog writes the compact file (about 45 thousand tokens, without the tool
+  pages) to load, and next to it the one with every tool's page (about 170 thousand tokens).
 
 ## Checking your own work
 

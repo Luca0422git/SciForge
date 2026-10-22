@@ -10,7 +10,9 @@ everything"):
     "expect" (texts it contains, JSON values, a picture's size);
   * the example of every tool shown on its reference page (SciForgeTests/docs/
     tool_examples.py): its setup, then the call; the answer must still be the one recorded
-    in SciForgeTests/docs/tool_results.json (the same words, numbers within 1e-4).
+    in SciForgeTests/docs/tool_results.json (the same words, numbers within 1e-4);
+  * what the reference pages promise about a tool (SciForgeTests/docs/doc_promises.py);
+  * on every call: the undo steps the handbook describes (undo_problems).
 
     freecadcmd -c "from SciForgeTests.headless import docs_runner; docs_runner.main()"
 
@@ -322,6 +324,33 @@ def run_documents(text_filter="", root=None):
     return results
 
 
+def run_promises(text_filter=""):
+    """What the reference pages promise about a tool (SciForgeTests/docs/doc_promises.py),
+    each promise a fresh session checked like a document's blocks."""
+    from SciForgeTests.docs import doc_promises
+
+    results = []
+    for name, calls in doc_promises.PROMISES.items():
+        if text_filter and text_filter not in name:
+            continue
+        start = time.time()
+        reset()
+        session = Session()
+        problems = []
+        try:
+            for i, call in enumerate(calls):
+                answer = session.call(call["tool"], call.get("args", {}))
+                for problem in check_expect(call.get("expect"), answer):
+                    problems.append("call %d, %s: %s" % (i + 1, call["tool"], problem))
+                if problems:
+                    break
+        finally:
+            session.close()
+        problems += session.undo_problems
+        results.append(_row("promise " + name, problems, len(calls), time.time() - start))
+    return results
+
+
 def _row(label, problems, calls, seconds):
     return {
         "label": label,
@@ -476,6 +505,8 @@ def main():
     try:
         report["results"] += run_examples(record, text_filter)
         report["results"] += run_documents(text_filter)
+        if not record:
+            report["results"] += run_promises(text_filter)
     except Exception as exc:
         report["results"].append(_row("session", ["%s\n%s" % (exc, traceback.format_exc())], 0, 0))
     reset()
