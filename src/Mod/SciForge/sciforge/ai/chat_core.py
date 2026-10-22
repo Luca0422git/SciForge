@@ -3,7 +3,8 @@
 (docs/sciforge/dev/briefs/home-cloud-ai.md, section 4.5), so it can be unit tested.
 
 The person types a request; Chat.send() asks the model; when the model calls SciForge's
-tools (sciforge/ai/tools_core.py) each call is checked with tools_core.validate() and run
+tools (the catalogue, sciforge/ai/catalog: as many as the provider takes, the most useful
+first) each call is checked with tools_core.validate() and run
 through call_tool (the chat panel's callback, which runs bridge.call on the GUI thread);
 the results (text, and screenshots as pictures) go back to the model; this repeats until
 the model answers in words, MAX_STEPS requests were made, or stop() was called.
@@ -20,7 +21,7 @@ result's text). API keys never appear in logs or messages.
 import threading
 import time
 
-from . import tools_core
+from . import catalog, tools_core
 from .providers import _common
 
 MAX_STEPS = 25
@@ -30,16 +31,19 @@ RETRY_DELAYS = (2, 6)
 SYSTEM_PROMPT = (
     "You are the design assistant inside SciForge, a parametric CAD program that works "
     "like Autodesk Fusion. You build and change the design open in SciForge with the tools "
-    "you are given: sketches, then extrude, revolve, hole, fillet, chamfer, shell, pattern "
-    "and parameters, each as a step in the design's timeline. All lengths are millimetres "
-    "(mm) and all angles degrees. Call get_design before changing a design, and use "
+    "you are given: sketches, then extrude, revolve, sweep, loft, hole, fillet, chamfer, "
+    "shell, patterns, assemblies, drawings and parameters, each as a step in the design's "
+    "timeline; get_timeline, get_step and edit_step read and change what exists, list_tools "
+    "lists every tool and get_help explains selectors, picks and curves. All lengths are "
+    "millimetres (mm) and all angles degrees. Call get_design before changing a design, and use "
     "get_design or screenshot after a change to check that it came out as intended. Every "
     "tool call that changes the design is one undo step in SciForge; undo takes back the "
     "last one. Refer to earlier steps by the ids get_design and the tools report (for "
     "example the sketch id as an extrude's profile). If a tool answers with an error, read "
     "it, fix the arguments and try again. When the request is unclear or a choice matters "
     "(a size, which face, whether to replace a file), ask the person instead of guessing. "
-    "Keep answers short and plain: the person may be new to CAD."
+    "Keep answers short and plain: the person may be new to CAD. How to pick faces and "
+    "edges: " + catalog.SELECTOR_HELP.replace("\n", " ")
 )
 
 COST_NOTE = (
@@ -145,7 +149,9 @@ class Chat:
         self.max_steps = max(1, int(max_steps))
         self.max_tokens = max_tokens
         self.system = system
-        self.tools = tools_core.TOOLS if tools is None else tools
+        self.tools = (
+            catalog.chat_tools(getattr(adapter, "max_tools", None)) if tools is None else tools
+        )
         self.history = list(history or [])
         self.usage = {"input_tokens": 0, "output_tokens": 0}
         self._key = key or None

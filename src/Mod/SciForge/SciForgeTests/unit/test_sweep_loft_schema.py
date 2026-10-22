@@ -144,9 +144,9 @@ class SweepLoftSchemaTests(unittest.TestCase):
                 with open(path, encoding="utf-8") as handle:
                     schema.validate(json.load(handle))
         # wave 4: sweep joining two bodies, two sweeps driven by parameters, a loft cutting
-        # two bodies
+        # two bodies; AI tools: a rib far from its sketch's origin (sf_rib_far_from_origin)
         self.assertEqual(
-            counts, {"sf_sweep_": 18, "sf_loft_": 22, "sf_rib_": 6, "sf_web_": 7}, counts
+            counts, {"sf_sweep_": 18, "sf_loft_": 22, "sf_rib_": 7, "sf_web_": 7}, counts
         )
 
 

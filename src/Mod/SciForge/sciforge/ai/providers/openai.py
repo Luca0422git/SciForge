@@ -60,6 +60,7 @@ _NOT_CHAT = (
 class Adapter:
     name = NAME
     display_name = DISPLAY_NAME
+    max_tools = 128  # (the Responses API takes at most 128 tools in a request)
     needs_key = NEEDS_KEY
     base_url = BASE_URL
     default_model = DEFAULT_MODEL

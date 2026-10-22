@@ -199,7 +199,15 @@ def box_built():
         any("'Sketch1'" in str(m.get("content")) for m in tool_messages),
         tool_messages[:1],
     )
-    h.check("the model got the tools", len(s["requests"][0].get("tools", [])) == 16)
+    from sciforge.ai import catalog
+    from sciforge.ai.providers import openai_compat
+
+    sent = [t.get("function", t).get("name") for t in s["requests"][0].get("tools", [])]
+    h.check(
+        "the model got the tools a local model takes, the first 16 first",
+        len(sent) == openai_compat.Adapter.max_tools and sent[:16] == list(catalog.LEGACY_NAMES),
+        (len(sent), sent[:20]),
+    )
     h.shot("chat")
 
 

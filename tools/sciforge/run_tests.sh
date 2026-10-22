@@ -2,10 +2,11 @@
 # Runs every SciForge test that does not need a full SciForge build:
 #   1. unit tests          (plain Python, no FreeCAD)
 #   2. golden models       (real FreeCAD, headless)
+#   2b. headless AI tools  (every AI tool once, real FreeCAD without a window)
 #   3. GUI smoke test      (real FreeCAD GUI on a virtual screen via xvfb-run)
 #
 #   tools/sciforge/run_tests.sh [--freecad DIR] [--out DIR]
-#                               [--only unit|golden|gui|scenarios|base]
+#                               [--only unit|golden|headless|gui|scenarios|base]
 #                               [--scenario NAME[,NAME...]]   (files of SciForgeTests/gui/
 #                                                   scenarios; several share one profile)
 #                               [--shard K/N]       (every N-th scenario, from the K-th)
@@ -14,7 +15,7 @@
 #            an unpacked SciForge AppImage, or a SciForge install prefix containing
 #            bin/SciForgeCmd (bin/FreeCADCmd for a build before the branding pass)
 # --out      where reports and the screenshot go (default .sciforge-cache/test-output)
-# --only     base = everything but the scenarios (unit, golden, smoke, journey)
+# --only     base = everything but the scenarios (unit, golden, headless, smoke, journey)
 # --shard    splits the scenarios over N runs (CI runs them side by side): 1/4 runs the
 #            1st, 5th, 9th... scenario in name order, 2/4 the 2nd, 6th... (N runs cover all)
 #
@@ -115,6 +116,23 @@ except Exception as exc:
     print("no golden report: %s" % exc); sys.exit(1)
 sys.exit(0 if report.get("passed") else 1)
 EOF
+}
+
+# Every AI tool called once in real FreeCAD without a window (SciForgeTests/headless).
+run_headless() {
+    echo "== [SciForge] headless AI tools"
+    need_freecad headless || return
+    SCIFORGE_HEADLESS_OUT="${OUT}" timeout 1200 "${FC_CMD[@]}" -c \
+        "from SciForgeTests.headless import runner; runner.main()" > "${OUT}/headless.log" 2>&1
+    grep -aoE "\[SciForge\] headless (FAIL|MISSING|summary).*" "${OUT}/headless.log"
+    python3 - "${OUT}/headless-report.json" <<'EOF2' || FAILED+=("headless")
+import json, sys
+try:
+    report = json.load(open(sys.argv[1]))
+except Exception as exc:
+    print("no headless report: %s" % exc); sys.exit(1)
+sys.exit(0 if report.get("passed") else 1)
+EOF2
 }
 
 # run_gui_script NAME SCRIPT LOG RESULT: one GUI test in a real FreeCAD window.
@@ -231,11 +249,12 @@ EOF
 case "${ONLY}" in
     unit) run_unit ;;
     golden) run_golden ;;
+    headless) run_headless ;;
     gui) run_gui ;;
     scenarios) run_scenarios ;;
-    base) run_unit; run_golden; run_gui_base ;;
-    "") run_unit; run_golden; run_gui ;;
-    *) echo "--only must be unit, golden, gui, scenarios or base" >&2; exit 2 ;;
+    base) run_unit; run_golden; run_headless; run_gui_base ;;
+    "") run_unit; run_golden; run_headless; run_gui ;;
+    *) echo "--only must be unit, golden, headless, gui, scenarios or base" >&2; exit 2 ;;
 esac
 
 echo "== [SciForge] reports in ${OUT}"

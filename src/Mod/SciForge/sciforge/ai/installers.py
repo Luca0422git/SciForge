@@ -42,6 +42,7 @@ SERVER_NAME = "sciforge"
 ENTRY_POINT = "server/sciforge/ai/sciforge_mcp.py"
 MANIFEST_VERSION = "0.3"
 _SERVER_MODULES = ("tools_core.py", "mcp_core.py", "bridge_core.py", "sciforge_mcp.py")
+_CATALOG = "catalog"  # a package: every .py file in it goes into the extension
 
 
 class InstallError(RuntimeError):
@@ -259,6 +260,11 @@ def mcpb_files(mod_root):
     )
     for name in _SERVER_MODULES:
         files["server/sciforge/ai/" + name] = os.path.join(mod_root, "sciforge", "ai", name)
+    # the tool catalogue (tools_core and the server read it): the whole package
+    folder = os.path.join(mod_root, "sciforge", "ai", _CATALOG)
+    for name in sorted(os.listdir(folder)) if os.path.isdir(folder) else []:
+        if name.endswith(".py"):
+            files["server/sciforge/ai/%s/%s" % (_CATALOG, name)] = os.path.join(folder, name)
     return files
 
 

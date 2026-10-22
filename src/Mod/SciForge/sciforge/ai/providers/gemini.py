@@ -123,6 +123,7 @@ def _model_path(model):
 class Adapter:
     name = NAME
     display_name = DISPLAY_NAME
+    max_tools = 128  # (kept to OpenAI's 128: a request with every tool is long)
     needs_key = NEEDS_KEY
     base_url = BASE_URL
     default_model = DEFAULT_MODEL
