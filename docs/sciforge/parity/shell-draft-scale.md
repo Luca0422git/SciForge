@@ -7,6 +7,34 @@ against Luca's own screen captures (outline 2.4). Implemented in
 `scale.py` + `scale_ui.py`, with the shared dialog base `pickpanel.py` and `follow.py` (later
 steps keep their faces). Status: **first pass + QA pass (2026-10-11), not yet signed off**.
 
+## Values past what fits stop at the limit (Luca's decision, 2026-10-21)
+
+**This deliberately differs from Fusion.** Fusion refuses a value that does not fit (a
+radius too big, a wall too thick, an angle too steep) with an error, and the dialog waits
+until a smaller value is typed. Luca (2026-10-21): "limit edits to stop at that limit, so if
+I want to chamfer something to the max I can quickly drag it without having to type
+whatever obscure value the error spits out", and "add the functionality to any tool that
+can give that sort of error". So in SciForge (shared helper `sciforge/value_limits.py`):
+
+- an arrow (or disc) dragged past the limit stops there, like the end of a slider; the
+  preview shows that result and a blue note under the message says "Largest that fits
+  here: 3.47 mm" ("Furthest that fits here" for a limit on the other side: a push into the
+  part, a negative angle); OK works at once;
+- a plain number typed past the limit is set to it and the note says so: "5 mm does not
+  fit: limited to 3.47 mm" (the box keeps what is being typed and shows the limit once it
+  is left);
+- the limit is found once (a time-budgeted bisection), rounded toward the safe side to the
+  box's precision (0.01 mm, 0.1 deg) and built once more to be sure; it is kept for the
+  inputs it was found for (the part, the picks, the other values), so a drag never runs a
+  search on every mouse move;
+- a value from a formula or parameter ("width / 2") is never rewritten: the dialog keeps
+  the explanation, with "Largest that fits here: ..." added, and OK waits.
+
+In these dialogs: Shell (Inside and Outside Thickness, also with other bodies), Draft (Angle
+and Angle 2; Draft's own 89.9 degree stop stays; the handle stops at the steepest angle
+the faces take). Scale has no such limit. Scenario `limits_shell_draft`; `shell_draft`,
+`shell_draft_qa_*`, `draft_curved` updated.
+
 ## Behaviour spec: Parting Line, Two Side / Symmetric, several bodies, sketches (modify-2, 2026-10-14)
 
 Sources (A = Autodesk help or API reference; F = Autodesk Community forum; G = guess, to be
@@ -69,7 +97,7 @@ checked against Fusion):
 | Shell Type: sharp or rounded corners where walls meet outside the part | Same: Sharp / Rounded |
 | Blue arrows to drag the thicknesses | Same: on the rim of the first opening, on the side turned toward you (also on a round rim), or on the face turned toward you for a hollow body; drawn over the part and grabbed where they are seen (also inside the see-through part). Dragged through the surface: the thinnest wall; the arrow stays after a 0 or a typo |
 | A cup (round part) with a 1 mm wall | Works. (Before the QA pass every wall of a round part drawn on screen was refused as "too thick": FreeCAD's box of a drawn cylinder is a little too small) |
-| A wall too thick: the dialog says so and OK waits | Same, with the thickest wall that fits ("about 9.99 mm"); the preview keeps the last good result; nothing in the Report view |
+| A wall too thick: the dialog says so and OK waits | **Differs (Luca, 2026-10-21):** dragged or typed, the wall stops at the thickest that fits (the arrow too) and the note says so; OK works. A wall from a formula is explained with the thickest that fits, and OK waits. Nothing in the Report view |
 | Parameters and formulas in the fields | Same (`wall`, `wall * 2`): stored as an expression, the shell follows the parameter |
 | Edit by double-clicking the timeline; Cancel / Esc / Ctrl+Z leave the part as it was; one undo step | Same; Esc while dragging an arrow too |
 | Later steps survive an edit of the shell (a sketch on its floor, a boss, a Press Pull on its wall) | Same, also when the edit changes how the shell is made (Inside to Both, faces to body): the later steps keep their faces (`follow.py`, golden `sf_shell_swap_presspull_follows`, `sf_shell_both_edit_presspull`) |

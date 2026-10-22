@@ -4,6 +4,35 @@ Source: Fusion's documented behaviour and everyday use. Not yet checked against 
 screen captures (outline 2.4). Implemented in `src/Mod/SciForge/sciforge/sketch_*.py` on top of
 FreeCAD 1.1.4's Sketcher. Status: **first pass + QA pass, not yet signed off**.
 
+## Values past what fits stop at the limit (Luca's decision, 2026-10-21)
+
+**This deliberately differs from Fusion.** Fusion refuses a value that does not fit (a
+radius too big, a wall too thick, an angle too steep) with an error, and the dialog waits
+until a smaller value is typed. Luca (2026-10-21): "limit edits to stop at that limit, so if
+I want to chamfer something to the max I can quickly drag it without having to type
+whatever obscure value the error spits out", and "add the functionality to any tool that
+can give that sort of error". So in SciForge (shared helper `sciforge/value_limits.py`):
+
+- an arrow (or disc) dragged past the limit stops there, like the end of a slider; the
+  preview shows that result and a blue note under the message says "Largest that fits
+  here: 3.47 mm" ("Furthest that fits here" for a limit on the other side: a push into the
+  part, a negative angle); OK works at once;
+- a plain number typed past the limit is set to it and the note says so: "5 mm does not
+  fit: limited to 3.47 mm" (the box keeps what is being typed and shows the limit once it
+  is left);
+- the limit is found once (a time-budgeted bisection), rounded toward the safe side to the
+  box's precision (0.01 mm, 0.1 deg) and built once more to be sure; it is kept for the
+  inputs it was found for (the part, the picks, the other values), so a drag never runs a
+  search on every mouse move;
+- a value from a formula or parameter ("width / 2") is never rewritten: the dialog keeps
+  the explanation, with "Largest that fits here: ..." added, and OK waits.
+
+In sketch mode: Fillet (the radius: the pointer far out or a typed number; Enter makes the
+largest fillet that fits and the text by the pointer says so) and Chamfer between two
+lines (Distance and Distance 2). Not held: the chamfer's angle and a chamfer between a
+line and an arc (their refusals stay); Offset has no such limit. `sketch2_fillet` B
+updated.
+
 ## Sketch, part 2: chain selection, Project to Surface in the sketch, 3D Sketch, fillet and chamfer with arcs, the text frame, Slice (branch `sf/sketch-2`, 2026-10-16)
 
 Researched before building. Autodesk's hosts cannot be opened from the sandbox, so the
@@ -22,7 +51,7 @@ checked in Luca's Fusion.
 |---|---|
 | A double-click on a sketch curve selects the chain of curves joined to it, without a window (Forum, course) | Same (`sketch_select.py`, rule in `sketch_select_core.py`): the curves reached through shared end points, branches too, of the clicked curve's line type (normal, construction, projected: **Guess**); a circle alone. Added to the selection. FreeCAD 1.1.4's own double-click "wire" selection never fired under SciForge (checked with real double-clicks), so SciForge finds the curve itself |
 | A box in the sketch: window to the right, crossing to the left; a plain box replaces the selection, Shift adds, Ctrl toggles (as on the part: `parity/selection.md`) | FreeCAD's sketch box does window / crossing by direction but only added: before FreeCAD sees the release SciForge clears the selection (plain) or puts it aside and toggles afterwards (Ctrl) |
-| Sketch Fillet: a vertex, two lines, two arcs (or a line and an arc), then the radius (Autodesk "Sketch modification tools") | SciForge's own Fillet (`sketch_fillet_tool.py`, maths `sketch_fillet_core.py`): a corner point or two curves (lines, arcs, circles), the pointer gives the radius (the arc passes as far from the corner as the pointer is), the R box takes a typed one, Enter or a click makes it; FreeCAD's sketch fillet trims (a corner of two lines keeps its point, construction, with its constraints); a Radius dimension. A radius that does not fit is refused with the reason. It picks curves itself: FreeCAD's own fillet tool never saw a click on CI (CI #123-#126); `modeling2_sketch` uses it now |
+| Sketch Fillet: a vertex, two lines, two arcs (or a line and an arc), then the radius (Autodesk "Sketch modification tools") | SciForge's own Fillet (`sketch_fillet_tool.py`, maths `sketch_fillet_core.py`): a corner point or two curves (lines, arcs, circles), the pointer gives the radius (the arc passes as far from the corner as the pointer is), the R box takes a typed one, Enter or a click makes it; FreeCAD's sketch fillet trims (a corner of two lines keeps its point, construction, with its constraints); a Radius dimension. A radius past what fits stops at the largest that fits and the text by the pointer says so (Luca, 2026-10-21; Fusion refuses it). It picks curves itself: FreeCAD's own fillet tool never saw a click on CI (CI #123-#126); `modeling2_sketch` uses it now |
 | Sketch Chamfer: "a vertex, or two lines" (Autodesk); the API's chamfers are line methods | Lines as before, and **SciForge goes further**: a line and an arc (the corner point, or the two curves), all three types. The setback on the arc is the straight distance from the old corner (what a dimension between the points shows); Distance and angle: on the line, the angle between the line and the chamfer. The old corner stays as a construction point on both curves (where the line meets the arc's circle) with the values as dimensions from it; the constraints that were on the corner point go (FreeCAD's fillet of curves does the same). Two arcs: refused, "a chamfer needs a line" |
 | Project / Include: the edges come in as purple linked curves that follow the source when it changes (Autodesk "Project and include geometry") | Unchanged, now checked: FreeCAD's external geometry in the sketch, purple; widening the block moves the projected line along (`sketch2_project` A, B). **Limit found**: stock FreeCAD 1.1.4 loses some references when the source changes: after widening a padded rectangle, its vertical edges and corners at the moved side ("missing element reference", "Failed to project external geometry"; the projected curve stays where it was). Reproduced headless without SciForge (`Pad.Edge2`, `Edge5`, four vertices of twelve edges and eight vertices); the top and bottom edges follow |
 | Project to Surface: the curves are in the sketch (Fusion's sketches hold 3D curves) | The "Projected Curves" object now belongs to its sketch (`sketch_companions.py`): listed under the sketch in the browser (a row of its own, eye, Delete), shown and hidden with the sketch (the eye, Finish Sketch, Suppress, the history marker), hidden by Show Projected Geometries while the sketch is open, no timeline step of its own (the sketch's step is theirs, as in Fusion), deleted with the sketch (one undo step), saved with the file; older files' Projected Curves are adopted by the sketch whose curves they project |

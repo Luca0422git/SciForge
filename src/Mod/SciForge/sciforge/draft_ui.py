@@ -19,7 +19,10 @@ Line: only the pull side of the line), Two Side splits them at the plane or line
 each side away from it (Angle 1 toward the pull direction, Angle 2 the other way),
 Symmetric the same with one angle. Drag the blue curved handle or type the angle; a positive
 angle makes the part narrower toward the pull direction. Faces that cannot be tilted do not
-light up; a draft that cannot be made is explained in the dialog and OK waits.
+light up. An angle dragged or typed past what the faces can take stops at the steepest one
+that works and the dialog says so (Luca, 2026-10-21; Fusion refuses it: value_limits.py); a
+draft that cannot be made otherwise (or an angle from a formula) is explained in the dialog
+and OK waits.
 
 Built on FreeCAD's PartDesign::Draft (Fixed Plane, One Side) or SciForge's DraftFeature
 (drafting.py). Double-click the step in the timeline to edit it.
@@ -38,6 +41,7 @@ from . import (
     pickpanel,
     preview,
     ui_icon_path,
+    value_limits,
     warn,
 )
 from .compat import QtCore, QtWidgets
@@ -136,7 +140,7 @@ MODE_ITEMS = [
 ]
 
 
-class DraftPanel(pickpanel.PickPanel):
+class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     title = "Draft"
     icon = "draft"
     last = None  # the most recent panel (tests and diagnostics)
@@ -161,6 +165,7 @@ class DraftPanel(pickpanel.PickPanel):
         self.value_boxes = ValueBoxes(self, default="angle")
         self.planes = None  # the origin squares while a plane box takes the clicks
         self._chains = {}
+        self.limit_init()  # an angle past what the faces take stops at the steepest that works
         if feature is not None:
             self.body = drafting.owner_body(feature)
             base, plane_ref, names, options, formula = drafting.read(feature)
@@ -183,6 +188,8 @@ class DraftPanel(pickpanel.PickPanel):
             self.body, self.base = shell_ui.start_body(body)
         self._build()
         self.finish_layout()
+        self.limit_label = value_limits.note_label()  # "Largest that fits here: ..."
+        self.layout.addRow(self.limit_label)
         self._rows()
         try:
             self._start(picks or [])
@@ -658,6 +665,7 @@ class DraftPanel(pickpanel.PickPanel):
         return len(self.picked) != before
 
     def _picks_updated(self, schedule=True):
+        self.limits.note = ""  # a limit found for the old picks no longer applies
         if self.plane_ref is not None:
             self.plane_box.set_text(drafting.plane_label(self.plane_ref))
         else:
@@ -717,6 +725,7 @@ class DraftPanel(pickpanel.PickPanel):
 
     # -- values -------------------------------------------------------------------------------
     def _typed(self, value):
+        value = self._limit_typed("angle", self.angle, value, self.formula)
         self.options["angle"] = value
         if self.handle is not None:
             try:
@@ -726,19 +735,89 @@ class DraftPanel(pickpanel.PickPanel):
         self.schedule()
 
     def _typed2(self, value):
+        value = self._limit_typed("angle2", self.angle2, value, self.formula2)
         self.options["angle2"] = value
         self.schedule()
 
+    def _limit_typed(self, what, field, value, formula):
+        """A typed angle held at the steepest one known to work (not a formula's)."""
+        held = self.limit_edit(what, value, "formula" if formula else "typed")
+        if held != value:  # the box shows it now, or once it is left
+            value_limits.show_held(self.limit_shower, what, field, value, held)
+        return held
+
     def _turned(self, degrees, released=False):
         value = round(max(-89.9, min(89.9, degrees)), 1)
-        if released and abs(value - degrees) > 0.05 and self.handle is not None:
+        held = self.limit_edit("angle", value, "dragged")
+        if held != value:
+            value = held
+            if self.handle is not None:
+                self.handle.set_angle(value)  # the handle stops at the steepest angle
+        elif released and abs(value - degrees) > 0.05 and self.handle is not None:
             self.handle.set_angle(value)  # turned past what a draft can be: back to the limit
+        changed = abs(float(self.options.get("angle", 0.0)) - value) > 1e-12
         self.options["angle"] = value
         self.angle.set_value(value)
         if self.formula:
             self.formula = ""  # a drag gives a plain number
             self._show_formula()
-        self.schedule()
+            changed = True
+        if changed:
+            self.schedule()
+        elif self.limits.note and not self.error:
+            self.show_status()  # held at the limit: nothing to rebuild
+
+    # -- angles past what fits (value_limits.LimitedValues) ------------------------------------
+    def limit_unit(self, what):
+        return "deg"
+
+    def limit_key(self, what):
+        options = self._spec_options()
+        options.pop(what, None)
+        plane = (self.plane_ref[0], self.plane_ref[1]) if self.plane_ref else None
+        return value_limits.make_key(
+            "draft",
+            self.base.Shape if self.base is not None else None,
+            plane,
+            self.names(),
+            [(m.body.Name, self.member_names(m)) for m in self.members],
+            options,
+            what,
+        )
+
+    def limit_works(self, what):
+        options = self._spec_options()
+        plane_ref, base, names = self.plane_ref, self.base, list(self.names())
+        members = [(m.base, list(self.member_names(m))) for m in self.members]
+
+        def works(value):
+            trial = dict(options)
+            trial[what] = value
+            drafting.check(base.Shape, plane_ref, names, trial)
+            drafting.draft_shape(base.Shape, names, drafting.build_spec(plane_ref, trial, base))
+            for member_base, member_names in members:
+                if member_names:
+                    spec = drafting.build_spec(plane_ref, trial, member_base)
+                    drafting.draft_shape(member_base.Shape, member_names, spec)
+            return True
+
+        return works
+
+    def limit_value(self, what):
+        return float(self.options.get(what, 0.0))
+
+    def limit_set(self, what, value):
+        self.options[what] = value
+        field = self.angle if what == "angle" else self.angle2
+        value_limits.show_held(self.limit_shower, what, field, field.value(), value)
+        if what == "angle" and self.handle is not None:
+            try:
+                self.handle.set_angle(value)
+            except Exception:
+                pass
+
+    def limit_keep(self):
+        return self.base.Shape if self.base is not None else None
 
     def _collect(self):
         self.options["flip"] = self.flip.isChecked()
@@ -748,9 +827,9 @@ class DraftPanel(pickpanel.PickPanel):
         self.options["parting_mode"] = self.mode.currentData() or "fix"
         self.options["parting"] = list(self.parting)
         if not self.formula:
-            self.options["angle"] = self.angle.value()
+            self.options["angle"] = self.limit_held("angle", self.angle.value())
         if not self.formula2:
-            self.options["angle2"] = self.angle2.value()
+            self.options["angle2"] = self.limit_held("angle2", self.angle2.value())
 
     def formula_typed(self, key, text, value):
         self.formula_error = ""
@@ -949,7 +1028,14 @@ class DraftPanel(pickpanel.PickPanel):
         try:
             drafting.check(self.base.Shape, self.plane_ref, names, self.options)
         except drafting.DraftError as exc:
-            self.error = str(exc)
+            reason = str(exc)
+            # The handle may reach Draft's own 89.9 degree stop: a dragged / typed angle there
+            # is held at the steepest one the faces take, like any angle that is too steep.
+            steep = "between -89.9 and 89.9" in reason
+            if steep and self.limit_refused("too steep: " + reason):
+                self._preview()
+                return
+            self.error = reason
             self.show_status()
             return
         self.error = None
@@ -994,6 +1080,13 @@ class DraftPanel(pickpanel.PickPanel):
                 if member.target is not None and _failed(member.target):
                     self.error = "%s: %s" % (member.body.Label, _status(member.target))
                     break
+        if self.error and self.limit_refused(self.error):
+            self._preview()  # held at the steepest angle that works: preview that
+            return
+        if self.error:
+            self.error = self.limit_hint(self.error)
+        else:
+            self.limit_good()
         self.show_preview(True)
         self.show_status()
 
@@ -1029,6 +1122,14 @@ class DraftPanel(pickpanel.PickPanel):
             self.say("⚠ Later steps no longer work: %s" % ", ".join(broken))
             return
         self.say("")
+
+    def say(self, text):
+        """The dialog's message. The note of a angle held at its limit shows under it while
+        there is no error."""
+        self.message.setText(text)
+        limits = getattr(self, "limits", None)
+        note = "" if text or limits is None else limits.note
+        value_limits.show_note(getattr(self, "limit_label", None), note)
 
     # -- OK / Cancel ------------------------------------------------------------------------
     def accept(self):

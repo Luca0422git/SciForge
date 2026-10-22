@@ -11,8 +11,10 @@ Picking works like inside a Fusion command:
 While picking, the part before the fillet is shown see-through with the picks
 highlighted, and the result is previewed solid on top. A blue arrow on the first
 edge drags the radius (chamfer: the distance; two arrows for two distances).
-A size that does not fit is reported in the dialog and OK waits for a fix; nothing
-is printed to the Report view.
+A size dragged or typed past what fits stops at the largest size that works (Luca,
+2026-10-21; Fusion refuses it instead), and the dialog says so: "Largest that fits here: 3.47
+mm" (value_limits.py). A size from a formula is not rewritten: it is reported in the dialog,
+with that limit, and OK waits for a fix. Nothing is printed to the Report view.
 
 Fusion's selection box has rows ("+" adds one): each row is a selection set with its own
 size and type, one step in the timeline, one undo step. The Fillet dialog also has
@@ -25,6 +27,7 @@ FreeCAD's PartDesign::Fillet / Chamfer (refined), so Press Pull's fillet editing
 """
 
 import contextlib
+import copy
 import math
 import time
 
@@ -32,7 +35,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import blend, commands, fillet_core as core, fillet_sets, log, shape_checks, ui_icon
-from . import ui_icon_path, warn
+from . import ui_icon_path, value_limits, warn
 from .blend_field import SaveFinishes, ValueField
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, Panel, ValueBoxes, _end_transaction, handle_size_at
@@ -383,6 +386,14 @@ class BlendPanel(Panel):
         self.rule_box = 0
         self.row_formulas = {}  # (row, or None for the rule radius; value name) -> formula
         self.error = None
+        # A size past what fits stops at the largest that works (value_limits.py): the limits
+        # found, the size edited last ((row, value name, "typed" / "dragged" / "formula")),
+        # whether its preview is still to come, and the sizes whose preview worked.
+        self.limits = value_limits.Limiter()
+        self._edit = None
+        self._edit_pending = False
+        self._limiting = False
+        self._good_values = {}
         self.arrows = []  # (ArrowDragger, spot, origin, direction) in global coordinates
         self.value_boxes = ValueBoxes(self)  # the value box next to each arrow
         self.fields = {}  # option name -> ValueField
@@ -430,6 +441,8 @@ class BlendPanel(Panel):
         self._build()
         self._load_row()
         self.finish_layout()
+        self.limit_label = value_limits.note_label()  # "Largest that fits here: 3.47 mm"
+        self.layout.addRow(self.limit_label)
         try:
             self._start(refs)
         except Exception as exc:  # never leave a half-open dialog without a reason
@@ -1158,6 +1171,7 @@ class BlendPanel(Panel):
         self.select_button.setText("%d selected" % count if count else "Select")
         if hasattr(self, "_rebuild_points"):
             self._rebuild_points()
+        self.limits.note = ""  # a limit found for the old picks no longer applies
         self._update_arrows()
         if recompute:
             self.schedule()
@@ -1252,10 +1266,20 @@ class BlendPanel(Panel):
         return self.fields.get(what)
 
     def _typed(self, what, value):
-        """A new value from a box (typed number, formula, the box's arrows)."""
+        """A new value from a box (typed number, formula, the box's arrows). A plain number
+        past the largest size that fits (found already for these picks) is held there."""
         self.formula_error = ""
-        self._set_value(self._row_key(), what, value)
-        self._place_arrows(self._row_key(), what)
+        row = self._row_key()
+        field = self._field_for(what)
+        formula = field is not None and bool(field.formula)
+        self._edit = (row, what, "formula" if formula else "typed")
+        self._edit_pending = True
+        if formula:
+            self.limits.note = ""  # a formula is never held at the limit
+        else:
+            value = self._hold(row, what, value, typed=True)
+        self._set_value(row, what, value)
+        self._place_arrows(row, what)
         self._refresh_rows()
         self.schedule()
 
@@ -1267,12 +1291,21 @@ class BlendPanel(Panel):
 
     def _dragged(self, spot, distance, released=False):
         """An arrow moved: the size follows it. Dragged back through its edge the size stops
-        at MIN_DRAG, and when the mouse is let go the arrow comes back to the size shown."""
+        at MIN_DRAG, dragged past the largest size that fits it stops there (the arrow too,
+        like the end of a slider), and when the mouse is let go the arrow comes back to the
+        size shown."""
         what, row = spot["what"], spot.get("row")
         if row is not None and row != self.active and row < len(self.groups):
             self._activate(row, rebuild=False)  # dragging a set's arrow makes it the current one
         value = max(MIN_DRAG, round(distance / spot["per_unit"], 2))
+        self._edit = (row, what, "dragged")
+        held = self._hold(row, what, value, typed=False)
+        if held != value:
+            value = held
+            self._place_arrows_now(row, what, value)
         changed = abs(value - self._value(row, what)) > 1e-12
+        if changed:
+            self._edit_pending = True
         self._set_value(row, what, value)
         field = self._field_for(what)
         if field is not None:
@@ -1286,6 +1319,142 @@ class BlendPanel(Panel):
             self.formula_error = ""
             self._refresh_rows()
             self.schedule()
+        elif self.limits.note and not self.error:
+            self.show_status()
+
+    # -- sizes past what fits (value_limits.py) -----------------------------------------------
+    def _unit(self, what):
+        return "deg" if what == "angle" else "mm"
+
+    def _limit_key(self, row, what):
+        """The inputs the largest size of (row, what) depends on: the part before the blend,
+        every set's picks and every other value (not the one being changed)."""
+        spec = copy.deepcopy(self.spec)
+        self._put(spec, row, what, None)
+        return value_limits.make_key(
+            self.kind,
+            self.info.shape if self.info is not None else None,
+            self.groups,
+            self.refs2,
+            [getattr(f, "Name", "") for f in self.features],
+            [getattr(f, "Name", "") for f in self.features2],
+            spec,
+            row,
+            what,
+            self._uses_step(),
+        )
+
+    @staticmethod
+    def _put(spec, row, what, value):
+        """Set (value None: drop) value `what` of row `row` in a copy of the settings."""
+        data = spec if row is None else spec["sets"][row]
+        if what.startswith("pt"):
+            k = int(what[2:])
+            points = data.get("points", [])
+            if k < len(points):
+                points[k][1] = value
+            return
+        if value is None:
+            data.pop(what, None)
+        else:
+            data[what] = value
+
+    def _limit_works(self, row, what):
+        """works(value): the blend builds with `what` set to value (nothing in the document)."""
+        spec = copy.deepcopy(self.spec)
+        uses_step = self._uses_step()
+        flat = self._flat() if uses_step else None
+        native = self._native_row()
+        info, groups = self.info, [list(g) for g in self.groups]
+        refs2, features, features2 = list(self.refs2), list(self.features), list(self.features2)
+
+        def works(value):
+            self._put(spec, row, what, value)
+            if uses_step:
+                fillet_sets.compute(info.shape, spec, flat, refs2, features, features2)
+            else:
+                blend.check_build(self.kind, info, groups[native], spec["sets"][native])
+            return True
+
+        return works
+
+    def _hold(self, row, what, value, typed):
+        """`value` held at the largest (or smallest) size known to fit for these picks; the
+        note under the boxes says so. Nothing is built here: every drag step comes past."""
+        if self.info is None:
+            return value
+        try:
+            held = self.limits.clamp(self._limit_key(row, what), value, typed, self._unit(what))
+        except Exception as exc:
+            warn("%s size limit: %s" % (self.title, exc))
+            return value
+        if held != value:
+            field = self._field_for(what)
+            if field is not None and field.raw is None:  # not while a number is being typed
+                field.set_value(held)
+        return held
+
+    def _place_arrows_now(self, row, what, value):
+        """The dragged arrow stops at the limit (it is set back on every drag step)."""
+        for dragger, spot, _origin, _direction in self.arrows:
+            if spot["what"] == what and spot.get("row") == row:
+                try:
+                    dragger.set_distance(max(value, 0.0) * spot["per_unit"])
+                except Exception:
+                    pass
+
+    def _good_size(self, row, what, key, value):
+        """(good, known): the size whose preview worked last with these same inputs, when it
+        is below `value`; else the smallest size (to be built first)."""
+        found = self._good_values.get((row, what))
+        if found is not None and found[0] == key and found[1] < value:
+            return found[1], True
+        return (MIN_DRAG if what != "angle" else 1.0), False
+
+    def _limit_refused(self, reason):
+        """The size just dragged or typed was refused as too big: find the largest that works
+        (once for these picks), use it and preview again. True when that was done."""
+        if self._limiting or not self._edit_pending or self._edit is None or self.info is None:
+            return False
+        row, what, source = self._edit
+        if source == "formula" or not value_limits.is_limit_error(reason):
+            return False
+        if row is not None and row >= len(self.spec["sets"]):
+            return False
+        value = self._value(row, what)
+        self._limiting = True
+        try:
+            key = self._limit_key(row, what)
+            good, good_known = self._good_size(row, what, key, value)
+            if value <= good:
+                return False
+            limit = self.limits.find(
+                key,
+                self._limit_works(row, what),
+                value,
+                good,
+                good_known=good_known,
+                unit=self._unit(what),
+                keep=self.info.shape,
+            )
+            if limit is None:
+                return False
+            self._edit_pending = False
+            self.limits.limited(key, value, limit, source == "typed", self._unit(what))
+            log("%s %g does not fit here, held at %g" % (self.title, value, limit))
+            self._set_value(row, what, limit)
+            field = self._field_for(what)
+            if field is not None and field.raw is None:
+                field.set_value(limit)
+            self._place_arrows(row, what)
+            self._refresh_rows()
+            self._preview()
+            return True
+        except Exception as exc:
+            warn("%s size limit: %s" % (self.title, exc))
+            return False
+        finally:
+            self._limiting = False
 
     def _collect(self):
         """Read the dialog's choices into the settings (subclasses). The value boxes report
@@ -1547,8 +1716,11 @@ class BlendPanel(Panel):
                 self.features2,
             )
         else:
+            # check_build: a Distance and Angle chamfer is built in a throw-away document
+            # (trial() cannot build it); FreeCAD's own step kept the last good shape when
+            # it failed, and the dialog showed no reason
             row = self._native_row()
-            blend.trial(self.kind, self.info, self.groups[row], self.spec["sets"][row])
+            blend.check_build(self.kind, self.info, self.groups[row], self.spec["sets"][row])
 
     def _preview(self):
         if self._closed:
@@ -1622,11 +1794,21 @@ class BlendPanel(Panel):
                     self._failed(reason)
                     return
             self._remember_good()
+        if self._edit is not None:
+            row, what, _source = self._edit
+            try:
+                key = self._limit_key(row, what)
+                self._good_values[(row, what)] = (key, self._value(row, what))
+            except Exception:
+                pass
+        self._edit_pending = False
         self._show_preview(True)
         self._refresh_rows()
         self.show_status()
 
     def _failed(self, reason):
+        if self._limit_refused(reason):
+            return  # held at the largest size that fits, and previewed with it
         self._good_last = False
         self.error = reason
         self.show_status()
@@ -1635,6 +1817,11 @@ class BlendPanel(Panel):
     def _optimistic(self):
         """The last preview worked and FreeCAD's own step holds it: change it directly."""
         good = getattr(self, "_good", None)
+        if self.kind == "chamfer" and not self._uses_step():
+            if self.spec["sets"][self._native_row()].get("chamfer_type") == "angle":
+                # checked first (blend.check_build): FreeCAD's Distance and Angle builder
+                # crashed (OpenCASCADE segfault) on some sizes that do not fit
+                return False
         return (
             bool(getattr(self, "_good_last", False))
             and good is not None
@@ -1737,25 +1924,39 @@ class BlendPanel(Panel):
             pass
 
     def _compute_hint(self):
+        """A size that does not fit and is not held at the limit (a formula, or picks that
+        changed under it): the error also says the largest size that fits."""
         try:
-            if self._closed or not self.error or not self._has_picks():
+            if self._closed or not self.error or not self._has_picks() or self.info is None:
                 return
-            if self._uses_step():
-                return  # several sets / types: the message names what to change
-            row = self._native_row()
-            options = self.spec["sets"][row]
-            what = "radius" if self.kind == "fillet" else "distance"
-            size = float(options.get(what, 0.0))
-            if size <= 0:
+            if not value_limits.is_limit_error(self.error):
                 return
-            best = blend.max_size(self.kind, self.info, self.groups[row], options, size)
-            if best and best < size and self.error:
-                shown = math.floor(best * 100.0) / 100.0
-                if shown > 0:
-                    self._say(
-                        "⚠ %s\nThe largest %s that fits here is about %.2f mm."
-                        % (self.error, what, shown)
-                    )
+            if self._edit is not None and self._edit[0] == self._row_key():
+                row, what = self._edit[0], self._edit[1]
+            else:
+                row = self._row_key()
+                what = "radius" if self.kind == "fillet" else "distance"
+                if row is not None and self.mode == "fillet":
+                    rtype = self.spec["sets"][row].get("radius_type", "constant")
+                    what = "chord" if rtype == "chord" else what
+            size = self._value(row, what)
+            key = self._limit_key(row, what)
+            good, good_known = self._good_size(row, what, key, size)
+            if size <= good:
+                return
+            limit = self.limits.find(
+                key,
+                self._limit_works(row, what),
+                size,
+                good,
+                good_known=good_known,
+                unit=self._unit(what),
+                keep=self.info.shape,
+            )
+            if limit is not None and self.error:
+                self._say(
+                    "⚠ %s\n%s" % (self.error, value_limits.hint(limit, "hi", self._unit(what)))
+                )
         except Exception as exc:
             warn("%s size hint: %s" % (self.title, exc))
 
@@ -1791,8 +1992,12 @@ class BlendPanel(Panel):
         return self.target
 
     def _say(self, text):
-        """Show (or clear) the dialog's message, growing the panel so no line is cut off."""
+        """Show (or clear) the dialog's message, growing the panel so no line is cut off. The
+        note of a size held at its limit shows under it while there is no error."""
         self.message.setText(text)
+        limits = getattr(self, "limits", None)
+        note = "" if text or limits is None else limits.note
+        value_limits.show_note(getattr(self, "limit_label", None), note)
         width = max(self.message.width(), self.form.width() - 30, 260)
         self.message.setMinimumHeight(self.message.heightForWidth(width) if text else 0)
 
@@ -2286,6 +2491,7 @@ class ChamferPanel(BlendPanel):
         self._update_rows()
 
     def _type_changed(self, *_):
+        self.limits.note = ""
         self._update_rows()
         self._collect()
         self._refresh_rows()

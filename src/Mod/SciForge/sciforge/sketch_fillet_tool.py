@@ -13,7 +13,9 @@ sketch fillet makes the arc and trims (SketchObject::fillet: the same rule as th
 preview, sketch_fillet_core.py); a corner of two lines keeps its old point as a
 construction point with the constraints that were on it, as FreeCAD's fillet tool does.
 The radius becomes a Radius dimension. One undo step per fillet; the tool waits for the
-next corner, Esc ends it.
+next corner, Esc ends it. A radius past what the curves can take (the pointer far out, or
+a number typed) stops at the largest that fits, and the text by the pointer says so (Luca,
+2026-10-21; Fusion refuses it: value_limits.py).
 
 FreeCAD's own fillet tool picks through FreeCAD's preselection, which never registered a
 click on CI's virtual screen (CI #123-#126): this tool computes its picks itself.
@@ -24,7 +26,7 @@ import math
 
 import FreeCAD as App
 
-from . import log
+from . import log, value_limits
 from . import sketch_draw as draw
 from . import sketch_fillet_core as core
 from .sketch_draw import LENGTH, Field
@@ -80,6 +82,7 @@ class SketchFillet(draw.DrawTool):
         super().__init__(session)
         self.refs = []  # per picked curve: the click on the part that stays
         self.made = {}  # the last fillet made (tests): arc, radius, constraint
+        self.limits = value_limits.Limiter()  # radii past what fits stop at the largest
 
     def steps(self):
         return 3
@@ -87,6 +90,8 @@ class SketchFillet(draw.DrawTool):
     def _enter_step(self, step):
         if step == 0:
             self.refs = []
+            if getattr(self, "limits", None) is not None:
+                self.limits.note = ""
         super()._enter_step(step)
 
     def prompt(self):
@@ -94,6 +99,9 @@ class SketchFillet(draw.DrawTool):
             return "click a corner, or the first curve."
         if self.step == 1:
             return "click the second curve."
+        note = getattr(self, "limits", None) and self.limits.note
+        if note:
+            return "%s (Enter makes it)." % note
         return "move to size it, or type the radius, Enter."
 
     def fields(self):
@@ -213,9 +221,40 @@ class SketchFillet(draw.DrawTool):
         if given is None:
             given = core.suggested(c1, c2)
         f = self.boxes.field("radius")
+        r = typed if typed is not None else given
+        held = self._held(c1, c2, r, typed is not None)
         if f is not None:
-            f.value = given
-        return typed if typed is not None else given
+            f.value = held if typed is None else given
+        return held
+
+    def _held(self, c1, c2, r, typed):
+        """`r` held at the largest radius that fits these two curves (found once for them,
+        then reused on every pointer move); the text by the pointer says so."""
+        before = self.limits.note
+        try:
+            key = value_limits.make_key("sketch_fillet", c1, c2, self.refs)
+            held = self.limits.clamp(key, r, typed)
+            if held == r and r > 0:
+                try:
+                    core.check(c1, c2, r, self.refs[0], self.refs[1])
+                except core.FilletError as exc:
+                    if value_limits.is_limit_error(str(exc)):
+                        refs = list(self.refs)
+
+                        def works(value):
+                            core.check(c1, c2, value, refs[0], refs[1])
+                            return True
+
+                        start = min(r / 2.0, core.suggested(c1, c2) * 0.01)
+                        limit = self.limits.find(key, works, r, start)
+                        if limit is not None:
+                            self.limits.limited(key, r, limit, typed)
+                            held = limit
+        except Exception:
+            return r
+        if self.limits.note != before:
+            self._tell()
+        return held
 
     def moved(self, snap):
         if self.step < 2:
@@ -289,3 +328,6 @@ class SketchFillet(draw.DrawTool):
 
     def after_make(self, kept):
         log("Fillet: radius %.4g mm" % self.made.get("radius", 0.0))
+        if self.limits.note:
+            self.say(self.limits.note)  # a typed radius was held at the largest that fits
+            self.limits.note = ""

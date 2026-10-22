@@ -13,7 +13,10 @@ The command looks at what is clicked, like Fusion:
                               sketch, or a shaded area clicked while the dialog waits)
 Nothing selected: the dialog opens and waits. Click more faces (or edges) to add them,
 click a picked one again to drop it. Tangent Chain also picks the faces that continue
-a picked face smoothly (a filleted run). Problems are shown in the dialog.
+a picked face smoothly (a filleted run). Problems are shown in the dialog. A distance (or
+radius) dragged or typed past what works stops at the furthest one that does, and the dialog
+says so (Luca, 2026-10-21; Fusion refuses it: value_limits.py): a push into the part stops
+before it would remove the body or cut it in two.
 """
 
 import FreeCAD as App
@@ -21,7 +24,7 @@ import FreeCADGui as Gui
 
 from . import commands, cut_preview, log, offset_type, preview, presspull
 from . import presspull_core as core, taskui
-from . import ui_icon_path, warn
+from . import ui_icon_path, value_limits, warn
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes
 
@@ -142,7 +145,7 @@ WIP_NOTE = (
 )
 
 
-class PressPullPanel(Panel):
+class PressPullPanel(Panel, value_limits.LimitedValues):
     title = "Press Pull"
     icon = "press_pull"
     last = None  # the most recent panel (for tests and diagnostics)
@@ -168,6 +171,7 @@ class PressPullPanel(Panel):
         self.value_boxes = ValueBoxes(self, default="distance")  # the box next to the arrow
         self.cut_view = None  # the red preview of the material taken away
         self._adopted = []  # plain solids made bodies by a pick (shown again on Cancel)
+        self.limit_init()  # a distance past what works stops at the furthest that does
 
         from .extrude_ui import SelectionField
 
@@ -215,6 +219,8 @@ class PressPullPanel(Panel):
         self.formula_label.setStyleSheet("color: #b8c7d9;")
         self.layout.addRow(self.formula_label)
         self.finish_layout()
+        self.limit_label = value_limits.note_label()  # a value held at its limit
+        self.layout.addRow(self.limit_label)
         # Fusion: a parameter or formula typed in the field; a number typed over it wins.
         # (FreeCAD's own expression binding made the field read-only once a formula was set.)
         self.formula_input = preview.FormulaInput(self, "value", self.field)
@@ -454,6 +460,8 @@ class PressPullPanel(Panel):
     def _selection_updated(self):
         """Create, change or remove the feature after the picked faces/edges changed."""
         self.message.setText("")
+        self.limits.note = ""  # a limit found for the old picks no longer applies
+        value_limits.show_note(self.limit_label, "")
         count = len(self.names)
         self.selection_field.set_text(
             ("%d face(s)" if self.mode == "faces" else "%d edge(s)") % count if count else ""
@@ -643,6 +651,17 @@ class PressPullPanel(Panel):
 
     # -- editing ---------------------------------------------------------------------------
     def _typed(self, value):
+        """A value from the box (typed, a formula, its arrows): held at the furthest one known
+        to work for these picks (not a formula's: it is never rewritten)."""
+        if self.target is None:
+            return
+        held = self.limit_edit("value", value, "formula" if self.formula else "typed")
+        if held != value:
+            value_limits.show_held(self.limit_shower, "value", self.field, value, held)
+            value = held
+        self._apply_value(value)
+
+    def _apply_value(self, value):
         if self.target is None:
             return
         if self._modify is not None:
@@ -662,8 +681,108 @@ class PressPullPanel(Panel):
     def _dragged(self, value):
         self.formula_cleared("value")  # a drag gives a plain number
         value = round(value, 2)
+        held = self.limit_edit("value", value, "dragged")
+        if held != value:
+            value = held
+            if self.dragger is not None:
+                self.dragger.set_distance(value)  # the arrow stops at the limit
+            if abs(self.field.value() - value) < 1e-12:
+                if self.limits.note and not self.error:
+                    self.show_status()  # held at the limit: nothing to rebuild
+                return
         self.field.set_value(value)
-        self._typed(value)
+        self._apply_value(value)
+
+    # -- values past what works (value_limits.LimitedValues) ------------------------------------
+    def _limit_blend(self):
+        """(info, refs, options, kind, option name) of the FreeCAD Fillet / Chamfer whose
+        size is changed (fillet mode or a fillet face clicked), or None (SciForge's own step:
+        its own refusal stays)."""
+        from . import blend as blends
+
+        if self.mode == "fillet" and self.base is not None:
+            info = blends.ShapeInfo(self.base.Shape)
+            return info, list(self.names), {"radius": 1.0}, "fillet", "radius"
+        target = self.target
+        if self.mode != "edit_blend" or target is None or not target.Base:
+            return None
+        if target.TypeId not in (blends.FILLET, blends.CHAMFER) or self.prop not in (
+            "Radius",
+            "Size",
+        ):
+            return None
+        source, subs = target.Base[0], list(target.Base[1])
+        info = blends.ShapeInfo(source.Shape)
+        if target.TypeId == blends.FILLET:
+            return info, subs, {"radius": 1.0}, "fillet", "radius"
+        types = {freecad: option for option, freecad, _label in blends.CHAMFER_TYPES}
+        options = {
+            "chamfer_type": types.get(target.ChamferType, "equal"),
+            "distance": target.Size.Value,
+            "distance2": target.Size2.Value,
+            "angle": target.Angle.Value,
+            "flip": bool(target.FlipDirection),
+        }
+        return info, subs, options, "chamfer", "distance"
+
+    def limit_key(self, what):
+        target = self.target
+        extra = None
+        if self.mode == "edit_blend" and target is not None:
+            extra = (
+                target.Name,
+                self.prop,
+                [
+                    (p, str(getattr(target, p)))
+                    for p in ("ChamferType", "Size2", "Angle", "FlipDirection")
+                    if p in target.PropertiesList
+                ],
+            )
+        base = self.base.Shape if self.base is not None else None
+        return value_limits.make_key("presspull", self.mode, base, list(self.names), extra)
+
+    def limit_works(self, what):
+        if self._modify is not None:
+            return lambda value: False  # Modify Existing: the extrude's own limits apply
+        if self.mode == "faces":
+            shape = self.base.Shape
+            faces = [shape.getElement(n) for n in self.names]
+            return lambda value: core.press_pull(shape, faces, value) is not None
+        found = self._limit_blend()
+        if found is None:
+            return lambda value: False
+        info, refs, options, kind, key = found
+        from . import blend as blends
+
+        def works(value):
+            trial = dict(options)
+            trial[key] = value
+            blends.check_build(kind, info, refs, trial)
+            return True
+
+        return works
+
+    def limit_value(self, what):
+        return float(self.field.value())
+
+    def limit_start(self, what, value):
+        if self.mode == "faces":
+            return 0.01 if value > 0 else -0.01
+        return 0.1  # a fillet radius / chamfer size
+
+    def limit_set(self, what, value):
+        value_limits.show_held(self.limit_shower, what, self.field, self.field.value(), value)
+        if self.dragger is not None:
+            self.dragger.set_distance(value)
+        if self.mode == "faces":
+            self.target.Distance = value
+        elif self.mode == "fillet":
+            self.target.Radius = value
+        elif self.mode == "edit_blend":
+            setattr(self.target, self.prop, value)
+
+    def limit_keep(self):
+        return self.base.Shape if self.base is not None else None
 
     # -- formulas (preview.FormulaInput calls the first three) --------------------------------
     def formula_typed(self, key, text, value):
@@ -712,6 +831,11 @@ class PressPullPanel(Panel):
             return  # a change that arrived as the dialog closed
         try:
             preview.recompute(self.doc)
+            text = preview.failure(self.target) if self._modify is None else ""
+            if text and self.limit_refused(text):
+                preview.recompute(self.doc)  # held at the furthest value that works
+            elif not text:
+                self.limit_good()
             self.show_status()
         except Exception as exc:
             self.message.setText("⚠ %s" % exc)
@@ -758,6 +882,7 @@ class PressPullPanel(Panel):
             view.clear()
 
     def show_status(self):
+        value_limits.show_note(self.limit_label, "")
         if self.formula_error:  # stays until the field gets a value again
             self.message.setText("⚠ " + self.formula_error)
             return
@@ -766,10 +891,14 @@ class PressPullPanel(Panel):
             return
         text = preview.failure(self.target)
         if text:
+            if self._modify is None:
+                text = self.limit_hint(text)  # a formula is not held: say what fits
             self.message.setText("⚠ " + text)
             return
         note = getattr(getattr(self.target, "Proxy", None), "note", "") if self.target else ""
         self.message.setText(note)
+        # a distance held at its limit: "Smallest that fits here: -9.99 mm"
+        value_limits.show_note(self.limit_label, self.limits.note)
 
     def accept(self):
         if self._timer.isActive():

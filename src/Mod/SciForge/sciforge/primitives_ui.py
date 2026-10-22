@@ -25,7 +25,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, drag_guard, handle_look, handles3d, log, preview, primitives
-from . import profile_pick, ui_icon_path, warn
+from . import profile_pick, ui_icon_path, value_limits, warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
 from .primitives_core import nearest_snap, nice_floor, round_to
@@ -717,8 +717,13 @@ def on_circle(center, mouse, radius):
 
 
 # -- the dialog base ----------------------------------------------------------------------------------------
-class PlacedPanel(Panel):
+class PlacedPanel(Panel, value_limits.LimitedValues):
     """A primitive placed on a plane with the mouse (Box, Cylinder, Sphere, Torus, Coil).
+
+    A size dragged or typed past what the shape can take (a torus ring too thick for its
+    diameter, coil turns that touch, a gear hole bigger than its root circle...) stops at
+    the largest (or smallest) value that works and the dialog says so (Luca, 2026-10-21;
+    Fusion refuses it: value_limits.py). A value from a formula is explained instead.
 
     Subclasses set: title, icon, kind, clicks (mouse clicks to place it) and implement
     _build_fields(form), _show_fields(), _collect(), _placed(points) (the clicks set the
@@ -767,6 +772,7 @@ class PlacedPanel(Panel):
         self._geometry_changed = False
         self.formula_error = ""
         self.body = None
+        self.limit_init()  # sizes past what fits stop at the largest that works
         if feature is not None:
             self.body = primitives.owner_body(feature)
             try:
@@ -844,6 +850,8 @@ class PlacedPanel(Panel):
         self.formulas.setStyleSheet("color: #b8c7d9;")
         form.addRow(self.formulas)
         self.finish_layout()
+        self.limit_label = value_limits.note_label()  # "Largest that fits here: ..."
+        form.addRow(self.limit_label)
         try:
             lines = self.message.fontMetrics().lineSpacing()
             self.message.setMinimumHeight(lines * self.MESSAGE_LINES + 4)
@@ -872,6 +880,7 @@ class PlacedPanel(Panel):
         return field, caption
 
     FORMULA_KEYS = ()  # fields where a typed parameter / formula keeps driving the value
+    NO_LIMIT_KEYS = ()  # fields never held at a limit (whole numbers: a bisection needs any value)
     # Where numbers typed over the 3D view go: while placing, the first of these not typed
     # yet; afterwards the field of the arrow dragged last, else READY_KEY.
     TYPE_ORDER = ()
@@ -1211,6 +1220,14 @@ class PlacedPanel(Panel):
     def _typed(self, key, value):
         if self._quiet:
             return
+        if self.state == "ready" and key in self.NO_LIMIT_KEYS:
+            self.limit_forget()
+        elif self.state == "ready" and key in self.fields:
+            formula = bool(self.options.get("expressions", {}).get(key))
+            held = self.limit_edit(key, value, "formula" if formula else "typed")
+            if held != value:  # the box shows it now, or once it is left
+                value_limits.show_held(self.limit_shower, key, self.fields[key], value, held)
+                value = held
         self.options[key] = value
         if self.state in ("plane", "place"):
             # Fusion: a size typed while placing is kept; the clicks give the rest (it was
@@ -1290,6 +1307,7 @@ class PlacedPanel(Panel):
 
     def _changed(self, new_geometry=False):
         self._collect()
+        self._hold_collected()
         self.options["operation"] = self.operation.currentData()
         self._auto_operation()
         self.dirty = True
@@ -1316,6 +1334,19 @@ class PlacedPanel(Panel):
             self.message.setText("⚠ %s" % exc)
 
     def _apply(self):
+        """Build the step; a value just dragged or typed past what fits is held at the
+        largest that works and built again (value_limits)."""
+        self._apply_once()
+        if self.ref is None:
+            return
+        if self.error and self.limit_refused(self.error):
+            self._apply_once()
+        elif not self.error:
+            self.limit_good()
+        if self.error:
+            self.error = self.limit_hint(self.error)
+
+    def _apply_once(self):
         if self.ref is None:
             return
         try:
@@ -1346,6 +1377,7 @@ class PlacedPanel(Panel):
         return self.target
 
     def show_status(self):
+        value_limits.show_note(getattr(self, "limit_label", None), "")
         if self.formula_error:
             self.message.setText("⚠ " + self.formula_error)
             return
@@ -1354,6 +1386,59 @@ class PlacedPanel(Panel):
             return
         text = _plain(preview.failure(self.target)) or self._problem()
         self.message.setText("⚠ " + text if text else "")
+        value_limits.show_note(getattr(self, "limit_label", None), "" if text else self.limits.note)
+
+    # -- sizes past what fits (value_limits.LimitedValues) ------------------------------------------
+    def limit_check(self, options):
+        """Raise when the values cannot make the shape (pure: no document). Subclasses."""
+        primitives.check(self.kind, options)
+
+    def limit_key(self, what):
+        options = {k: v for k, v in self.options.items() if k not in (what, "x", "y")}
+        return value_limits.make_key(self.kind, options, what)
+
+    def limit_works(self, what):
+        options = dict(self.options)
+
+        def works(value):
+            trial = dict(options)
+            trial[what] = value
+            self.limit_check(trial)
+            return True
+
+        return works
+
+    def limit_value(self, what):
+        return float(self.options.get(what, 0.0))
+
+    def limit_unit(self, what):
+        field = self.fields.get(what)
+        return getattr(field, "unit", "mm") or "mm"
+
+    def limit_set(self, what, value):
+        self.options[what] = value
+        field = self.fields.get(what)
+        if field is not None:
+            value_limits.show_held(self.limit_shower, what, field, field.value(), value)
+        handle = self.handles.get(what)
+        if handle is not None:
+            try:
+                handle.set_value(value)
+            except Exception:
+                pass
+
+    def _hold_collected(self):
+        """Values read back from the boxes (a number being typed) held at the limits known
+        for them; a formula's value is never held."""
+        expressions = self.options.get("expressions", {})
+        for key in self.fields:
+            if key in self.NO_LIMIT_KEYS:
+                continue
+            if key in self.options and not expressions.get(key):
+                try:
+                    self.options[key] = self.limit_held(key, float(self.options[key]))
+                except (TypeError, ValueError):
+                    pass
 
     def _problem(self):
         """A cut that misses or takes everything, separate pieces (FreeCAD says nothing)."""
@@ -1490,13 +1575,34 @@ class PlacedPanel(Panel):
     def _handle_dragged(self, name, apply, value):
         self._last_handle = name  # a number typed over the view now goes to its field
         self.drop_formula(name)
+        before = self.options.get(name)
         apply(value)
+        if self._hold_dragged(name) and before == self.options.get(name):
+            self.show_status()  # held at the limit: nothing to rebuild
+            return
         self._changed()
 
     @safe
     def _handle_released(self, name, apply, value):
         apply(value)
+        self._hold_dragged(name)
         self._changed(new_geometry=True)
+
+    def _hold_dragged(self, name):
+        """The value a handle was dragged to, held at the largest that fits (the handle stops
+        there too). True when it was held."""
+        if name not in self.fields or name not in self.options or name in self.NO_LIMIT_KEYS:
+            return False
+        value = float(self.options[name])
+        held = self.limit_edit(name, value, "dragged")
+        if held == value:
+            return False
+        self.options[name] = held
+        self.set_field(self.fields[name], held)
+        handle = self.handles.get(name)
+        if handle is not None:
+            handle.set_value(held)
+        return True
 
     def set_field(self, field, value):
         self._quiet = True

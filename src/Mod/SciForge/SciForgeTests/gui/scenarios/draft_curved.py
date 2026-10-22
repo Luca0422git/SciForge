@@ -7,13 +7,15 @@ Its 8 side walls (4 flat, 3 round... and the spline) are one tangent chain.
 Ribbon Draft with nothing selected, click the XY square (pull +Z), click the spline wall: it
 is taken (FreeCAD's own Draft refuses such a face) with its whole tangent chain; type 3,
 Tangent Chain off (the spline alone) and on again, OK, Ctrl+Z / Ctrl+Y, edit from the
-timeline, an angle the r 3 corners cannot take (explained, OK waits), 5, OK, and a second
+timeline, an angle the r 3 corners cannot take (held at the steepest that works and said:
+Luca's decision of 2026-10-21), 5, OK, and a second
 Draft started with the spline wall selected beforehand, Cancel.
 
 Volumes, measured on a mesh (OpenCASCADE's volume of B-spline faces is ~0.5 % off): the
 outline is smooth all round, so at height z it is offset inward by z tan(a), with area
 A - P d + pi d^2 (Steiner): V(a) = A H - P tan(a) H^2 / 2 + pi tan(a)^2 H^3 / 3.
 """
+
 import math
 
 import FreeCAD as App
@@ -232,14 +234,20 @@ def edit_open():
 
 
 def too_steep():
+    """Luca, 2026-10-21: an angle the corners cannot take is held at the steepest that works
+    (it was refused, and OK waited)."""
     p = sd.draft_panel()
-    text = p.message.text() if p else ""
-    h.check("an angle the r 3 corners cannot take is explained", "bends too tightly" in text, text)
-    h.task_button("OK")
+    note = p.limit_label.text() if p and p.limit_label.isVisible() else ""
+    a = p.options.get("angle", 0) if p else 0
+    h.check("40 is held at the steepest angle the r 3 corners take", 3.0 < a < 40.0, a)
+    h.check("and said", note == "40° does not fit: limited to %.1f°" % a, note)
+    h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
+
+
+too_steep.wait_ms = 9000
 
 
 def ok_waits():
-    h.check("OK waits while the draft fails", sd.draft_panel() is not None)
     p = sd.draft_panel()
     if p:
         sd.type_into(p.angle.widget, "5")

@@ -11,7 +11,8 @@ Sphere from the selected top face, centre 6 mm out, Diameter 4: half sticks out,
 Intersect keeps the half inside; Cut takes it away; OK. Double-click Sphere 1, Diameter
 3, OK. Torus with nothing selected: XY square, centre on the origin, a point at (20, 0):
 inner diameter 40, torus diameter 10, away from the part: a New Body. Position Outside;
-Inside with Torus Diameter 25 is too thick (said in the dialog, OK refused); back to
+Inside with Torus Diameter 25 is too thick: held at the thickest that works (19.99) and said
+(Luca's decision of 2026-10-21; it was refused); back to
 10 and Outside, OK. Undo / redo. Cancel and Esc leave the part as it was.
 
 Hand-derived volumes (pi = PI):
@@ -21,6 +22,7 @@ Hand-derived volumes (pi = PI):
   half sphere r1.5 = 2.25 pi
   torus R25 r5 = 2 pi^2 25 25 = 1250 pi^2; R20 r5 = 1000 pi^2
 """
+
 import math
 
 import FreeCAD as App
@@ -398,15 +400,18 @@ torus_too_thick.wait_ms = 1200
 
 
 def torus_refused():
+    """Luca, 2026-10-21: a ring too thick for its diameter is held at the thickest that
+    works (inside a 40 inner circle: under 20)."""
     p = torus_panel()
-    h.check("too thick: said in the dialog", "too thick" in p.message.text(), p.message.text())
+    note = p.limit_label.text() if p.limit_label.isVisible() else ""
+    h.check("too thick: held at 19.99", near(p.options["torus_diameter"], 19.99), p.options)
+    h.check("and said", note == "25 mm does not fit: limited to 19.99 mm", note)
+    h.check("no error", p.message.text() == "", p.message.text())
     h.check("no pop-up", not h.popups(), h.popups())
-    h.task_button("OK")
 
 
 def torus_still_open():
     p = torus_panel()
-    h.check("OK refused while it cannot be built", p is not None and not pi.no_dialog())
     if p is None:
         return
     ui.type_into(p.tube.widget, "10")

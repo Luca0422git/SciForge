@@ -8,13 +8,15 @@ Path 2, wrong order: the radius typed before any pick, then an edge, then the fa
 Path 3, Esc in the middle of picking: the part comes back exactly as it was (no
         see-through leftover, nothing selected), and the next F starts empty.
 Path 4, values while the preview runs: three radii typed back to back, the arrow dragged
-        far out (too big: said in the dialog, OK refused) and back through the edge
-        (the radius stops at its smallest and the arrow comes back to it).
+        far out (it stops at the largest radius that fits and the dialog says so: Luca's
+        decision of 2026-10-21, Fusion refuses it) and back through the edge (the radius
+        stops at its smallest and the arrow comes back to it).
 Path 5, edit from the timeline three times (add an edge, drop it again, a radius typed in
         inches and Cancel), then undo / redo through the edits.
 Path 6, another command's key while the dialog is open: E keeps a good fillet and opens
-        Extrude; Q drops a fillet that does not fit and opens Press Pull; F again keeps
-        the fillet and starts a new one with nothing picked (not the old picks).
+        Extrude; Q drops a fillet that does not fit (a parameter "big" = 45 mm typed as the
+        radius: a formula is never held at the largest radius) and opens Press Pull; F
+        again keeps the fillet and starts a new one with nothing picked (not the old picks).
 Path 7, save while the dialog is open (Ctrl+S): the file never holds a half-made
         fillet. Close, reopen, edit the fillet from the timeline, Press Pull its face.
 
@@ -27,6 +29,7 @@ import tempfile
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
+from PySide6 import QtTest
 
 from SciForgeTests.gui import blend_steps as b
 from SciForgeTests.gui import harness as h
@@ -246,45 +249,42 @@ def p4_drag_far():
 
 
 def p4_too_big():
+    """Luca, 2026-10-21: dragged past the largest radius that fits, the radius stops there
+    (it was refused, and OK waited)."""
     p = b.blend_panel()
     r = p.radius.value() if p else 0
-    h.check("P4 dragging far out makes the radius big", r > 15, r)
-    text = p.message.text() if p else ""
-    h.check("P4 too big: said in the dialog", "too big" in text, text)
-    # The preview follows the arrow while it is dragged (like Fusion's), so the last good
-    # result is the last radius that still fitted during the drag (at least the one before).
-    shown = getattr(getattr(p, "target", None), "Radius", None)
-    shown = float(getattr(shown, "Value", shown or 0.0))
+    h.check("P4 dragged far out: the radius stops just under 10 mm", 9.0 < r <= 10.0, r)
+    h.check("P4 no error", p is not None and p.message.text() == "", p and p.message.text())
+    h.check("P4 the preview shows the largest round", b.close(h.solid_volume(), one_edge(r)), r)
+    dragger, spot = p.arrows[0][0], p.arrows[0][1]
     h.check(
-        "P4 the preview keeps the last good result",
-        0 < shown < r
-        and b.close(h.solid_volume(), one_edge(shown))
-        and h.solid_volume() <= s["good"] + 1e-6,
-        (h.solid_volume(), shown, s["good"]),
+        "P4 the arrow stops there too",
+        abs(dragger.distance() - r * spot["per_unit"]) < 1e-6,
+        (dragger.distance(), r),
     )
     h.shot("p4-too-big")
-    h.task_button("OK")
 
 
-def p4_refused():
-    h.check("P4 OK refused while too big", dialog_open() and b.blend_panel() is not None)
-
-
-p4_refused.wait_ms = 1500  # the dialog works out the largest radius that fits
+p4_too_big.wait_ms = 1500  # the dialog works out the largest radius that fits
 
 
 def p4_full_message():
     p = b.blend_panel()
     if p is None:
         return
-    text = p.message.text()
-    h.check("P4 the hint names the largest radius", "largest radius" in text, text)
-    shown = p.message.height() >= p.message.heightForWidth(p.message.width()) - 1
-    visible = p.message.visibleRegion().boundingRect().height()
+    label = p.limit_label
+    text = label.text() if label.isVisible() else ""
     h.check(
-        "P4 the whole message is readable (not cut off)",
-        shown and visible >= p.message.height() - 1,
-        (p.message.height(), p.message.heightForWidth(p.message.width()), visible),
+        "P4 the note says the largest radius",
+        text == "Largest that fits here: %.2f mm" % p.radius.value(),
+        text,
+    )
+    shown = label.height() >= label.heightForWidth(label.width()) - 1
+    visible = label.visibleRegion().boundingRect().height()
+    h.check(
+        "P4 the whole note is readable (not cut off)",
+        shown and visible >= label.height() - 1,
+        (label.height(), label.heightForWidth(label.width()), visible),
     )
     h.shot("p4-message")
 
@@ -467,10 +467,16 @@ def p6_pick2():
 
 
 def p6_too_big():
+    from sciforge import parameters
+
     p = b.blend_panel()
     h.check("P6 vertical edge picked", p is not None and len(p.refs) == 1, picks())
+    # A plain 45 would be held at the largest radius that fits (Luca, 2026-10-21) and the
+    # fillet would fit; a formula is never rewritten, so it stays a fillet that does not fit.
+    parameters.add_user(App.ActiveDocument, "big", "mm", "45")
     if p:
-        b.type_into(p.radius.widget, "45")
+        b.type_into(p.radius.widget, "big")
+        QtTest.QTest.keyClick(p.radius.widget, QtCore.Qt.Key_Tab)
 
 
 def p6_press_q():
@@ -628,7 +634,6 @@ h.run(
         p4_fast_result,
         p4_drag_far,
         p4_too_big,
-        p4_refused,
         p4_full_message,
         p4_drag_back,
         p4_dragged_back,

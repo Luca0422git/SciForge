@@ -852,6 +852,35 @@ def trial(kind, info, refs, options):
     return result
 
 
+def check_build(kind, info, refs, options):
+    """Raise BlendError if the blend does not work: trial(), and for a Distance and Angle
+    chamfer (Part has no Python call for it, trial() cannot build it) the same bevel built
+    as a Two Distances chamfer: the second distance is where a bevel leaving the measured
+    face at the angle meets the other face (law of sines in the corner's triangle). Used to
+    explain a refused chamfer and to find the largest size that fits (value_limits). Not
+    FreeCAD's own Distance and Angle builder: OpenCASCADE crashed FreeCAD in it (segfault in
+    ChFi3d_Builder) for some sizes where the bevel runs into a fillet, and a search tries
+    sizes nobody typed."""
+    if trial(kind, info, refs, options) is not None:
+        return
+    names = blended_edges(info, refs)
+    label, size = _size_name(kind, options)
+    angle = math.radians(float(options.get("angle", 45.0)))
+    second = 0.0
+    for name in names:
+        frame = info.frame(name)
+        gamma = frame["gamma"] if frame else math.pi / 2.0
+        far = math.sin(angle + gamma)
+        if far <= 1e-9:
+            raise BlendError(too_big(kind, label, size))
+        second = max(second, size * math.sin(angle) / far)
+    two = dict(options, chamfer_type="two", distance=size, distance2=second)
+    try:
+        trial(kind, info, refs, two)
+    except BlendError:
+        raise BlendError(too_big(kind, label, size))
+
+
 def too_big(kind, label, size, exc=None):
     what = "round" if kind == "fillet" else "bevel"
     return "%s %g mm is too big here: the %s does not fit on the faces next to it." % (
