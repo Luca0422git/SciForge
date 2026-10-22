@@ -90,7 +90,12 @@ class Guard(unittest.TestCase):
     def test_stored_baseline_readable(self):
         """The baseline kept in the repository is one the guard can read."""
         if os.path.exists(perf_guard.DEFAULT):
-            self.assertTrue(perf_guard.load(perf_guard.DEFAULT))
+            stored = perf_guard.load(perf_guard.DEFAULT)
+            self.assertTrue(stored)
+            self.assertTrue(all(v >= 0 for v in stored.values()))
+            # both benchmarks are in it: perf_big_model's and perf_benchmark's
+            self.assertIn("Idle: busy time per second (timers)", stored)
+            self.assertIn("Fillet, new, 4 vertical edges", stored)
 
 
 if __name__ == "__main__":
