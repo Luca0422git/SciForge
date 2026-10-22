@@ -1,0 +1,262 @@
+{
+  "id": "export_report_design",
+  "title": "Export report: what STEP, IGES, STL, 3MF and OBJ leave out of a design with components, a hidden body and a material",
+  "tags": [
+    "export",
+    "export-report",
+    "components"
+  ],
+  "steps": [
+    {
+      "op": "parameter",
+      "name": "width",
+      "value": 40,
+      "unit": "mm"
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "base"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 2.0,
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            0,
+            70,
+            30
+          ],
+          "name": "b2"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            80,
+            0,
+            90,
+            10
+          ],
+          "name": "b3"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e3",
+      "profile": "s3",
+      "distance": 5,
+      "operation": "new_body"
+    },
+    {
+      "op": "body_material",
+      "feature": "e2",
+      "material": "aluminium"
+    },
+    {
+      "op": "components_from_bodies",
+      "id": "k1",
+      "bodies": [
+        "e2"
+      ],
+      "label": "Bracket"
+    },
+    {
+      "op": "component_paste",
+      "id": "i1",
+      "component": "k1",
+      "dx": 60
+    },
+    {
+      "op": "hide_bodies",
+      "bodies": [
+        "e3"
+      ]
+    },
+    {
+      "op": "export_report_expect",
+      "format": "STEP",
+      "expect": {
+        "hidden": 1,
+        "timeline": 7,
+        "sketches": 3,
+        "parameters": 1,
+        "names": 2,
+        "looks": 1,
+        "materials": 1
+      },
+      "comment": "Whole design, headless: Body3 is hidden; s1 e1 f1 s2 e2 s3 e3; the root Body and Bracket's Body2 come back as Body1 (the copy Bracket:2 is a second occurrence, no body of its own); only Body2 has a look (aluminium) and a material"
+    },
+    {
+      "op": "export_report_expect",
+      "format": "IGES",
+      "expect": {
+        "hidden": 1,
+        "timeline": 7,
+        "sketches": 3,
+        "parameters": 1,
+        "components": 2,
+        "names": 2,
+        "looks": 2,
+        "materials": 2
+      },
+      "comment": "IGES: no components (Bracket, Bracket:2); Body and Body001 come back as Body1 and Body3 (Body2 keeps its name by chance: it is the second); the copy's body has the material too"
+    },
+    {
+      "op": "export_report_expect",
+      "format": "STL (Binary)",
+      "expect": {
+        "hidden": 1,
+        "timeline": 7,
+        "sketches": 3,
+        "parameters": 1,
+        "components": 2,
+        "merged": 3,
+        "looks": 2,
+        "materials": 2,
+        "curved": 4
+      },
+      "comment": "STL: the 3 shown bodies in one mesh; the 4 fillet faces are curved"
+    },
+    {
+      "op": "export_report_expect",
+      "format": "3MF",
+      "expect": {
+        "hidden": 1,
+        "timeline": 7,
+        "sketches": 3,
+        "parameters": 1,
+        "components": 2,
+        "looks": 2,
+        "materials": 2,
+        "curved": 4
+      },
+      "comment": "3MF keeps the names (one object per body) and the unit"
+    },
+    {
+      "op": "export_report_expect",
+      "format": "OBJ",
+      "expect": {
+        "hidden": 1,
+        "timeline": 7,
+        "sketches": 3,
+        "parameters": 1,
+        "components": 2,
+        "looks": 2,
+        "materials": 2,
+        "curved": 4
+      },
+      "comment": "OBJ keeps the names (one group per body)"
+    },
+    {
+      "op": "export_report_expect",
+      "format": "STEP",
+      "target": "k1",
+      "expect": {
+        "timeline": 2,
+        "sketches": 1,
+        "parameters": 1,
+        "names": 1,
+        "looks": 1,
+        "materials": 1
+      },
+      "comment": "Bracket alone: e2 and s3 (drawn in Body2 before e3 made a new body of it); its body comes back named after the component"
+    },
+    {
+      "op": "export_report_expect",
+      "format": "STL (ASCII)",
+      "target": [
+        "e1"
+      ],
+      "unit": "Inch",
+      "expect": {
+        "timeline": 4,
+        "sketches": 2,
+        "parameters": 1,
+        "curved": 4,
+        "unit": 1
+      },
+      "comment": "Body alone in inches: s1 e1 f1 and s2 (drawn in Body before e2 made a new body of it)"
+    },
+    {
+      "op": "export_report_expect",
+      "format": "3MF",
+      "target": [
+        "e1",
+        "e2"
+      ],
+      "unit": "Centimeter",
+      "expect": {
+        "timeline": 6,
+        "sketches": 3,
+        "parameters": 1,
+        "components": 1,
+        "looks": 1,
+        "materials": 1,
+        "curved": 4
+      },
+      "comment": "Body and Body2 in centimetres: 3MF writes the unit"
+    }
+  ],
+  "expect": {
+    "volume": 12000,
+    "faces": 12,
+    "solids": 2,
+    "bbox": [
+      50,
+      0,
+      0,
+      130,
+      30,
+      10
+    ],
+    "source": "analytic",
+    "note": "what the component steps measure: Bracket and its copy Bracket:2 (60 to the right), two 20 x 30 x 10 boxes = 12000; the export checks are the point of this model"
+  }
+}

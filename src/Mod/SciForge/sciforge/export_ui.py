@@ -88,6 +88,15 @@ def _design_name(doc):
     return doc.Label
 
 
+def files_label(written):
+    """How an export's message names what it wrote: "two.stl", or "3 files" (One File Per
+    Body). `written`: [(path, triangles or None)] or [path]."""
+    paths = [w[0] if isinstance(w, (list, tuple)) else w for w in written or []]
+    if len(paths) == 1:
+        return os.path.basename(paths[0])
+    return "%d files" % len(paths)
+
+
 # -- the bodies list ---------------------------------------------------------------------------
 class BodyList(QtWidgets.QListWidget):
     """Fusion's Selection: the bodies to export, ticked. Pre-ticked from the selection, else
@@ -467,6 +476,7 @@ class ExportDialog(_MeshDialog):
                 % (len(written), "" if len(written) == 1 else "s", os.path.dirname(path))
             )
             self.accept()
+            self.report(written, fmt)
             return written
         except (export.ExportError, self.exchange_core.ExchangeError) as exc:
             self.say(str(exc))
@@ -474,6 +484,38 @@ class ExportDialog(_MeshDialog):
             warn("Export failed: %s" % exc)
             self.say("The export failed: %s" % exc)
         return None
+
+    def report(self, written, fmt):
+        """Say what the file leaves out (export_report_ui: a short message over the view,
+        nothing when nothing is lost). Never raises."""
+        try:
+            from . import export_report_ui
+
+            kind = self.kind()
+            what = self.what.currentText()
+            options = {}
+            if kind in self.exchange_core.FLAT_KINDS:
+                objects = self.flat
+            elif what == COMPONENT:
+                objects = self.chosen_component()
+            elif what == SELECTED:
+                objects = self.chosen_bodies()
+            else:
+                objects = None
+            if kind in MESH_KINDS:
+                level, surface, normal = self.refinement.values()
+                options = {
+                    "unit": self.unit.currentText(),
+                    "per_body": self.structure.currentText() == "One File Per Body",
+                    "level": level,
+                    "surface": surface,
+                    "normal": normal,
+                }
+            export_report_ui.report_losses(
+                self.doc, objects, fmt, files_label(written), **options
+            )
+        except Exception as exc:
+            warn("export report: %s" % exc)
 
     def export_to(self, path, fmt, chosen=None):
         from . import exchange
@@ -810,6 +852,23 @@ class PrintDialog(_MeshDialog):
                     open_folder(os.path.dirname(file_path))
                 commands.tell("Saved %s" % file_path)
             self.accept()
+            try:  # what the print file leaves out (colours, bodies merged...), if anything
+                from . import export_report_ui
+
+                export_report_ui.report_losses(
+                    self.doc,
+                    chosen,
+                    fmt,
+                    os.path.basename(file_path),
+                    purpose="print",
+                    verb="Sent" if sending else "Saved",
+                    unit=unit,
+                    level=level,
+                    surface=surface,
+                    normal=normal,
+                )
+            except Exception as exc:
+                warn("3D Print report: %s" % exc)
             return True
         except export.ExportError as exc:
             self.say(str(exc))
@@ -844,7 +903,26 @@ def export_everything(doc, folder=None, open_after=True):
     written = export.export_everything(doc, folder, chosen, screenshot, _design_name(doc))
     if open_after:
         open_folder(folder)
+    report_everything(doc, chosen, written)
     return written
+
+
+def report_everything(doc, chosen, written):
+    """One message for the files Export Everything wrote (what each leaves out, the
+    formats named when not all of them lose it). Never raises."""
+    try:
+        from . import export_report, export_report_ui
+
+        reports = []
+        for key, fmt in (("step", "STEP"), ("stl", "STL (Binary)"), ("3mf", "3MF"), ("obj", "OBJ")):
+            if key in written:
+                entries = export_report.safe_losses(doc, chosen, fmt, whole=True)
+                reports.append((export_report.core.format_name(fmt), entries))
+        keys = ("step", "stl", "3mf", "obj")
+        names = [os.path.basename(written[k]) for k in keys if k in written]
+        export_report_ui.report_combined(", ".join(names), reports)
+    except Exception as exc:
+        warn("Export Everything report: %s" % exc)
 
 
 # ============================================================================ commands

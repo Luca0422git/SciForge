@@ -1,0 +1,125 @@
+{
+  "id": "export_report_sketch_dxf",
+  "title": "Export report: what Save As DXF leaves out of a sketch (dimensions, constraints, construction, points, its place in 3D)",
+  "tags": [
+    "export",
+    "export-report",
+    "dxf",
+    "sketch"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ],
+          "name": "plate"
+        },
+        {
+          "circle": [
+            20,
+            15,
+            5
+          ],
+          "name": "hole"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 5
+    },
+    {
+      "op": "export_report_expect",
+      "format": "DXF",
+      "target": "s1",
+      "expect": {
+        "dimensions": 7,
+        "constraints": 8
+      },
+      "comment": "rectangle + circle on XY: 4 + 3 dimensions, 4 coincident + 2 horizontal + 2 vertical; nothing else is lost"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            10
+          ],
+          "name": "side"
+        },
+        {
+          "ellipse": [
+            40,
+            5,
+            6,
+            3
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch_extras",
+      "target": "s2",
+      "points": [
+        [
+          2,
+          2
+        ],
+        [
+          4,
+          4
+        ]
+      ],
+      "construction": [
+        [
+          0,
+          0,
+          20,
+          10
+        ]
+      ]
+    },
+    {
+      "op": "export_report_expect",
+      "format": "DXF",
+      "target": "s2",
+      "expect": {
+        "dimensions": 4,
+        "constraints": 8,
+        "construction_curves": 1,
+        "points": 2,
+        "off_plane": 1
+      },
+      "comment": "on XZ (the DXF is flat in the sketch's own X and Y), with 2 points and a construction line"
+    }
+  ],
+  "expect": {
+    "volume": 5607.300918301276,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      5
+    ],
+    "source": "analytic",
+    "note": "40 x 30 x 5 = 6000 minus the hole pi * 5^2 * 5 = 392.699; the DXF checks are the point of this model"
+  }
+}

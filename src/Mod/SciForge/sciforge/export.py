@@ -405,7 +405,8 @@ def export_mesh_files(
             mesh = mesh.copy()
             mesh.transform(inverse)
         if not mesh.isSolid():
-            warn("%s: the mesh is not watertight (open edges); a slicer may complain" % body.Label)
+            # said in the export message too (export_report: "not closed"), so no warning
+            log("%s: the mesh is not watertight (open edges); a slicer may complain" % body.Label)
         meshes.append((body.Label, mesh))
     written = []
     if per_body and len(meshes) > 1:

@@ -14,7 +14,9 @@ A  EXPORT > Export PDF: the dialog (the drawing's name, Open afterwards ticked);
 B  EXPORT > Export DXF: Open afterwards not ticked; Export: the DXF has the hole as a
    circle (R6) at the view's centre on VISIBLE, the dimension 50 on DIMENSIONS, the centre
    mark's two lines (18 mm: 3 mm past the hole) on CENTER, the hatching (45 degree lines)
-   on HATCH, the caption and the note on TEXT, the title on SHEET; it was not opened.
+   on HATCH, the caption and the note on TEXT, the title on SHEET; it was not opened. The
+   export message says what the DXF does not keep: the dimension (plain lines and text),
+   the hatching (separate lines), the font (the PDF of A kept everything: no message).
 C  Export PDF with the name emptied: the dialog says to give a name and stays; Cancel:
    no file.
 D  A second drawing in inches (ASME): the bottom edge's dimension reads 1.969, the title
@@ -195,9 +197,18 @@ def dark_share(image, dpi, x0, y0, x1, y1):
     return dark / float(total or 1)
 
 
+def message():
+    """The export message (sciforge/export_report_ui.py) on screen, as text ("" if none)."""
+    from sciforge import export_report_ui
+
+    n = export_report_ui.current()
+    return "%s\n%s" % (n.title.text(), n.body.text()) if n is not None else ""
+
+
 def a_written():
     path = os.path.join(OUT, "exp_sheet.pdf")
     h.check("the dialog closed", dialog() is None)
+    h.check("the PDF leaves nothing out: no export message", message() == "", message())
     if not h.check("the PDF is written", os.path.isfile(path), os.listdir(OUT)):
         return
     with open(path, "rb") as handle:
@@ -300,6 +311,17 @@ def b_written():
     h.check("the note", "NOTE 1" in words, words)
     sheet = [t[1][0] for t in on(entities, "TEXT", "SHEET")]
     h.check("the title block's title", "Exp" in sheet, sheet)
+    text = message()
+    h.check("the export message", "Exported exp_sheet.dxf" in text, text)
+    h.check(
+        "... the dimension as plain lines and text",
+        "1 dimension as plain lines and text" in text,
+        text,
+    )
+    h.check("... the section's hatching", "the hatching of 1 section view" in text, text)
+    h.check("... the font", "the font of the text" in text, text)
+    h.check("... no hidden view", "hidden" not in text, text)
+    h.check("... no other sheet", "other sheet" not in text, text)
 
 
 # -- C ------------------------------------------------------------------------------------------

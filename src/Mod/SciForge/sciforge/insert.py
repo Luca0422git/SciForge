@@ -584,10 +584,12 @@ def _layer_of(obj, layers):
     return None
 
 
-def read_curves(path):
+def read_curves(path, notes=None):
     """[(layer name, [edges])] of an SVG or DXF file, read with FreeCAD's importers into a
     throw-away document. The edges lie in the XY plane, in mm (the importers scale the
-    file's units; SVG px count 96 per inch, as FreeCAD reads them)."""
+    file's units; SVG px count 96 per inch, as FreeCAD reads them). `notes` (a dict): filled
+    with what the file had that does not come in (export_report_core.curve_items: entities
+    FreeCAD cannot read, texts and dimensions, points, pictures, curves not flat)."""
     if not path or not os.path.isfile(path):
         raise InsertError("The file was not found: %s" % (path or "(no file)"))
     ext = os.path.splitext(path)[1].lower()
@@ -599,11 +601,17 @@ def read_curves(path):
             import importSVG
 
             importSVG.insert(path, doc.Name)
+            if notes is not None:
+                _svg_notes(path, notes)
         else:
             import importDXF
 
             with _dxf_dialog_off():
-                importDXF.insert(path, doc.Name)
+                stats = _insert_dxf(importDXF, path, doc.Name)
+            if notes is not None:
+                from . import export_report_core
+
+                notes.update(export_report_core.dxf_facts(stats))
         doc.recompute()
         layers = {}
         for obj in doc.Objects:
@@ -630,9 +638,37 @@ def read_curves(path):
             # moved twice when it was put on again: found by the SVG scenario)
             for edge in shape.Edges:
                 found[layer].append(edge.copy())
+                if notes is not None and edge.BoundBox.ZLength > 1e-6:
+                    notes["flattened"] = notes.get("flattened", 0) + 1
         return [(layer, found[layer]) for layer in order if found[layer]]
     finally:
         _close_temp(doc, active)
+
+
+def _insert_dxf(importDXF, path, doc_name):
+    """FreeCAD's DXF import into `doc_name`; returns the importer's statistics (entity
+    counts, entities it cannot read) when FreeCAD gives them (1.1: _import_dxf_file, the
+    function insert() itself runs), else None."""
+    run = getattr(importDXF, "_import_dxf_file", None)
+    if run is not None:
+        try:
+            result = run(path, doc_name)
+            stats = result[1] if isinstance(result, tuple) and len(result) > 1 else None
+            return stats if isinstance(stats, dict) else None
+        except TypeError:
+            pass  # another FreeCAD's signature: the public insert below
+    importDXF.insert(path, doc_name)
+    return None
+
+
+def _svg_notes(path, notes):
+    try:
+        from . import export_report_core
+
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            notes.update(export_report_core.svg_facts(handle.read()))
+    except Exception as exc:
+        log("Insert SVG: the file was not looked into (%s)" % exc)
 
 
 def curves_bounds(edges):

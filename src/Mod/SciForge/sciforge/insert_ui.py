@@ -575,11 +575,13 @@ class InsertMeshPanel(_InsertPanel):
         self.triad = None
         self._start = None
         self.value_boxes = taskui.ValueBoxes(self)
+        self.source = None  # (path, the file's triangles) for the import report
         if feature is None:
             mesh = insert.read_mesh(path)
             unit = insert.design_unit(doc)
             self.obj = insert.make_mesh_body(doc, mesh, path, unit=unit)
             self.obj.Placement = App.Placement()
+            self.source = (path, mesh)
         else:
             self.obj = feature
             path = getattr(feature, "SourceFile", "") or ""
@@ -784,9 +786,15 @@ class InsertMeshPanel(_InsertPanel):
 
     # -- finishing ----------------------------------------------------------------------
     def accept(self):
+        try:
+            unit = self.unit.currentText()
+        except Exception:
+            unit = None
         if not super().accept():
             return False
         _refresh_browser()
+        if self.source is not None:
+            report_mesh_import(self.source[0], self.source[1], unit)
         return True
 
     def reject(self):
@@ -813,6 +821,32 @@ class InsertMeshPanel(_InsertPanel):
                 pass
             self.triad = None
         super().cleanup()
+
+
+def report_mesh_import(path, mesh, unit):
+    """Say what is wrong with or was left out of an inserted mesh file (export_report:
+    open edges, colours, a 3MF's own unit...). Never raises."""
+    try:
+        from . import export_report, export_report_ui
+
+        export_report_ui.report_import(
+            os.path.basename(path or ""), export_report.mesh_import_items(path, mesh, unit)
+        )
+    except Exception as exc:
+        warn("Insert Mesh report: %s" % exc)
+
+
+def report_curves_import(path, notes):
+    """Say what an SVG / DXF had that is not in the sketch (export_report). Never
+    raises."""
+    try:
+        from . import export_report, export_report_ui
+
+        export_report_ui.report_import(
+            os.path.basename(path or ""), export_report.curve_import_items(path, notes)
+        )
+    except Exception as exc:
+        warn("Insert report: %s" % exc)
 
 
 def _refresh_browser():
@@ -1037,13 +1071,19 @@ class InsertCurvesPanel(_PlaneHandles, _InsertPanel):
         self.angle_sign = -1.0 if kind == "svg" else 1.0
         super().__init__(doc, self.title)
         self.init_handles()
-        raw = insert.read_curves(path)
+        self.import_notes = {}
+        raw = insert.read_curves(path, self.import_notes)
         box = insert.curves_bounds([e for _name, edges in raw for e in edges])
         self.extent = box or ((0.0, 0.0), (0.0, 0.0))
         (x0, y0), (x1, y1) = self.extent
         self.origin = ((x0 + x1) / 2.0, (y0 + y1) / 2.0) if kind == "svg" else (0.0, 0.0)
         self.layers = [(name, insert.curves_to_geometry(edges)) for name, edges in raw]
         self.layers = [(name, geos) for name, geos in self.layers if geos]
+        self.import_notes["skipped"] = max(
+            0,
+            sum(len(edges) for _name, edges in raw)
+            - sum(len(geos) for _name, geos in self.layers),
+        )
         if not self.layers:
             raise insert.InsertError("The file holds no curves that can go into a sketch.")
         self.path = path
@@ -1270,6 +1310,7 @@ class InsertCurvesPanel(_PlaneHandles, _InsertPanel):
         if not super().accept():
             return False
         _refresh_browser()
+        report_curves_import(self.path, self.import_notes)
         if reopen is not None and bodies.alive(reopen):
             from . import sketch_ui
 
