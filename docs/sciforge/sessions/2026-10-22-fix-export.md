@@ -86,3 +86,13 @@ change.
   in `SciForgeTests/docs/tool_results.json` ("1 curved face becomes"), AI docs regenerated.
 - Speed (reviewer's scripts): STEP open 23.8 s -> 7.7 s (7.3 s without any check); STL
   report on perf_big_model 0.80 s -> 0.25 s.
+- `--only base`: unit 2101 OK (9 skipped), golden 451 pass + 2 known XFAIL (`plate_hole_grid`,
+  `sf_loft_merge_slot_volume`), headless AI 202 calls 0 failed, docs 137 items 0 failed,
+  agent 70 checks, smoke and journey: all passed.
+- Related scenarios, all PASS: ai_tools_gui 22, direct_step_box 186, drawing_export 76,
+  exchange2_export 89, exchange2_step_insert 75, exchange2_step_open 80, export_everything
+  27, export_formats 54, export_print 44, export_report 61, export_report_card 43,
+  home_screen 71, import_report 40, insert_dxf 36, insert_mesh 65, insert_step 30,
+  mesh_print 34, navbar_display 73, navbar_grid 56 (failed once on a drag that landed on
+  exactly 10.0 mm, passed when run again: nothing to do with the card), navbar_viewports
+  59, send_to_slicer 106, sketch2_project 95.
