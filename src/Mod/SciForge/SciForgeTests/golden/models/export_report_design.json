@@ -14,6 +14,12 @@
       "unit": "mm"
     },
     {
+      "op": "parameter",
+      "name": "thick",
+      "value": "width / 4",
+      "unit": "mm"
+    },
+    {
       "op": "sketch",
       "id": "s1",
       "plane": "XY",
@@ -34,6 +40,13 @@
       "id": "e1",
       "profile": "s1",
       "distance": 10
+    },
+    {
+      "op": "edit",
+      "target": "e1",
+      "expressions": {
+        "distance": "thick"
+      }
     },
     {
       "op": "blend_fillet",
@@ -126,7 +139,7 @@
         "hidden": 1,
         "timeline": 7,
         "sketches": 3,
-        "parameters": 1,
+        "parameters": 2,
         "names": 2,
         "looks": 1,
         "materials": 1
@@ -140,7 +153,7 @@
         "hidden": 1,
         "timeline": 7,
         "sketches": 3,
-        "parameters": 1,
+        "parameters": 2,
         "components": 2,
         "names": 2,
         "looks": 2,
@@ -155,7 +168,7 @@
         "hidden": 1,
         "timeline": 7,
         "sketches": 3,
-        "parameters": 1,
+        "parameters": 2,
         "components": 2,
         "merged": 3,
         "looks": 2,
@@ -171,7 +184,7 @@
         "hidden": 1,
         "timeline": 7,
         "sketches": 3,
-        "parameters": 1,
+        "parameters": 2,
         "components": 2,
         "looks": 2,
         "materials": 2,
@@ -186,7 +199,7 @@
         "hidden": 1,
         "timeline": 7,
         "sketches": 3,
-        "parameters": 1,
+        "parameters": 2,
         "components": 2,
         "looks": 2,
         "materials": 2,
@@ -201,12 +214,11 @@
       "expect": {
         "timeline": 2,
         "sketches": 1,
-        "parameters": 1,
         "names": 1,
         "looks": 1,
         "materials": 1
       },
-      "comment": "Bracket alone: e2 and s3 (drawn in Body2 before e3 made a new body of it); its body comes back named after the component"
+      "comment": "Bracket alone: e2 and s3 (drawn in Body2 before e3 made a new body of it); its body comes back named after the component; no parameter (Bracket's steps use none: review F10)"
     },
     {
       "op": "export_report_expect",
@@ -218,11 +230,11 @@
       "expect": {
         "timeline": 4,
         "sketches": 2,
-        "parameters": 1,
+        "parameters": 2,
         "curved": 4,
         "unit": 1
       },
-      "comment": "Body alone in inches: s1 e1 f1 and s2 (drawn in Body before e2 made a new body of it)"
+      "comment": "Body alone in inches: s1 e1 f1 and s2 (drawn in Body before e2 made a new body of it); 2 parameters: e1's distance is thick, and thick's formula uses width"
     },
     {
       "op": "export_report_expect",
@@ -235,13 +247,13 @@
       "expect": {
         "timeline": 6,
         "sketches": 3,
-        "parameters": 1,
+        "parameters": 2,
         "components": 1,
         "looks": 1,
         "materials": 1,
         "curved": 4
       },
-      "comment": "Body and Body2 in centimetres: 3MF writes the unit"
+      "comment": "Body and Body2 in centimetres: 3MF writes the unit; 2 parameters: e1's distance is thick, and thick's formula uses width"
     }
   ],
   "expect": {

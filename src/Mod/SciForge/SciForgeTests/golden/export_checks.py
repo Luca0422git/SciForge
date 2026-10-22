@@ -65,7 +65,9 @@ def op_hide_bodies(self, step):
 
 
 def op_sketch_extras(self, step):
-    """Test setup: points and construction lines added to a sketch."""
+    """Test setup: points, construction lines and projected reference curves (not
+    "defining": they are not curves of the sketch, so its DXF has no place for them) added
+    to a sketch."""
     import Part
 
     sketch = self.objects[step["target"]]
@@ -73,6 +75,8 @@ def op_sketch_extras(self, step):
         sketch.addGeometry(Part.Point(App.Vector(x, y, 0)))
     for x0, y0, x1, y1 in step.get("construction", []):
         sketch.addGeometry(Part.LineSegment(App.Vector(x0, y0, 0), App.Vector(x1, y1, 0)), True)
+    for step_id, sub in step.get("references", []):
+        sketch.addExternal(self.objects[step_id].Name, sub, False, False)
     self.doc.recompute()
 
 

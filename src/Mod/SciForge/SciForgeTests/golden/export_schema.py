@@ -17,7 +17,8 @@ and wraps schema.validate, as hardware_schema does.
       Open read it; what export_report says did not come in must be exactly `expect`.
   {"op": "hide_bodies", "bodies": ["e3"]}       hide the steps' bodies (as the eye icon)
   {"op": "sketch_extras", "target": "s1", "points": [[x, y]], "construction": [[x0, y0, x1,
-   y1]]}                                        add points / construction lines to a sketch
+   y1]], "references": [["e1", "Edge3"]]}       add points / construction lines / projected
+                                                reference curves (not defining) to a sketch
 """
 
 from . import schema
@@ -40,7 +41,10 @@ IMPORT_FILES = (
     "extras.dxf",
     "extras.svg",
 )
-schema.STEP_KEYS["sketch_extras"] = ({"target"}, {"points", "construction", "comment"})
+schema.STEP_KEYS["sketch_extras"] = (
+    {"target"},
+    {"points", "construction", "references", "comment"},
+)
 
 
 def _pairs(here, value, size):
@@ -106,6 +110,15 @@ def check_steps(model):
                 _pairs(here + ".points", step["points"], 2)
             if "construction" in step:
                 _pairs(here + ".construction", step["construction"], 4)
+            refs = step.get("references", [])
+            if not isinstance(refs, list) or any(
+                not isinstance(r, list)
+                or len(r) != 2
+                or r[0] not in seen
+                or not str(r[1]).startswith(("Edge", "Vertex"))
+                for r in refs
+            ):
+                schema._fail(here, "'references' is [[earlier step id, 'EdgeN'], ...]")
         if "id" in step:
             seen[step["id"]] = op
 
