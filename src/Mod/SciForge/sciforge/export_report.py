@@ -157,13 +157,13 @@ def _written(doc, key, scope, target, chosen):
     from . import bodies, exchange, export
 
     if scope == "bodies":
-        if key in ("step", "iges"):
+        if key in core.EXACT_FORMATS:
             return [b for b in chosen if not export.is_mesh_body(b) and bodies.has_solid(b)], []
         return [b for b in chosen if export.can_export(b)], []
     if key == "step":
         written, hidden_comps, _comps = _step_written(doc, scope, target)
         return written, hidden_comps
-    if key == "iges":
+    if key in ("iges", "brep"):
         return exchange._bodies_of_scope(doc, scope, target), []
     if scope == "component":
         return exchange.mesh_bodies_of(doc, target), []
@@ -176,7 +176,7 @@ def design_facts(doc, objects=None, fmt="step", unit="Millimeter", per_body=Fals
 
     key = core.format_key(fmt)
     scope, target, chosen = _scope_of(objects)
-    meshes_allowed = key not in ("step", "iges")
+    meshes_allowed = key not in core.EXACT_FORMATS
     written, hidden_comps = _written(doc, key, scope, target, chosen)
     names = {b.Name for b in written}
     solids = [b for b in written if not export.is_mesh_body(b)]
@@ -254,6 +254,8 @@ def design_facts(doc, objects=None, fmt="step", unit="Millimeter", per_body=Fals
         out["names_lost"] = step_names_lost(doc, scope, target)
     elif key == "iges":
         out["names_lost"] = iges_names_lost(solids)
+    elif key == "brep":
+        out["names_lost"] = len(solids)  # one compound of solids: no names at all
     if key == "step":
         try:
             import FreeCAD as App

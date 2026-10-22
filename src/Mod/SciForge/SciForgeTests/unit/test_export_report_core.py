@@ -119,6 +119,18 @@ class Iges(unittest.TestCase):
         self.assertEqual(names["count"], 2)
         self.assertIn("IGES", names["text"])
 
+    def test_brep(self):
+        """BREP (the AI export tool's brep): exact solids only, no names, colours or
+        structure, like IGES; mesh bodies are left out like STEP / IGES."""
+        self.assertEqual(core.format_key(".brp"), "brep")
+        items = core.items("brep", dict(DESIGN, components=2, meshes=1, colours_written=True))
+        k = keys(items)
+        for key in ("timeline", "components", "looks", "names", "meshes"):
+            self.assertIn(key, k)
+        self.assertNotIn("curved", k)  # exact curves stay exact
+        names = [i for i in items if i["key"] == "names"][0]
+        self.assertIn("BREP", names["text"])
+
 
 class Meshes(unittest.TestCase):
     def test_stl_merges_and_facets(self):

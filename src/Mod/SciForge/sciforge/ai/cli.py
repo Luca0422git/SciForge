@@ -4,6 +4,7 @@ convert and script designs without the window, with the same AI tools the app of
 
     sciforge-cli info FILE                  a JSON summary (bodies, timeline, parameters)
     sciforge-cli convert IN OUT [--force]   e.g. part.FCStd -> part.step / .stl / .3mf
+                                            (the answer lists what OUT does not keep)
     sciforge-cli run [FILE] --tool 'NAME {JSON}' ... [--save OUT.FCStd] [--force]
                                             run tools in order, then save
     sciforge-cli check FILE                 is the design sound (check_design as JSON;
@@ -75,7 +76,10 @@ def _parser():
     sub = parser.add_subparsers(dest="command")
     p = sub.add_parser("info", help="a JSON summary of a design or STEP / IGES file")
     p.add_argument("file")
-    p = sub.add_parser("convert", help="open IN, write OUT (format from its extension)")
+    p = sub.add_parser(
+        "convert",
+        help="open IN, write OUT (format from its extension); says what OUT does not keep",
+    )
     p.add_argument("source")
     p.add_argument("target")
     p.add_argument("--force", action="store_true", help="replace OUT if it exists")

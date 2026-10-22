@@ -322,7 +322,10 @@ define(
     "document",
     "File > Open",
     "Open a design (.FCStd) or a STEP / IGES file as a new design (its components and bodies "
-    "kept). A design that is already open comes to the front. It becomes the active design.",
+    "kept). A design that is already open comes to the front. It becomes the active design. "
+    "For a STEP / IGES file the answer also lists what the file had that did not come in or "
+    "came in changed (\"Not brought in, or changed:\" and one line each: loose faces, "
+    "curves and points, surface bodies, bodies with geometry errors).",
     schema({"path": string("full path of the file")}, ["path"]),
     needs=(),
     changes=False,
@@ -416,7 +419,11 @@ define(
     "Bring a file into the active design: STEP / IGES (one component with the file's "
     "structure, its bodies and colours), STL / OBJ / 3MF (a mesh body; unit: the file's "
     "unit), DXF (its curves into a new sketch on sketch_plane XY | XZ | YZ, ready to "
-    "extrude), FCStd (another design's bodies as a component). label names what is made.",
+    "extrude), FCStd (another design's bodies as a component). label names what is made. "
+    "The answer also lists what the file had that did not come in or came in changed "
+    "(\"Not brought in, or changed:\" and one line each, as INSERT's message says: an "
+    "open mesh, a 3MF's unit or colours, DXF texts, hatches and points, loose faces of a "
+    "STEP...); a mesh whose file says another unit can be inserted again with unit.",
     schema(
         {
             "path": string("full path of the file"),
@@ -671,7 +678,9 @@ define(
     "DRAWING > EXPORT > Output PDF / Output DXF",
     "Export a drawing: format pdf (every sheet in one PDF; needs the SciForge window) or dxf "
     "(the sheet: frame, views on their own layers, dimensions, text). Replacing an existing "
-    "file must be confirmed by the person in SciForge.",
+    "file must be confirmed by the person in SciForge. The answer lists what the file does "
+    "not keep (\"Not kept in this file:\": other sheets, dimensions written as plain lines "
+    "and text, hatching as lines, the font...), as the drawing's Export message does.",
     schema(
         {
             "drawing": step_id("the drawing (default: the newest)"),

@@ -1406,8 +1406,12 @@ define(
     "(one sketch, or one flat face, as 2D curves: give sketch or face). bodies: step ids of "
     "the bodies to write (default every visible body); mesh formats take refinement Low | "
     "Medium | High (Fusion's presets), unit (Millimeter, Centimeter, Meter, Inch, Foot) and "
-    "one_file_per_body. STEP keeps the components and colours; mesh files keep only the "
-    "triangles (no sketches, timeline or parameters).",
+    "one_file_per_body. STEP keeps the components (and the colours when SciForge's window "
+    "is open); mesh files keep only the triangles. No exchange file keeps the timeline, "
+    "sketches or parameters. The answer lists, after the file written, what this file does "
+    "not keep of this design (\"Not kept in this file:\" and one line each: the timeline "
+    "steps, sketches, hidden bodies, colours, names, bodies merged into one mesh...), the "
+    "same facts File > Export's message shows; nothing is listed when nothing is lost.",
     schema(
         {
             "format": {

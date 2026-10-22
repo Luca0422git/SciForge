@@ -43,18 +43,21 @@ FORMAT_NAMES = {
     "stl_ascii": "STL",
     "3mf": "3MF",
     "obj": "OBJ",
+    "brep": "BREP",
     "dxf": "DXF",
     "dwg": "DWG",
     "drawing_pdf": "PDF",
     "drawing_dxf": "DXF",
 }
-SOLID_FORMATS = ("step", "iges", "stl", "stl_ascii", "3mf", "obj")
+SOLID_FORMATS = ("step", "iges", "stl", "stl_ascii", "3mf", "obj", "brep")
+EXACT_FORMATS = ("step", "iges", "brep")  # exact solids only (no mesh bodies)
 MESH_FORMATS = ("stl", "stl_ascii", "3mf", "obj")
 FLAT_FORMATS = ("dxf", "dwg")
 DRAWING_FORMATS = ("drawing_pdf", "drawing_dxf")
 _ALIASES = {
     "stp": "step",
     "igs": "iges",
+    "brp": "brep",
     "stl (binary)": "stl",
     "stl (ascii)": "stl_ascii",
     "pdf": "drawing_pdf",
@@ -194,7 +197,7 @@ def _left_out(facts, fmt, out):
                 "%s (only solid bodies are exported)" % plural(n, "surface body", "surface bodies"),
             )
         )
-    if fmt in ("step", "iges") and _n(facts, "meshes"):
+    if fmt in EXACT_FORMATS and _n(facts, "meshes"):
         n = _n(facts, "meshes")
         out.append(
             _item(
@@ -305,13 +308,13 @@ def items(fmt, facts, purpose="file"):
                         "the names of %s (they come back as Body1, Body2 ...)" % _bodies(n),
                     )
                 )
-        elif fmt == "iges" and _n(facts, "names_lost"):
+        elif fmt in ("iges", "brep") and _n(facts, "names_lost"):
             n = _n(facts, "names_lost")
             out.append(
                 _item(
                     "names",
                     n,
-                    "the names of %s (IGES holds unnamed shapes)" % _bodies(n),
+                    "the names of %s (%s holds unnamed shapes)" % (_bodies(n), FORMAT_NAMES[fmt]),
                 )
             )
         looks = _n(facts, "looks")

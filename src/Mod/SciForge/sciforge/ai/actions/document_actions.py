@@ -8,6 +8,7 @@ import os
 
 import FreeCAD as App
 
+from ... import warn
 from .. import bridge_core, executor
 from ..executor import UserError, json_result, summary
 from . import action
@@ -141,6 +142,7 @@ def open_design(ctx, args):
     path = os.path.abspath(args["path"])
     if not os.path.isfile(path):
         raise UserError("There is no file %s." % path)
+    notes = ""
     if path.lower().endswith(".fcstd"):
         doc = ctx.host.open_design(path)
     else:
@@ -153,12 +155,14 @@ def open_design(ctx, args):
             raise
         doc.recompute()
         step_import.apply_looks(made)
+        notes = _cad_notes(made, path, "Opened")
     ctx.host.ready(doc)
     body = ctx.host.find_body(doc)
     if body is not None:
         ctx.host.set_active_body(body)
     return bridge_core.result(
-        "Opened %s as design %r (id %r). %s" % (path, doc.Label, doc.Name, summary(doc))
+        "Opened %s as design %r (id %r). %s%s"
+        % (path, doc.Label, doc.Name, summary(doc), notes)
     )
 
 
@@ -221,6 +225,56 @@ def switch_design(ctx, args):
     return bridge_core.result("The active design is now %s. %s" % (doc.Label, summary(doc)))
 
 
+# -- what a file leaves out (export_report: the same facts as the window's message) ----------
+def report_lines(lead, entries):
+    """The extra lines of an answer: the lead and one line per item ("" when none)."""
+    if not entries:
+        return ""
+    return "\n%s\n%s" % (lead, "\n".join("- %s" % e["text"] for e in entries))
+
+
+def export_losses(doc, objects, fmt, file_name, **options):
+    """What the file does not keep (export_report.losses, the facts File > Export's message
+    shows), as lines to add to the answer; the window also shows its message and every run
+    logs the one-line report. Never raises: a report that cannot be made never turns a
+    written file into a failure."""
+    try:
+        from ... import export_report, export_report_ui
+
+        entries = export_report.safe_losses(doc, objects, fmt, **options)
+        several = str(file_name).endswith(" files")
+        lead = "Not kept in these files:" if several else "Not kept in this file:"
+        export_report_ui.report_export(file_name, entries, lead=lead)
+        return report_lines(lead, entries)
+    except Exception as exc:
+        warn("AI export report: %s" % exc)
+        return ""
+
+
+def import_notes(file_name, entries, verb="Inserted"):
+    """What a file had that did not come in (or came in changed), as lines to add to the
+    answer, the same facts as the window's message after Open / Insert. Never raises."""
+    try:
+        from ... import export_report_ui
+
+        export_report_ui.report_import(file_name, entries, verb)
+        return report_lines("Not brought in, or changed:", entries)
+    except Exception as exc:
+        warn("AI import report: %s" % exc)
+        return ""
+
+
+def _cad_notes(made, path, verb):
+    try:
+        from ... import export_report
+
+        entries = export_report.cad_import_items(getattr(made, "notes", None))
+    except Exception as exc:
+        warn("AI import report: %s" % exc)
+        return ""
+    return import_notes(os.path.basename(path), entries, verb)
+
+
 # -- export -----------------------------------------------------------------------------------
 def _bodies_for_export(ctx, doc, args):
     from ... import export
@@ -259,25 +313,34 @@ def export_file(ctx, args):
                 raise UserError("That face is not flat: DXF takes a sketch or a flat face.")
         _check_overwrite(ctx, path)
         written = exchange.export_dxf(target, path)
-        return bridge_core.result("Exported %s." % written)
+        lost = export_losses(doc, target, "DXF", os.path.basename(written))
+        return bridge_core.result("Exported %s.%s" % (written, lost))
     if fmt in MESH_LABELS:
         label = MESH_LABELS[fmt]
         path = export.with_extension(path, export.extension_of(label))
         _check_overwrite(ctx, path)
         body_list = _bodies_for_export(ctx, doc, args)
+        level = args.get("refinement", export.DEFAULT_REFINEMENT)
+        unit = args.get("unit", "Millimeter")
+        per_body = bool(args.get("one_file_per_body"))
         written = export.export_mesh_files(
+            doc, body_list, label, path, level=level, unit=unit, per_body=per_body
+        )
+        files = ", ".join("%s (%d triangles)" % (p, n) for p, n in written)
+        lost = export_losses(
             doc,
             body_list,
             label,
-            path,
-            level=args.get("refinement", export.DEFAULT_REFINEMENT),
-            unit=args.get("unit", "Millimeter"),
-            per_body=bool(args.get("one_file_per_body")),
+            _files_label([p for p, _n in written]),
+            unit=unit,
+            per_body=per_body,
+            level=level,
+            whole=not args.get("bodies"),
         )
-        files = ", ".join("%s (%d triangles)" % (p, n) for p, n in written)
-        return bridge_core.result("Exported %s." % files)
+        return bridge_core.result("Exported %s.%s" % (files, lost))
     if fmt in ("step", "iges"):
         _check_overwrite(ctx, path)
+        options = {}
         if args.get("bodies"):
             chosen = _bodies_for_export(ctx, doc, args)
             if fmt == "step":
@@ -285,26 +348,42 @@ def export_file(ctx, args):
             else:
                 written = exchange.export_cad(doc, fmt, path, scope="bodies", chosen=chosen)
         elif fmt == "step" and not ctx.host.gui:
+            chosen = None  # the whole design, its components kept (File > Export)
             written = exchange.export_cad(doc, "step", path, scope="design")
         elif fmt == "step":
-            written = export.export_step(export.exportable_bodies(doc), path)
+            chosen = export.exportable_bodies(doc)
+            options["whole"] = True
+            written = export.export_step(chosen, path)
         else:
+            chosen = None
             written = exchange.export_cad(doc, fmt, path, scope="design")
-        return bridge_core.result("Exported %s." % written)
+        lost = export_losses(doc, chosen, fmt, os.path.basename(str(written)), **options)
+        return bridge_core.result("Exported %s.%s" % (written, lost))
     if fmt == "brep":
         import Part
 
         _check_overwrite(ctx, path)
         solids = []
-        for body in _bodies_for_export(ctx, doc, args):
+        body_list = _bodies_for_export(ctx, doc, args)
+        for body in body_list:
             from ... import bodies
 
             solids += bodies.global_shape(body).Solids
         if not solids:
             raise UserError("There is no solid to write.")
         Part.makeCompound(solids).exportBrep(path)
-        return bridge_core.result("Exported %s (%d solids)." % (path, len(solids)))
+        lost = export_losses(
+            doc, body_list, "brep", os.path.basename(path), whole=not args.get("bodies")
+        )
+        return bridge_core.result("Exported %s (%d solids).%s" % (path, len(solids), lost))
     raise UserError("SciForge cannot export %s." % fmt)
+
+
+def _files_label(paths):
+    """A file's name, or "N files" (One File Per Body), as the window's message says."""
+    if len(paths) == 1:
+        return os.path.basename(str(paths[0]))
+    return "%d files" % len(paths)
 
 
 def _tip(ctx, doc):
@@ -333,6 +412,7 @@ def import_file(ctx, args):
             made = step_import.import_file(doc, path, exchange_core.INSERT, parent, label)
             doc.recompute()
             step_import.apply_looks(made)
+            reports.append(lambda: _cad_notes(made, path, "Inserted"))
             return "Inserted %s: %s." % (
                 os.path.basename(path),
                 exchange_core.describe(
@@ -344,16 +424,17 @@ def import_file(ctx, args):
             ), (made.top.Name if made.top is not None else None)
         if ext in (".stl", ".obj", ".3mf"):
             mesh = insert.read_mesh(path)
-            obj = insert.make_mesh_body(
-                doc, mesh, path, MESH_UNITS[args.get("unit", "mm")], label=label
-            )
+            unit = MESH_UNITS[args.get("unit", "mm")]
+            obj = insert.make_mesh_body(doc, mesh, path, unit, label=label)
+            reports.append(lambda: _mesh_notes(path, mesh, unit))
             return (
                 "Inserted %s as a mesh body (%d triangles)."
                 % (os.path.basename(path), mesh.CountFacets),
                 obj.Name,
             )
         if ext == ".dxf":
-            layers = insert.read_curves(path)
+            notes = {}
+            layers = insert.read_curves(path, notes)
             edges = [e for _layer, found in layers for e in found]
             if not edges:
                 raise UserError("The DXF has no curves SciForge can read.")
@@ -368,11 +449,14 @@ def import_file(ctx, args):
                 matrix = App2.Matrix()
                 matrix.scale(factor, factor, factor)
                 edges = [e.transformGeometry(matrix) for e in edges]
-            insert.add_curves(sketch, edges)
+            geos = insert.curves_to_geometry(edges)
+            notes["skipped"] = max(0, len(edges) - len(geos))
+            insert.add_geometry(sketch, geos)
             doc.recompute()
+            reports.append(lambda: _curve_notes(path, notes))
             return (
                 "Inserted %d curves of %s into the sketch %r."
-                % (len(edges), os.path.basename(path), sketch.Name),
+                % (len(geos), os.path.basename(path), sketch.Name),
                 sketch.Name,
             )
         if ext == ".fcstd":
@@ -400,9 +484,36 @@ def import_file(ctx, args):
         raise UserError("SciForge cannot insert %s files." % ext)
 
     before = None
+    reports = []  # what did not come in: told once the insert is done (not undone)
     text, made = ctx.change(work)
     mark_modified(doc)
-    return ctx.done(text + ((" Its id is %r." % made) if made else ""), doc, before)
+    answer = ctx.done(text + ((" Its id is %r." % made) if made else ""), doc, before)
+    notes = "".join(report() for report in reports)
+    if notes:
+        answer["text"] += notes
+    return answer
+
+
+def _mesh_notes(path, mesh, unit):
+    try:
+        from ... import export_report
+
+        entries = export_report.mesh_import_items(path, mesh, unit)
+    except Exception as exc:
+        warn("AI import report: %s" % exc)
+        return ""
+    return import_notes(os.path.basename(path), entries)
+
+
+def _curve_notes(path, notes):
+    try:
+        from ... import export_report
+
+        entries = export_report.curve_import_items(path, notes)
+    except Exception as exc:
+        warn("AI import report: %s" % exc)
+        return ""
+    return import_notes(os.path.basename(path), entries)
 
 
 def _sketch_on_plane(ctx, body, plane, label):

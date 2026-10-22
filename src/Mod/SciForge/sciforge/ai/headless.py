@@ -47,11 +47,17 @@ class InProcessClient:
             return bridge_core.error_result("SciForge could not run %s: %s" % (name, exc))
 
 
-def open_file(path, host):
-    """Open a design or a STEP / IGES file (as File > Open does) as the active design."""
+IMPORT_LEAD = "\nNot brought in, or changed:"
+
+
+def open_file(path, host, notes=None):
+    """Open a design or a STEP / IGES file (as File > Open does) as the active design.
+    notes (a list): gets the lines saying what the file had that did not come in."""
     answer = call("open_design", {"path": os.path.abspath(path)}, host)
     if answer["is_error"]:
         raise RuntimeError(answer["text"])
+    if notes is not None and IMPORT_LEAD in answer["text"]:
+        notes.append(answer["text"][answer["text"].index(IMPORT_LEAD) :])
     return App.ActiveDocument
 
 
@@ -95,7 +101,9 @@ FORMATS = {
 
 
 def convert(source, target, host=None):
-    """Open source, write target (format by its extension). Returns the tool's answer."""
+    """Open source, write target (format by its extension). Returns the tool's answer: the
+    file written, what it does not keep (export_report) and, for a STEP / IGES source, what
+    did not come in from it."""
     host = host or HeadlessHost()
     ext = os.path.splitext(target)[1].lower()
     fmt = FORMATS.get(ext)
@@ -104,10 +112,15 @@ def convert(source, target, host=None):
             "SciForge cannot write %s files (it writes %s)."
             % (ext or "these", ", ".join(sorted(set(FORMATS))))
         )
-    open_file(source, host)
+    notes = []
+    open_file(source, host, notes)
     if fmt == "fcstd":
-        return call("save_as", {"path": os.path.abspath(target)}, host)
-    return call("export", {"format": fmt, "path": os.path.abspath(target)}, host)
+        answer = call("save_as", {"path": os.path.abspath(target)}, host)
+    else:
+        answer = call("export", {"format": fmt, "path": os.path.abspath(target)}, host)
+    if notes and not answer["is_error"]:
+        answer = dict(answer, text=answer["text"] + "".join(notes))
+    return answer
 
 
 def run_calls(calls, host=None, start=None, stop_on_error=True):

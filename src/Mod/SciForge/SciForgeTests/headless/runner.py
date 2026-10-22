@@ -1067,6 +1067,8 @@ SESSION = [
         "tool": "export_drawing",
         "args": {"format": "dxf", "path": "{tmp}/drawing.dxf"},
         "check": _file("drawing.dxf"),
+        # what the DXF leaves out (export_report, as the drawing's Export message)
+        "contains": ["Not kept in this file:", "as plain lines and text"],
     },
     {
         "tool": "export_drawing",
@@ -1094,6 +1096,7 @@ SESSION = [
         "tool": "export",
         "args": {"format": "step", "path": "{tmp}/all.step"},
         "check": _file("all.step"),
+        "contains": ["Not kept in this file:", "- the timeline ("],
     },
     {
         "tool": "export",
@@ -1105,6 +1108,7 @@ SESSION = [
         "tool": "export",
         "args": {"format": "stl", "path": "{tmp}/plate.stl", "bodies": ["$plate"]},
         "check": _file("plate.stl"),
+        "contains": ["Not kept in this file:", "- the timeline ("],
     },
     {
         "tool": "export",
@@ -1125,6 +1129,7 @@ SESSION = [
         "tool": "export",
         "args": {"format": "brep", "path": "{tmp}/plate.brep", "bodies": ["$plate"]},
         "check": _file("plate.brep"),
+        "contains": ["BREP holds unnamed shapes"],
     },
     {
         "tool": "export",

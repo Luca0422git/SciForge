@@ -452,8 +452,19 @@ def export_drawing(ctx, args):
                     "sheet itself); export DXF instead, or run SciForge."
                 )
             written = drawing_sheets.export_pdf(page, path)
+            which = "all"  # every sheet in one PDF
         else:
             written = drawing.export_dxf(page, path)
+            which = "current"  # a DXF holds one sheet
     except drawing.DrawingError as exc:
         raise UserError(str(exc))
-    return bridge_core.result("Exported %s to %s." % (page.Label, written or path))
+    from .document_actions import export_losses
+
+    lost = export_losses(
+        page.Document,
+        page,
+        "drawing_" + args["format"],
+        os.path.basename(str(written or path)),
+        which=which,
+    )
+    return bridge_core.result("Exported %s to %s.%s" % (page.Label, written or path, lost))
