@@ -108,7 +108,16 @@ The branches were built side by side, so some of them could not use each other y
   again): 137 items, 874 calls, 0 failed; agent end to end 70 / 70.
 - GUI: `undo_fast` paths E and F (71 checks), `ai_tools_gui` path 7 (the AI export's report
   and the window's card).
-- Results of `--only base` and the 18 scenarios: see the report of this session.
+- `run_tests.sh --only base` on the final code: all passed (unit 2091 OK, 9 skipped; golden
+  451 pass + the 2 known XFAIL plate_hole_grid and sf_loft_merge_slot_volume; headless 202
+  calls / 117 tools / 0 failed; documentation examples 137 items / 874 calls / 0 failed;
+  agent end to end 70 / 70; smoke, journey, restart).
+- Scenarios, all PASS: ai_agent_e2e (78 checks), ai_bridge (44), ai_chat (20), ai_docs_gui
+  (16), ai_panel (27), ai_tools_gui (22), drawing_pdf_layers (55), export_report (61),
+  fillet_qa (114), import_report (39), limits_fillet (51), limits_presspull (35),
+  limits_shell_draft (48), parameters_trial (36), perf_benchmark (21), sketch_explain (159),
+  timeline_browser (92), undo_fast (71). The full suite (about 400) was not run here.
+- `make_ai_docs.py --check`, `parity.py --check`, `check_install.sh`: pass.
 
 ## Limitations
 
