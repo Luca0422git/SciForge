@@ -117,3 +117,53 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 Corner relief where bend lines meet with Center (Start / End work), Relief Remnant, Corner Closure's weld relief shapes,
 bend transitions and 3-bend corners, Lofted Flange inside the Flange dialog and with real bends
 between facets (so a Brake Form lofted flange has no flat pattern yet).
+
+## QA pass (branch `sf/sm-more-qa`, 2026-10-23, independent QA)
+
+Ran the builder's 8 scenarios, the unit tests (1906 OK) and the golden models (505 + 2 known
+xfail) on `sf/sm-more` first: all passed. Then probed what Luca would do next, headless
+(FreeCADCmd + the golden Builder) and through the GUI, and fixed what broke:
+
+- **Bend along a diagonal line was always refused** ("would run the sheet into itself"). Two
+  causes in `sheetmetal_bend.py`: `_moving_spans` compared the moving side's front with the
+  zone's whole extent along the line, so a zone whose ends are slanted looked wider than what
+  moves (a tab); and `_bend_zone_solid` pushed the corners of the zone's missing triangles
+  square to the zone's sides, so the plug no longer followed the slanted outline. A tab is now
+  a moving side narrower than the zone's own slices, and corners slide along the outline.
+  Golden `sheetmetal_smm_bend_diagonal` (analytic); the unfolder lays it flat to the plate.
+- **Join by Bend of an upright below the plate, or of edges overlapping only in part, was
+  refused** ("would split the body"): the extension pieces were placed along the bend's axis
+  from the wrong edge's start. Picking a plate's far edge (the bend would remove the whole
+  plate) is now refused with what to pick. Goldens `sheetmetal_smm_join_bend_below` /
+  `_overlap` (analytic).
+- **A first click on another sheet metal body was silently ignored** by every sm-more dialog
+  (they open on the active body). With nothing picked yet it now moves the dialog to that body
+  (`SmPanel._other_sheet` / `_move_to`, using PickPanel's `switch_body`): Fusion's First Edge
+  of Join by Bend may be on any body. Scenario `smmore_qa_join_order` (fails without the fix).
+- **Lofted Flange between two straight lines** on separate planes was refused as "in one
+  plane" (two parallel lines always share a plane): now a flat slanted flange. Golden
+  `sheetmetal_smm_lofted_lines` (analytic).
+- **Lofted Flange Brake Form, Face Number 1 or 2 on a circle** made a pyramid / wedge
+  silently: a full circle keeps at least 3 facets (unit test).
+- **Lofted Flange edit, Operation**: Join edited to New Body dropped the body's earlier
+  shape; New Body edited to Join stayed its own body. The Operation is greyed in an edit.
+- **Corner Closure, Extend Aligned off on a corner mitred to the gap** was refused while on
+  built the relief cut: both now cut the relief. Golden `..._mitred_square`.
+- **Change Parameters** listed values the step's choices do not use (a Rolled hem's Gap, a
+  rule gap's Gap, a rule radius's Bend Radius): hidden like Shell / Flange do (`show_used`).
+- **Bend's Corner Relief checkbox** changed nothing: greyed with the reason.
+
+New scenarios: `smmore_qa_reopen` (save / reopen of Hem, two-set Fillet, Corner Closure, Join
+by Bend, Lofted Flange; each edited from the timeline, a value changed, Cancel / Esc leave
+values and part as they were; Join deleted from the timeline brings the other body back,
+Ctrl+Z hides it again), `smmore_qa_refusals` (empty design for every command, the SOLID
+Fillet fallback, Join of two thicknesses, a Lofted Flange's new body gone after Esc),
+`smmore_qa_join_order`.
+
+Facts: the golden runner's `SCIFORGE_GOLDEN_FILTER` runs a subset; a check step's `expect`
+needs its own `source`. Comparing a step's property strings before / after Cancel must skip
+shapes, `ShapeMaterial` and `SciForgePicks` (rebuilt with float noise).
+
+Left (parity doc Known gaps 13-15 and the builder's): Corner Closure's default relief is not
+the rule's (Fusion's "Use rule defaults"), Hem's Override Rules has no bend relief override,
+a Brake Form lofted flange still has no flat pattern, Join by Bend reads the other body live.

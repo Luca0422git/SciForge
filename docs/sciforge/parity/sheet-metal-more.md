@@ -199,3 +199,5 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 - Change Parameters listed values a step's choices do not use (a Rolled hem's Gap, the
   rule's gap): they are hidden, as the dialogs hide them.
 - Bend's Corner Relief box changed nothing: shown greyed with the reason.
+- A Brake Form circle with Face Number 1 or 2 (or a coarse tolerance) became a point or a line
+  (a square-to-round turned into a pyramid): a full circle keeps at least three facets.
