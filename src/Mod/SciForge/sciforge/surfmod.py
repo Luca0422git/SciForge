@@ -901,11 +901,12 @@ def stitch_join(base_shape, copies, tolerance=core.STITCH_TOLERANCE):
 
 
 # -- Split Body with surfaces --------------------------------------------------------------------
-def extended_tool(shape, around):
+def extended_tool(shape, around, clip=False):
     """A surface body as Split Body's tool, with Extend Splitting Tool: its open edges
     carried on (Natural where the surface allows it, else Tangent) far enough to cross
     `around`, so a sculpted surface smaller than the body still cuts it in two. The surface
-    as it is when that cannot be done."""
+    as it is when that cannot be done. clip: only the part of it near `around` (the
+    dialog's red preview: just over the body, like a plane's)."""
     from . import surface_geom
 
     try:
@@ -914,8 +915,31 @@ def extended_tool(shape, around):
             return shape
         reach = max(around.BoundBox.DiagonalLength, 1.0) + _gap(shape, around)
         grown = surface_geom.extend(shape, free, reach, "natural")
-        if grown is not None and not grown.isNull() and grown.Faces:
-            return grown
+        if grown is None or grown.isNull() or not grown.Faces:
+            return shape
+        return _clipped(grown, around) if clip else grown
+    except Exception:
+        pass
+    return shape
+
+
+def _clipped(shape, around):
+    """`shape` cut down to the box round `around` plus a margin (split_core.margin)."""
+    from . import split_core
+
+    try:
+        b = around.BoundBox
+        box = (b.XMin, b.YMin, b.ZMin, b.XMax, b.YMax, b.ZMax)
+        m = split_core.margin(box)
+        cage = Part.makeBox(
+            b.XLength + 2 * m,
+            b.YLength + 2 * m,
+            b.ZLength + 2 * m,
+            App.Vector(b.XMin - m, b.YMin - m, b.ZMin - m),
+        )
+        inside = shape.common(cage)
+        if not inside.isNull() and inside.Faces:
+            return inside
     except Exception:
         pass
     return shape

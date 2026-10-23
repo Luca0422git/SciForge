@@ -100,7 +100,7 @@ def tool_shape(tool, extend, around, fit=False):
             # shows it carried on too, where it cuts.
             from . import surfmod
 
-            return surfmod.extended_tool(shape, around) if extend else shape
+            return surfmod.extended_tool(shape, around, clip=fit) if extend else shape
         return shape
     if not sub.startswith("Face"):
         raise SplitError("Split with a plane, a face or a body.")
