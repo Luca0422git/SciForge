@@ -2347,6 +2347,7 @@ class StitchPanel(SurfacePanel):
             if own is not None and own not in picked and bodies.has_solid(own):
                 if surface.created_body(self.step) is None:
                     return own
+        self.closes = False
         try:
             shapes = [surface.whole_shape(b) for b in picked if _alive(b)]
             stitched, _open = g.stitch(shapes, float(self.options["tolerance"]))
@@ -2354,6 +2355,7 @@ class StitchPanel(SurfacePanel):
             return None
         if not stitched.Solids:
             return None
+        self.closes = True
         for body in bodies.solid_bodies(self.doc, visible_only=True):
             if body in picked:
                 continue
@@ -2365,6 +2367,18 @@ class StitchPanel(SurfacePanel):
         return None
 
     def check(self, options):
+        operation = options.get("operation")
+        if core.is_solid_operation(operation) and options.get("target") is None:
+            word = core.OPERATION_LABELS[operation]
+            if not getattr(self, "closes", False):
+                raise core.SurfaceError(
+                    "The surfaces do not close into a solid, so the stitch cannot %s. Close the "
+                    "gaps (a bigger Tolerance or more surfaces), or use New Body." % word
+                )
+            raise core.SurfaceError(
+                "No solid body touches the closed stitch, so there is nothing to %s it with. "
+                "Use New Body, or move it onto a solid." % word
+            )
         for obj, _sub in self.picks.get("bodies") or []:
             if bodies.has_solid(obj) and not self._mine(obj):
                 raise core.SurfaceError(
