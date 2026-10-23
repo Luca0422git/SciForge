@@ -84,21 +84,22 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
 
 ## Tests
 
-- Golden models (`SciForgeTests/golden/models/sheetmetal_*.json`, 17, hand-derived volumes):
-  base flange rect, Side 2 / Centered with a 0.5 mm rule, New Component, Join, L bracket, every
-  Bend Position and Height Datum, mitred corner, a four-edge tray, flange on a flange, partial
-  width with reliefs, Two Offsets between two planes, rule edit recomputes, contour L, contour
-  Two Sides / Side 2, a contour on a sheet edge, an inside corner, angle edit, To Object, an Extrude cut through the sheet then a flange
-  edit.
+- Golden models (`SciForgeTests/golden/models/sheetmetal_*.json`, 19, volumes derived by hand
+  except the inside corner's FreeCAD baseline): base flange rect, Side 2 / Centered with a
+  0.5 mm rule, New Component, Join, L bracket, every Bend Position and Height Datum, mitred
+  corner, a four-edge tray, an inside corner, flange on a flange, partial width with reliefs,
+  Two Offsets between two planes, rule edit recomputes, contour L, contour Two Sides / Side 2,
+  a contour on a sheet edge, angle edit, To Object, an Extrude cut through the sheet then a
+  flange edit.
 - Unit tests: `SciForgeTests/unit/test_sheetmetal_flange_core.py` (flange maths, rule lists).
-- Scenarios (real clicks): `sheetmetal_flange` (base + edge, Rule drop-down, datums, positions,
-  height arrow and angle handle drags, undo/redo, edit, Esc, swapping the body's rule),
-  `sheetmetal_rules` (the whole rules dialog, refusals, undo of the visit), `sheetmetal_contour`
-  (contour options, drag, Cancel, save / reopen, edit after reopen, a contour on a sheet edge), `sheetmetal_edge_options`
-  (miter, reliefs, refusals, To Object, Two Offsets, Sheet Metal component),
-  `sheetmetal_parameters` (a user parameter in Height), `sheetmetal_components` (New
-  Component, Extrude cut through sheet metal, Join), and `ribbon_sweep` with
-  `SWEEP_TABS=sheet_metal`.
+- Scenarios (real clicks): `sheetmetal_flange` (base + edge, Rule drop-down, datums,
+  positions, height arrow and angle handle drags, undo/redo, edit, Esc, swapping the body's
+  rule), `sheetmetal_rules` (the whole rules dialog, refusals, undo of the visit),
+  `sheetmetal_contour` (contour options, drag, Cancel, save / reopen, edit after reopen, a
+  contour on a sheet edge), `sheetmetal_edge_options` (miter, reliefs, refusals, To Object,
+  Two Offsets, Sheet Metal component), `sheetmetal_parameters` (a user parameter in Height),
+  `sheetmetal_components` (New Component, Extrude cut through sheet metal, Join), and
+  `ribbon_sweep` with `SWEEP_TABS=sheet_metal`.
 
 ## Known gaps
 

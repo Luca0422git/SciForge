@@ -131,7 +131,9 @@ def edit_shows():
     p = sm.panel()
     h.check("the edit dialog", p is not None and p.editing)
     h.check(
-        "it knows the formula", p is not None and p.formulas.get("height") == "lip", p and p.formulas
+        "it knows the formula",
+        p is not None and p.formulas.get("height") == "lip",
+        p and p.formulas,
     )
 
 
