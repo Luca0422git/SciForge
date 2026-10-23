@@ -60,6 +60,9 @@ SIDE_FIELDS = [
     ("tip_radius", "Tip Radius", "mm"),
     ("hole_start_radius", "Hole Start Radius", "mm"),
     ("hole_end_radius", "Hole End Radius", "mm"),
+    ("step_tip_radius", "Alignment Tip Radius", "mm"),
+    ("major_tip_radius", "Major Tip Radius", "mm"),
+    ("major_root_radius", "Major Root Radius", "mm"),
 ]
 RIB_FIELDS = [
     ("rib_total_angle", "Total Angle", "deg"),
@@ -395,6 +398,9 @@ class BossPanel(Panel):
                 "step_draft": s["step"] != "none",
                 "hole_start_radius": hole and (side == 1 or s["hole"] == "simple"),
                 "hole_end_radius": hole and side == 2 and s["extent"] != "through",
+                "step_tip_radius": s["step"] != "none",
+                "major_tip_radius": hole and s["hole"] == "counterbore",
+                "major_root_radius": hole and s["hole"] == "counterbore",
             }
             for key, _text, _unit in SIDE_FIELDS:
                 visible = show.get(key, True)

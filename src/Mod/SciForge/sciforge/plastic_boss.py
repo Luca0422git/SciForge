@@ -185,7 +185,15 @@ def side_shapes(base, frame, s, label="Side"):
         h = float(s["step_depth"])
         r_top = s["step_diameter"] / 2.0
         r_base = r_top + h * _tan(s["step_draft"])
-        adds.append(_cone(r_base, r_top, h, frame.at(tip), frame.d * -1.0))
+        step_solid = _cone(r_base, r_top, h, frame.at(tip), frame.d * -1.0)
+        r_round = float(s.get("step_tip_radius", 0.0))
+        if r_round > TOL:
+            if r_round >= min(r_top, h) - 1e-3:
+                raise BossError("%s: the alignment tip radius is too big for the step." % label)
+            step_solid = _fillet_circle_at(
+                step_solid, frame.at(tip - h), r_top, r_round, label, "alignment tip"
+            )
+        adds.append(step_solid)
         spigot = h
     elif s["step"] == "in":
         h = float(s["step_depth"])
@@ -194,6 +202,11 @@ def side_shapes(base, frame, s, label="Side"):
         r_top = s["step_diameter"] / 2.0
         r_bottom = max(0.05, r_top - h * _tan(s["step_draft"]))
         cuts.append(_cone(r_top, r_bottom, h + 0.02, frame.at(tip - 0.02), frame.d))
+        r_round = float(s.get("step_tip_radius", 0.0))
+        if r_round > TOL:
+            if r_round >= min(od / 2.0 - r_top, h) - 1e-3:
+                raise BossError("%s: the alignment tip radius is too big for the step." % label)
+            cuts.append(_mouth_round(frame, r_top, tip, r_round))
     # ribs
     rib_info = []
     if s.get("ribs") and shank_len > 1e-3:
@@ -274,6 +287,28 @@ def side_shapes(base, frame, s, label="Side"):
                 )
             cuts.append(_mouth_round(frame, r_h, mouth, r_mouth))
         r_m = s["major_diameter"] / 2.0
+        r_mtip = float(s.get("major_tip_radius", 0.0))
+        r_mroot = float(s.get("major_root_radius", 0.0))
+        if s["hole"] == "simple" and (r_mtip > TOL or r_mroot > TOL):
+            raise BossError(
+                "%s: the counterbore radii need a counterbore (the hole is simple). Set them "
+                "to 0." % label
+            )
+        if s["hole"] == "countersink" and r_mroot > TOL:
+            raise BossError(
+                "%s: a countersink has no floor to round: set the counterbore root radius "
+                "to 0." % label
+            )
+        if r_mtip > TOL and r_mtip >= max(0.0, od / 2.0 - r_m) - 1e-3:
+            raise BossError(
+                "%s: the counterbore tip radius (%.2f mm) is wider than the wall around it."
+                % (label, r_mtip)
+            )
+        if r_mroot > TOL and r_mroot >= r_m - r_h - 1e-3:
+            raise BossError(
+                "%s: the counterbore root radius (%.2f mm) is wider than its floor."
+                % (label, r_mroot)
+            )
         if s["hole"] == "counterbore":
             if s["side"] == 1:
                 floor = tip + float(s["major_depth"])
@@ -282,12 +317,26 @@ def side_shapes(base, frame, s, label="Side"):
                         "%s: the counterbore leaves no material under the screw head: make "
                         "its Major Depth smaller than %.2f mm." % (label, s_out - tip)
                     )
-                cuts.append(_cone(r_m, r_m, s_out + 0.05 - floor, frame.at(floor), frame.d))
+                bore = _cone(r_m, r_m, s_out + 0.05 - floor, frame.at(floor), frame.d)
+                if r_mroot > TOL:
+                    bore = _fillet_circle_at(
+                        bore, frame.at(floor), r_m, r_mroot, label, "counterbore root"
+                    )
+                cuts.append(bore)
+                if r_mtip > TOL:
+                    cuts.append(_mouth_round(frame, r_m, s_out, r_mtip, -1.0))
             else:
                 depth = float(s["major_depth"])
                 if tip + depth >= end - 1e-4:
                     raise BossError("%s: the counterbore is deeper than the hole." % label)
-                cuts.append(_cone(r_m, r_m, depth + spigot + 0.05, frame.at(start), frame.d))
+                bore = _cone(r_m, r_m, depth + spigot + 0.05, frame.at(start), frame.d)
+                if r_mroot > TOL:
+                    bore = _fillet_circle_at(
+                        bore, frame.at(tip + depth), r_m, r_mroot, label, "counterbore root"
+                    )
+                cuts.append(bore)
+                if r_mtip > TOL:
+                    cuts.append(_mouth_round(frame, r_m, tip - spigot, r_mtip))
         elif s["hole"] == "countersink":
             sink = (r_m - r_h) / math.tan(math.radians(s["countersink_angle"] / 2.0))
             if s["side"] == 1:
@@ -295,34 +344,45 @@ def side_shapes(base, frame, s, label="Side"):
                     raise BossError("%s: the countersink is deeper than the boss." % label)
                 cuts.append(_cone(r_m, r_h, sink, frame.at(s_out), frame.d * -1.0))
                 cuts.append(_cone(r_m, r_m, 0.05, frame.at(s_out), frame.d))
+                if r_mtip > TOL:
+                    raise BossError(
+                        "%s: the countersink's mouth is not rounded here: set the counterbore "
+                        "tip radius to 0." % label
+                    )
             else:
                 top = tip - spigot
                 if top + sink >= end - 1e-4:
                     raise BossError("%s: the countersink is deeper than the hole." % label)
                 cuts.append(_cone(r_m, r_h, sink, frame.at(top), frame.d))
                 cuts.append(_cone(r_m, r_m, 0.05, frame.at(top - 0.05), frame.d))
+                if r_mtip > TOL:
+                    raise BossError(
+                        "%s: the countersink's mouth is not rounded here: set the counterbore "
+                        "tip radius to 0." % label
+                    )
     info = {"s_in": s_in, "s_out": s_out, "tip": tip, "root": root, "ribs": rib_info}
     return adds, cuts, info
 
 
-def _mouth_round(frame, r_hole, s_mouth, radius):
+def _mouth_round(frame, r_hole, s_mouth, radius, sign=1.0):
     """A ring that rounds a hole's mouth (radius `radius`), cut with the hole: the square
-    corner beside the mouth less a quarter circle, turned round the axis."""
+    corner beside the mouth less a quarter circle, turned round the axis. The material lies
+    towards +s from the mouth (sign 1) or towards -s (sign -1)."""
     import Part
 
     e = frame.x
 
     def p(rho, s):
-        return frame.at(s) + e * rho
+        return frame.at(s_mouth + sign * s) + e * rho
 
     eps = 0.05
-    a = p(r_hole - 0.01, s_mouth - eps)
-    b = p(r_hole + radius, s_mouth - eps)
-    c = p(r_hole + radius, s_mouth)
+    a = p(r_hole - 0.01, -eps)
+    b = p(r_hole + radius, -eps)
+    c = p(r_hole + radius, 0.0)
     k = (1.0 - (0.5**0.5)) * radius
-    mid = p(r_hole + k, s_mouth + k)
-    d = p(r_hole, s_mouth + radius)
-    f = p(r_hole - 0.01, s_mouth + radius)
+    mid = p(r_hole + k, k)
+    d = p(r_hole, radius)
+    f = p(r_hole - 0.01, radius)
     wire = Part.Wire(
         [
             Part.LineSegment(a, b).toShape(),

@@ -84,7 +84,7 @@ rule when the component has none, and say so in the dialog.
 | Diameter, draft (wider towards the root), hole diameter and draft, major diameter and depth, countersink angle (90) | Same | A |
 | Alignment Step None / In / Out with diameter, depth, draft | Same. Defaults: Side 1 In with a recess of Side 2's diameter + 2 x clearance (Fusion's sample sizes the recess to the mate's diameter), Side 2 Out of its own diameter (its tip carried on 1 mm - clearance into the recess) | A (critic C8), G (clearance, Out) |
 | Offset Clearance pulls each side's tip back from the parting face | Same (rule Clearance / 2 per side) | A, G (default) |
-| Root Radius, Tip Radius, Hole Start / End Radius | Same (root: the rule's Nominal Radius; the others 0); the hole's start radius rounds its mouth (a simple hole; the head side's hole at the tip), the end radius its blind bottom | A, G (defaults) |
+| Root Radius, Tip Radius, Hole Start / End Radius, Major Tip / Root Radius, Alignment Tip Radius | Same (root: the rule's Nominal Radius; the others 0); the hole's start radius rounds its mouth (a simple hole; the head side's hole at the tip), the end radius its blind bottom; the counterbore's mouth and floor corner; the recess's mouth or the spigot's top edge. Made as exact revolved rounds or fillets of the cutting tools, so they cannot fail on the part | A, G (defaults) |
 | Ribs per side: Quantity, Total Angle (360), Rotation from the sketch X, Thickness, Draft, Outer Draft, Length from the axis or To Next, Step Offset, a Chamfer (angle, size) or Fillet top corner; a To Next rib is web-shaped | Same; the Side 1 / Side 2 check boxes switch ribs on (Fusion's rib shape None = no ribs) | A (critic C2, CP.2 #6) |
 | Each rib's extent: By Length / To Next / Suppressed (`setRibExtent`) | Each Rib: one list per rib (up to 12), for all the side's points; a changed side-wide Extent resets them | A, G (all points) |
 | Fastener: Create Component (a screw at every boss, in a component of its own), Head Type, Drive, Thread Form, Length, material / finish text | Create Component with Head Type Pan / Round / Flat (countersunk) / Hex / Hex Washer and Length (0 = Auto: 0.5 mm short of the pilot hole's bottom); the head sits on the counterbore's floor, in the countersink, or on the outside face; the screws follow the boss (editing them opens the boss) | A (section), G (sizes) |
@@ -122,6 +122,7 @@ rule when the component has none, and say so in the dialog.
 | Golden | `plastic_boss_fastener` | the enclosure's bosses with their pan-head screws (exact) |
 | Golden | `plastic_boss_hole_radii` | the pilot holes' mouth and bottom rounded (Pappus, exact) |
 | Golden | `plastic_boss_ribs_each` | four square ribs per boss, the second suppressed (exact) |
+| Golden | `plastic_boss_blends` | counterbore tip / root, recess and spigot tip radius (Pappus, exact) |
 | Unit | `test_plastic_core.py` (21) | the library against the research table, inch rules, expressions, refusals, describe, materials; Boss defaults, rule links, refusals, rib angles; the PLASTIC tab's wiring |
 
 ## Known gaps (not built, with the reason)
@@ -130,9 +131,9 @@ rule when the component has none, and say so in the dialog.
   Thread Form and Thread Angle, the material and finish text, and a modelled thread (the
   screw is plain; Fusion carries the thread cosmetically). Fusion's fastener has no API
   (critic CP.2 #10) so the sizes are SciForge's.
-- **Boss blends beyond root, tip and the hole's start / end radius**: counterbore tip / root
-  radius, alignment tip / root radius, rib outer fillet and rib base fillet as a separate
-  value (the ribs' base takes the root radius in the same fillet).
+- **Boss blends not built**: the alignment root radius (where a spigot meets its tip), the
+  rib outer fillet and a separate rib base fillet (the ribs' base takes the root radius),
+  rounds at a countersink's mouth (refused with the reason).
 - **Per-rib extent per point**: Fusion sets each rib of each point; SciForge sets each rib
   once for all the side's points (Each Rib).
 - **A rib ending within the root radius of a wall**: OpenCASCADE cannot make the root fillet

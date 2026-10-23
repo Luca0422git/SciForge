@@ -33,6 +33,9 @@ SIDE_NUMBERS = (
     "tip_radius",
     "hole_start_radius",
     "hole_end_radius",
+    "step_tip_radius",
+    "major_tip_radius",
+    "major_root_radius",
     "rib_total_angle",
     "rib_rotation",
     "rib_cut",
@@ -92,6 +95,9 @@ def side_defaults(side, rule, screw=3.0):
         "tip_radius": 0.0,
         "hole_start_radius": 0.0,
         "hole_end_radius": 0.0,
+        "step_tip_radius": 0.0,
+        "major_tip_radius": 0.0,
+        "major_root_radius": 0.0,
         "ribs": False,
         "rib_count": 4,
         "rib_total_angle": 360.0,
@@ -195,7 +201,13 @@ def check_options(options):
         for key, allowed in SIDE_CHOICES.items():
             if s.get(key) not in allowed:
                 raise BossError("Side %d: unknown %s %r" % (side, key, s.get(key)))
-        for key in ("hole_start_radius", "hole_end_radius"):
+        for key in (
+            "hole_start_radius",
+            "hole_end_radius",
+            "step_tip_radius",
+            "major_tip_radius",
+            "major_root_radius",
+        ):
             s.setdefault(key, 0.0)
         for key in SIDE_NUMBERS:
             try:
@@ -249,6 +261,9 @@ def check_options(options):
             "major_depth",
             "hole_start_radius",
             "hole_end_radius",
+            "step_tip_radius",
+            "major_tip_radius",
+            "major_root_radius",
         ):
             if s[key] < 0:
                 raise BossError("%s: %s cannot be negative." % (name, key.replace("_", " ")))
