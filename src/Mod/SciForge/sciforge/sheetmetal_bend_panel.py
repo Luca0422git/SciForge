@@ -327,7 +327,25 @@ class SmPanel(pickpanel.PickPanel):
             self.drop_preview(target)
             self.quiet_recompute()
         self._click_through(False)
+        before = self.default_options()
         self.switch_body(body, base)
+        # values still at the first body's defaults follow the new body's rule (a hem's 4 T
+        # length on a thicker sheet); values the user typed stay
+        try:
+            after = self.default_options()
+            for key, old in before.items():
+                new = after.get(key)
+                if key not in self.fields or new is None or new == old:
+                    continue
+                now = self.value(key)
+                if isinstance(old, float) and isinstance(now, float):
+                    same = abs(now - old) < 1e-9
+                else:
+                    same = now == old
+                if same:
+                    self.set_value(key, new)
+        except Exception as exc:
+            warn("%s: defaults of %s: %s" % (self.title, body.Label, exc))
         log("%s moved to %s" % (self.title, body.Label))
 
     def picks_changed(self, added, dropped):

@@ -4,8 +4,9 @@ Hem, Join by Bend, Corner Closure, Fillet and Chamfer of the SHEET METAL tab say
 mouse (no dialog, no pop-up, no error), and Lofted Flange opens and waits, Esc makes nothing.
 On a solid (not sheet metal) body the SHEET METAL tab's Fillet opens the SOLID Fillet. Join by
 Bend of a 1 mm steel plate and a 1.5 mm aluminium plate is refused with the reason (OK waits),
-Esc leaves both plates as they were. A Lofted Flange previewed in a new body, then Esc: the new
-body is gone again and the profiles' sketches are still shown."""
+Esc leaves both plates as they were; Hem opened on the steel plate then a click on the aluminium
+one moves there (the Length follows its rule, a Gap typed stays). A Lofted Flange previewed in
+a new body, then Esc: the new body is gone again and the profiles' sketches are still shown."""
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -239,6 +240,56 @@ def join_untouched():
     h.check("the upright plate is as it was", st.close(st.volume(s["upright"]), 1600.0))
     h.check("the aluminium plate is as it was", st.close(st.volume(s["alu"]), s["alu_volume"]))
     h.check("the aluminium plate is still shown", bodies.is_shown(s["alu"]))
+
+
+def hem_from_steel():
+    from sciforge import pickpanel
+
+    pickpanel.activate(s["upright"])
+    Gui.Selection.clearSelection()
+    h.fit(iso=False)
+    st.tab()
+    h.ribbon("Hem")
+
+
+def hem_on_steel():
+    from sciforge import sheetmetal_hem_ui
+
+    p = st.panel(sheetmetal_hem_ui.HemPanel)
+    h.check(
+        "Hem opens on the steel plate, Length 4 T = 4 mm",
+        p is not None and p.body is s["upright"] and st.close(p.value("length"), 4.0),
+        p and (p.body.Label, p.value("length")),
+    )
+    st.type_into(p, "gap", "0.6")
+
+
+def click_alu_edge():
+    h.click_edge(V(50, 20, 1.5))
+
+
+def hem_on_alu():
+    from sciforge import sheetmetal_hem_ui
+
+    p = st.panel(sheetmetal_hem_ui.HemPanel)
+    st.settle(p)
+    h.check(
+        "the dialog moved to the aluminium plate",
+        p is not None and p.body is s["alu"] and len(p.picks["edges"]) == 1,
+        p and (p.body.Label, p.picks),
+    )
+    h.check(
+        "Length follows its rule (4 T = 6 mm); the Gap typed stays 0.6",
+        p is not None and st.close(p.value("length"), 6.0) and st.close(p.value("gap"), 0.6),
+        p and (p.value("length"), p.value("gap")),
+    )
+    h.check("the hem is previewed on the aluminium plate", st.volume(s["alu"]) > s["alu_volume"])
+    st.esc()
+
+
+def hem_left():
+    st.settle()
+    h.check("Esc: the aluminium plate as it was", st.close(st.volume(s["alu"]), s["alu_volume"]))
     App.closeDocument(App.ActiveDocument.Name)
 
 
@@ -326,6 +377,11 @@ h.run(
         thickness_refused,
         ok_waits,
         join_untouched,
+        hem_from_steel,
+        hem_on_steel,
+        click_alu_edge,
+        hem_on_alu,
+        hem_left,
         lofted_setup,
         lofted_open,
         lofted_square,
