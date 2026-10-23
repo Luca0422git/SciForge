@@ -665,7 +665,11 @@ class PatternPanel(Panel):
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         else:
-            self.body = _surface_body(preselection or []) or commands.find_body()
+            self.body = (
+                _surface_body(preselection or [])
+                or commands.find_body()
+                or _shown_surface(self.doc)
+            )
             self.base = self.body.Tip if self.body is not None else None
         self.active = "objects"
         self.escape = preview.EscapeCancels(self)
@@ -2288,6 +2292,16 @@ def _surface_body(selection):
     return None
 
 
+def _shown_surface(doc):
+    """With no solid to repeat: a shown surface body (it is repeated as a body), or None."""
+    try:
+        from . import surfmod_ui
+
+        return surfmod_ui.shown_surface_body(doc)
+    except Exception:
+        return None
+
+
 def start(kind, panel_class=None):
     """Run a pattern command; things selected before it starts are its objects."""
     panel_class = panel_class or PatternPanel
@@ -2307,6 +2321,8 @@ def start(kind, panel_class=None):
     surface = _surface_body(selection)
     body = surface or commands.find_body()  # a surface body is patterned as a body (surface-4)
     tip = body.Tip if body is not None else None
+    if surface is None and (tip is None or tip.Shape.isNull() or not tip.Shape.Solids):
+        surface = _shown_surface(doc)
     if surface is None and (tip is None or tip.Shape.isNull() or not tip.Shape.Solids):
         commands.tell(
             "%s needs a solid to repeat: make one first (Create Sketch, then Extrude)."

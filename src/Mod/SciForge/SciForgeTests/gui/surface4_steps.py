@@ -78,13 +78,15 @@ def edges(sk):
     return [(sk, "Edge%d" % (i + 1)) for i in range(len(sk.Shape.Edges))]
 
 
-def surface_box(width=30.0, depth=20.0, height=10.0):
+def surface_box(width=30.0, depth=20.0, height=10.0, open_side=False):
     """An open box of surfaces (four walls and a floor, no lid) in one surface body: a
-    surface Extrude of a rectangle, a Patch of the same rectangle, Stitch. Returns the body."""
+    surface Extrude of a rectangle, a Patch of the same rectangle, Stitch. Returns the body.
+    open_side: no wall on the side x = 0 either (three walls)."""
     from sciforge import bodies, surface
 
     sk = sketch([(0, 0), (width, 0), (width, depth), (0, depth)])
-    walls = surface.build("extrude", {"refs": edges(sk)}, {"distance": height})
+    sides = edges(sk)[:3] if open_side else edges(sk)
+    walls = surface.build("extrude", {"refs": sides}, {"distance": height})
     App.ActiveDocument.recompute()
     floor = surface.build("patch", {"refs": edges(sk)}, {})
     App.ActiveDocument.recompute()
