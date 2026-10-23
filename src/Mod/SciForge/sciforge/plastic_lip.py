@@ -250,16 +250,17 @@ def section_solid(rim, bottom, top, height, vector):
         )
 
 
-def round_tip(solid, rim, height, vector, radius):
-    """The lip with its top edges rounded; (shape, note)."""
+def round_tip(solid, rim, height, up, radius):
+    """The lip with its top edges rounded (the edges `height` from the rim along `up`, the
+    rim's normal on the lip's side); (shape, note)."""
     if radius <= 1e-9:
         return solid, ""
     top = []
     base = rim.wire.Vertexes[0].Point
     for edge in solid.Edges:
-        if all(abs((v.Point - base).dot(vector) - height) < 1e-5 for v in edge.Vertexes):
+        if all(abs((v.Point - base).dot(up) - height) < 1e-5 for v in edge.Vertexes):
             mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
-            if abs((mid - base).dot(vector) - height) < 1e-5:
+            if abs((mid - base).dot(up) - height) < 1e-5:
                 top.append(edge)
     try:
         out = solid.makeFillet(radius, top)
@@ -298,7 +299,7 @@ def tools(rim, options, pull):
         sign = -1 if (o["type"] == "lip_and_groove" and o["swap"]) else 1
         vector = pull * sign
         solid = section_solid(rim, bottom, top, h * scale, vector)
-        solid, note = round_tip(solid, rim, h, vector, o.get("tip_radius", 0.0))
+        solid, note = round_tip(solid, rim, h, rim.normal * sign, o.get("tip_radius", 0.0))
         out["lip"] = (solid, sign, note)
     if o["type"] in ("groove", "lip_and_groove"):
         bottom, top, d = core.groove_section(o)
