@@ -419,9 +419,14 @@ def press_pull(shape, names, distance):
         return _result(_offset_curved(shape, picked[0], d), "Press Pull")
     planes = [_plane_of(f) for f in picked]
     normal0 = planes[0][1]
-    for _o, n in planes[1:]:
-        if n.getAngle(normal0) > 1e-6:
-            raise SurfaceModifyError("Pick faces that face the same way (parallel).")
+    if any(n.getAngle(normal0) > 1e-6 for _o, n in planes[1:]):
+        try:
+            return _result(_move_planes(shape, picked, planes, d), "Press Pull")
+        except _NotPolygons:
+            raise SurfaceModifyError(
+                "Faces that face different ways move together only among flat faces with "
+                "straight edges (like the walls of a box). Push or pull them one at a time."
+            )
     try:
         return _result(_slide_corners(shape, picked, planes, d), "Press Pull")
     except _NotPolygons:
@@ -580,6 +585,108 @@ def _slide_corners(shape, picked, planes, d):
             new.reverse()  # each face keeps its side (its normal)
         faces.append(new)
     return sew(faces)
+
+
+def _move_planes(shape, picked, planes, d):
+    """Press Pull of flat faces that face different ways (two walls of a box at once), as
+    Fusion's Offset Face: each picked plane moves `d` along its own normal and every corner
+    of a picked face goes where the planes of its faces meet again. A corner on the open
+    edge of a face that stays slides along that edge (as for one face); a corner between
+    moved faces only stays in the plane of the open edges there (an open box's rim stays
+    flat), else on their lines (each moves with its face). Every face with a moved corner is
+    rebuilt as the same polygon. Raises _NotPolygons when a face involved is not a flat
+    polygon or a corner is not fixed by its faces."""
+    corners = {}
+    for face in picked:
+        if not _is_polygon(face):
+            raise _NotPolygons()
+        for vertex in face.Vertexes:
+            corners[vertex.hashCode()] = vertex
+    moved = {}
+    for key, vertex in corners.items():
+        rows, extra, open_dirs = [], [], []
+        for f in shape.ancestorsOfType(vertex, Part.Face):
+            if not _is_flat(f):
+                raise _NotPolygons()
+            origin, n = _plane_of(f)
+            shift = d if any(f.isSame(p) for p in picked) else 0.0
+            rows.append((n, n.dot(origin) + shift))
+        for e in shape.ancestorsOfType(vertex, Part.Edge):
+            owners = faces_of_edge(shape, e)
+            if len(owners) != 1:
+                continue
+            if not _is_line(e):
+                raise _NotPolygons()
+            ends = [v.Point for v in e.Vertexes]
+            open_dirs.append((ends[1] - ends[0]).normalize())
+            square = _plane_of(owners[0])[1].cross(ends[1] - ends[0])
+            if square.Length < 1e-12:
+                raise _NotPolygons()
+            square.normalize()
+            # the plane through the open edge square to its face: it holds the face's
+            # normal, so it stays where it is when the face moves
+            moves = any(owners[0].isSame(p) for p in picked)
+            (extra if moves else rows).append((square, square.dot(vertex.Point)))
+        point = _meet(rows)
+        rim = open_dirs[0].cross(open_dirs[1]) if len(open_dirs) == 2 else None
+        if point is None and rim is not None and rim.Length > 1e-6:
+            rim.normalize()
+            point = _meet(rows + [(rim, rim.dot(vertex.Point))])
+        if point is None:
+            point = _meet(rows + extra)
+        if point is None:
+            raise _NotPolygons()
+        moved[key] = point
+    faces = []
+    for face in shape.Faces:
+        if not any(v.hashCode() in moved for v in face.Vertexes):
+            faces.append(face.copy())
+            continue
+        if not _is_polygon(face):
+            raise _NotPolygons()
+        for edge in face.Edges:
+            a, b = (v.Point for v in edge.Vertexes)
+            na, nb = (moved.get(v.hashCode(), v.Point) for v in edge.Vertexes)
+            if (nb - na).Length < 1e-7 or (nb - na).dot(b - a) <= 0:
+                raise SurfaceModifyError(
+                    "That is further than the faces next to it reach: they would disappear. "
+                    "Use a smaller distance."
+                )
+        points = [moved.get(v.hashCode(), v.Point) for v in face.OuterWire.OrderedVertexes]
+        try:
+            new = Part.Face(Part.makePolygon(points + [points[0]]))
+        except Exception:
+            raise SurfaceModifyError("A face around it would fold over. Use a smaller distance.")
+        if new.Area < 1e-9 or not new.isValid():
+            raise SurfaceModifyError("A face around it would vanish. Use a smaller distance.")
+        u0, u1, v0, v1 = face.ParameterRange
+        before = face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+        u0, u1, v0, v1 = new.ParameterRange
+        if new.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0).dot(before) < 0:
+            new.reverse()
+        faces.append(new)
+    return sew(faces)
+
+
+def _meet(rows):
+    """The point where the planes n . x = c of `rows` meet (three of them that cross, the
+    others checked); None when they do not cross in one point (a line or more is left).
+    Raises _NotPolygons when they cannot all hold."""
+    import itertools
+
+    best = None
+    for a, b, c in itertools.combinations(rows, 3):
+        det = a[0].dot(b[0].cross(c[0]))
+        if best is None or abs(det) > abs(best[0]):
+            best = (det, a, b, c)
+    if best is None or abs(best[0]) < 1e-9:
+        return None
+    det, (n1, c1), (n2, c2), (n3, c3) = best
+    point = (n2.cross(n3) * c1 + n3.cross(n1) * c2 + n1.cross(n2) * c3) * (1.0 / det)
+    for n, c in rows:
+        if abs(n.dot(point) - c) > 1e-6 * max(1.0, abs(c)):
+            raise _NotPolygons()
+    return point
 
 
 def _offset_face(face, d):
