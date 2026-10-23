@@ -65,6 +65,12 @@ def empty_assigned():
     doc = App.ActiveDocument
     h.check("dialog closed", ps.assign_panel() is None)
     h.check("the design has the default rule", plastic.assigned_rule_name(doc) == "Default (mm)")
+    titles = ps.timeline_titles()
+    h.check(
+        "a rule is not a timeline step (Fusion)",
+        not any("Plastic" in t or "Rule" in t for t in titles),
+        titles,
+    )
 
 
 def empty_undo():
@@ -201,6 +207,18 @@ def back_to_2():
     h.check("Ctrl+Z: the Shell's 2 mm wall again", ps.near(v, SHELL_2, 1e-6), v)
 
 
+def library_twin():
+    p = ps.assign_panel()
+    ps.click_tree_row(p.rules.tree, "ABS 2 mm", "Library")
+    text = p.info.text()
+    h.check(
+        "a library rule the design holds too: the dialog says the design's copy is used",
+        "This design has its own 'ABS 2 mm'" in text,
+        text,
+    )
+    ps.esc()
+
+
 def manage():
     Gui.Selection.clearSelection()
     ps.menu("SETUP", "Manage Plastic Rules")
@@ -270,6 +288,53 @@ def rename_undone():
     names = [r["name"] for r in plastic.design_rules(doc)]
     h.check("Ctrl+Z: the old name", names == ["ABS 2 mm"], names)
     h.check("Ctrl+Z: assigned under it", plastic.assigned_rule_name(doc) == "ABS 2 mm")
+    Gui.Selection.clearSelection()
+    ps.menu("SETUP", "Manage Plastic Rules")
+
+
+def new_inch_rule():
+    p = ps.manage_panel()
+    ps.click_tree_row(p.rules.tree, "ABS 2 mm", "In This Design")
+    ps.click(p.buttons["new"])
+    h.check("New opens the editor", p.editor.isVisible() and p.fields["units"].isEnabled())
+    h.check("starts as a copy (2.0 mm)", p.fields["thickness"].text() == "2.0")
+    ps.choose(p.fields["units"], "in")
+
+
+def inch_converted():
+    p = ps.manage_panel()
+    f = p.fields
+    h.check(
+        "Units in: the thickness converted (2 mm = 0.0787 in)",
+        f["thickness"].text() == "0.0787",
+        f["thickness"].text(),
+    )
+    h.check(
+        "and its range (1.2-3.5 mm)",
+        (f["minimum_thickness"].text(), f["maximum_thickness"].text()) == ("0.0472", "0.1378"),
+        (f["minimum_thickness"].text(), f["maximum_thickness"].text()),
+    )
+    h.check(
+        "an expression in Thickness kept",
+        f["nominal_radius"].text() == "Thickness / 2",
+        f["nominal_radius"].text(),
+    )
+    h.check("the draft (degrees) kept", f["draft_angle"].text() == "1.0", f["draft_angle"].text())
+    ps.click(p.save_button)
+
+
+def inch_saved():
+    from sciforge import plastic
+
+    p = ps.manage_panel()
+    h.check("the inch rule saved", p is not None and p.message.text() == "", p and p.message.text())
+    rule = plastic.find_rule(App.ActiveDocument, "New rule")
+    h.check(
+        "it is the same 2 mm wall",
+        rule is not None and abs(plastic.core.evaluated(rule)["thickness"] - 2.0) < 0.01,
+        rule,
+    )
+    ps.esc()
     ps.clear_library_prefs()
 
 
@@ -386,6 +451,8 @@ h.run(
         followed_15,
         undo,
         back_to_2,
+        assign,
+        library_twin,
         manage,
         edit_abs2,
         type_3,
@@ -399,6 +466,9 @@ h.run(
         renamed,
         undo,
         rename_undone,
+        new_inch_rule,
+        inch_converted,
+        inch_saved,
     ]
     + sd.box_steps("PlasticQADraft")
     + [

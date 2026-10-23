@@ -175,6 +175,13 @@ class AssignPanel(Panel):
         lines = ["Assigned now: %s" % (now or "none")]
         if name:
             rule = plastic.find_rule(self.doc, name) if where == "design" else None
+            if where == "library" and plastic.find_rule(self.doc, name) is not None:
+                # assign_rule keeps the design's copy (a library edit never changes a
+                # design silently): say so rather than show the library's values only
+                rule = plastic.find_rule(self.doc, name)
+                lines.append(
+                    "This design has its own '%s': the component takes the design's values." % name
+                )
             rule = rule or plastic.library_rule(name)
             if rule is not None:
                 key = plastic.material_key(rule)
@@ -328,6 +335,10 @@ class ManagePanel(Panel):
         grid.addRow(actions)
         self.editor.setVisible(False)
         form.addRow(self.editor)
+        # a new rule's numbers follow a change of its Units (2 mm -> 0.0787 in)
+        self._units_shown = None
+        self._loading = False
+        self.fields["units"].currentTextChanged.connect(self._units_changed)
         self.finish_layout()
         self.rules.fill(doc)
         self.rules.tree.currentItemChanged.connect(lambda *a: self._enable())
@@ -400,6 +411,7 @@ class ManagePanel(Panel):
 
     def _open_editor(self, where, old, rule):
         self.editing = (where, old)
+        self._loading = True
         self.editor.setTitle(
             "%s Plastic Rule (%s)"
             % ("Edit" if old else "New", DESIGN if where == "design" else LIBRARY)
@@ -414,9 +426,31 @@ class ManagePanel(Panel):
                     widget.setEditText(value)
             else:
                 widget.setText(value)
+        self._loading = False
+        self._units_shown = self.fields["units"].currentText()
         # Units are fixed when a rule is made (Fusion)
         self.fields["units"].setEnabled(old is None)
         self.editor.setVisible(True)
+
+    def _units_changed(self, text):
+        """A new rule's Units changed: its plain lengths are converted (an expression in
+        Thickness follows the thickness by itself)."""
+        try:
+            if self._loading or self.editing is None or self.editing[1] is not None:
+                return
+            old, self._units_shown = self._units_shown, text
+            if not old or old == text or text not in core.MM_PER_UNIT:
+                return
+            factor = core.MM_PER_UNIT[old] / core.MM_PER_UNIT[text]
+            for key in core.LENGTH_FIELDS:
+                widget = self.fields[key]
+                try:
+                    value = float(widget.text())
+                except ValueError:
+                    continue
+                widget.setText("%g" % round(value * factor, 4))
+        except Exception as exc:
+            warn("plastic rule units: %s" % exc)
 
     def _close_editor(self):
         self.editing = None

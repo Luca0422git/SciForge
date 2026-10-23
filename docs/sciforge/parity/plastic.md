@@ -44,7 +44,7 @@ settle it).
 | Picking a library rule copies it into the design | Same (`assign_rule`); when the design already has a rule of that name the component takes the design's copy (library edits never change a design silently) | A (copy), G (same name) |
 | The rule's material becomes the component's physical material | Same for the materials SciForge's library has (ABS, PC, PP, Nylon, Acetal, Acrylic, PLA, PETG); PC/ABS, HIPS, HDPE, PBT and TPE have none yet: the dialog says the bodies keep theirs | A, G (mapping) |
 | Manage Plastic Rules: two lists, a pencil to edit, New, Copy, Delete, Set As Default (library) | Same as buttons under the lists (New, Edit, Copy, Delete, Copy to Library, Copy to Design, Set As Default); Edit opens the rule's fields under the lists (not a second window) | A, G (buttons) |
-| Edit Plastic Rule fields: Name, Units (fixed once made), Material, Thickness, Draft Angle, Nominal Radius, Reveal Height, Clearance, Thickness Range min / max, Thickness Variation, Minimum Draft Angle, Knife Edge Threshold | Same fields; lengths may be expressions in Thickness ("Thickness / 2"), a bare number is in the rule's units | A |
+| Edit Plastic Rule fields: Name, Units (fixed once made), Material, Thickness, Draft Angle, Nominal Radius, Reveal Height, Clearance, Thickness Range min / max, Thickness Variation, Minimum Draft Angle, Knife Edge Threshold | Same fields; lengths may be expressions in Thickness ("Thickness / 2"), a bare number is in the rule's units; switching a new rule's Units converts its plain numbers (2 mm becomes 0.0787 in; QA pass) | A, G (conversion) |
 | Thickness must lie in the thickness range; the default library rule and a rule in use cannot be deleted | Same, each refusal said in the dialog | A |
 | Editing a design rule (or giving the component another rule) updates the features that use it | Boss and Rest values that came from the rule follow it (linked until typed over; golden `plastic_rule_edit_moves_boss`). A Shell, Draft, Rib / Web or thin Extrude whose value was the rule's when its dialog was OK'd is linked too (`plastic.remember_links`, one line at each dialog's OK) and follows the rule (`plastic.follow`); a value typed over, or a formula, is left alone | A, G (links) |
 | The library: Fusion ships base rules in metric and imperial and several resins | SciForge's own library (16 rules: Default mm / in, ABS, PC, PC/ABS, PP, PA66, POM, HIPS, HDPE, PBT, PMMA, TPE, FDM PLA / PETG); values checked against the research table (unit test) | A (existence), G (values) |
@@ -57,7 +57,7 @@ settle it).
 | Command | Field | Rule value | Src |
 |---|---|---|---|
 | Shell | Inside / Outside thickness | Thickness | A |
-| Draft | Angle (and the second side's) | Draft Angle | A (Draft uses the rule), G (field) |
+| Draft | Angle (and the second side's) | Draft Angle; a rule without draft (0 deg: FDM PLA / PETG) leaves Draft its own angle, and a linked Draft keeps its angle (Draft refuses 0, and a Draft set to 0 silently stops drafting; QA) | A (Draft uses the rule), G (field, the 0 case) |
 | Rib, Web | Thickness | 0.6 x Thickness | A (uses the rule), G (factor) |
 | Extrude (thin) | Wall thickness (both sides) | Thickness | A (Extrude uses the rule), G (field) |
 | Fillet, Rule Fillet | Radius | Nominal Radius (Rule Fillet only) | G |
@@ -76,12 +76,13 @@ rule when the component has none, and say so in the dialog.
 | (brief) a point on a face | A click on a flat face puts a point sketch on that face and raises the parting plane 3 x the screw (a standoff); more clicks on the same face add points; another face is refused | G |
 | Side 1 = head side along the sketch's normal, Side 2 = thread side against it; Flip swaps them | Same | A |
 | Each side finds the nearest visible solid body along its direction; a side with no body is left out | Same (the dialog lists the two bodies); a point with no body on either side is refused | A |
-| Participant bodies may be given (else found) | Side 1 Body / Side 2 Body boxes: Auto, or click the box then a body (in the view or the browser); a picked body the side's direction does not meet is refused in the dialog; the box's x goes back to Auto | A (API `participantBodies`), G (boxes) |
+| Participant bodies may be given (else found) | Side 1 Body / Side 2 Body boxes: Auto, or click the box then a body (in the view or the browser); a picked body the side's direction does not meet is refused in the dialog; the box's x goes back to Auto; Flip moves a picked body to the other box (it stays on its side of the plane) | A (API `participantBodies`), G (boxes) |
 | Offset Position moves the parting face along the normal | Same, with a blue arrow and its value box | A |
 | One feature per side, joined into its body | One `SciForge::Boss` step per side in its body ("Boss 1", "Boss 2" in the timeline); both share the settings, editing either opens the one dialog | A |
 | Shape: Blank / Constant Diameter (Constant Thickness "not supported yet") | Blank and Constant Diameter; Constant Thickness is offered as a SciForge extra, labelled so | A (critic C1) |
 | Hole Type Simple / Counterbore / Countersink; the head side always goes through; the thread side Through / From Bottom (a floor) / From Top (a depth) | Same; head side's counterbore / countersink open from the outside face, its floor "material under the head" above the tip; thread side's at the tip | A |
 | Diameter, draft (wider towards the root), hole diameter and draft, major diameter and depth, countersink angle (90) | Same | A |
+| Major Draft Angle (the counterbore wall's draft) | Same, the wall widening to the counterbore's mouth (either side); 0 by default (a plain counterbore the screw head fits), not linked to the rule; a Major Tip Radius on a drafted counterbore is refused with the reason (added by the QA pass; golden `plastic_boss_major_draft`) | A (field), G (default 0) |
 | Alignment Step None / In / Out with diameter, depth, draft | Same. Defaults: Side 1 In with a recess of Side 2's diameter + 2 x clearance (Fusion's sample sizes the recess to the mate's diameter), Side 2 Out of its own diameter (its tip carried on 1 mm - clearance into the recess) | A (critic C8), G (clearance, Out) |
 | Offset Clearance pulls each side's tip back from the parting face | Same (rule Clearance / 2 per side) | A, G (default) |
 | Root Radius, Tip Radius, Hole Start / End Radius, Major Tip / Root Radius, Alignment Tip / Root Radius | Same (root: the rule's Nominal Radius; the others 0); the hole's start radius rounds its mouth (a simple hole; the head side's hole at the tip), the end radius its blind bottom; the counterbore's mouth and floor corner; the recess's mouth and floor corner, or the spigot's top edge and foot (a spigot narrower than the tip). Made as exact revolved rounds or fillets of the cutting tools, so they cannot fail on the part | A, G (defaults) |
@@ -97,7 +98,7 @@ rule when the component has none, and say so in the dialog.
 | A closed sketch profile and a body; the profile becomes a flat face, material removed where the body bulges past it and added where it lies below, Thickness and draft | Same: what lies past the sketch plane inside the profile is cut; a plate Thickness thick under the flat face, side walls Thickness thick (drafted, wider towards the body) down to the old wall; in a shelled part the old wall inside the walls is removed (even wall, the inside open), in a solid part the pedestal is solid | A (outcome), G (construction) |
 | Flip | Turns the inside round (default: the side of the part's centre of mass); a profile that lies over nothing is refused in the dialog | G |
 | The body | Body box: Auto (the body the profile lies over; the sketch's own body first) or picked (click the box, then the body); the dialog says where it builds | A (a body is an input), G (box) |
-| Thickness / draft from the rule | Same, linked until typed over; a blue arrow drags the thickness | G |
+| Thickness / draft from the rule | Same, linked until typed over; a blue arrow drags the thickness. The dialog says the rule ("Plastic rule: <name>", or the default "(default; no rule assigned)"); the linked values come from the rule of the body the rest builds in, and an edit shows the values it is built with now (a rule edited since) | G |
 
 ### Rule Fillet (PLASTIC > MODIFY)
 
@@ -124,7 +125,10 @@ rule when the component has none, and say so in the dialog.
 | Golden | `plastic_boss_ribs_each` | four square ribs per boss, the second suppressed (exact) |
 | Golden | `plastic_boss_blends` | counterbore tip / root, recess and spigot tip radius (Pappus, exact) |
 | Golden | `plastic_boss_alignment_roots` | the recess's floor corner and a narrow spigot's foot rounded (Pappus, exact) |
-| Unit | `test_plastic_core.py` (21) | the library against the research table, inch rules, expressions, refusals, describe, materials; Boss defaults, rule links, refusals, rib angles; the PLASTIC tab's wiring |
+| Golden | `plastic_boss_major_draft` | the enclosure's counterbores drafted 5 deg (frustum by hand, exact; QA pass) |
+| Scenario | `plastic_qa_rules` (QA pass) | an empty design (Assign gives the default rule and is no timeline step, Ctrl+Z; Manage opens and Esc; Rule Fillet says it needs a solid); a Shell made with the rule follows a reassigned rule, Ctrl+Z puts both back; Assign names the design's copy of a library rule it already holds; Manage: an edit the Shell follows at once, Esc drops both; rename a rule (still assigned, browser row renamed), Ctrl+Z; a new rule switched to inches converts its numbers; a Draft linked to PP 1.5 mm keeps its angle when FDM PLA (no draft) is assigned, a new Draft then opens with its own 1 deg, ABS moves the linked Draft to 1 deg |
+| Scenario | `plastic_qa_tools` (QA pass) | Boss on a face then Esc (no step, no point sketch left); a Rest with the rule's 1 deg draft (flat 20 x 12 face), Esc; a Rest OK'd, then PMMA 2.5 mm assigned: the Rest follows, its edit says the rule and shows 2.5; a boss saved and reopened: edit from the timeline, Offset 1 (moves), Major Draft Angle 5 (frustum by hand), a rounded drafted mouth refused, OK, Ctrl+Z; PMMA assigned after reopen: the boss follows, its edit shows the rule's root radius 1.25; Side 1 Body picked (the lid) then Flip: the lid moves to the Side 2 box, no error; the lid in a component of its own (placed by the component) with PMMA 2.5 mm, the enclosure with no rule: each side found, built and shown with its own rule (volumes by hand), OK, Ctrl+Z |
+| Unit | `test_plastic_core.py` (25) | the library against the research table, inch rules, expressions, refusals, describe, materials; Boss defaults, rule links, refusals, rib angles; the PLASTIC tab's wiring |
 
 ## Known gaps (not built, with the reason)
 
@@ -153,6 +157,35 @@ rule when the component has none, and say so in the dialog.
 - **Rib / Web draft and base fillet** (Fusion's Design Extension step): SciForge's Rib has no
   draft yet, so the rule's draft has nowhere to go.
 - **Configurations' plastic rule table**: not built (SciForge has no configurations).
+- **Rules of nested components** (QA pass): a rule assigned to a component gives its
+  material, and its rule links, to the bodies of its sub-components that have no rule of
+  their own, but `default_for` / `rule_for_body` of such a body give no rule (no
+  inheritance). Fusion's behaviour for sub-components is not documented.
+- **Plastic settings between test scenarios**: the user library and the default rule
+  (`Mod/SciForge/Plastic`) are not reset by `harness.run`'s `prepare()`; every plastic
+  scenario resets them in its setup (`plastic_steps.clear_library_prefs`). A plastic-2
+  scenario after a failed plastic one in a CI shard could inherit another default rule.
+
+## QA pass (sf/plastic-1-qa, 2026-10-23)
+
+Fixed: a rule without draft drove Draft to 0 (refused when opening Draft, and a linked
+Draft silently stopped drafting: valid, volume of the undrafted box); Boss / Rest edits
+showed the values stored when they were made, not the rule's values they are built with
+after a rule edit or reassignment (root radius 1.0 shown, 1.25 built); a new boss's root
+radius was clamped to T / 2 in the dialog while the step used the nominal radius; Rest did
+not say which rule it used and took the active body's rule rather than the rule of the body
+it builds in; rule refusals named the internal keys ("nominal_radius: ...") and a Thickness
+typed as "Thickness / 2" said "unknown name 'Thickness'"; Major Draft Angle (A-api) was not
+built and not listed as a gap; Flip with a body picked in a Side box kept the body on the
+side number (so it was looked for on the wrong side of the plane: an error) instead of on its
+side of the plane; switching a new rule's Units kept the numbers (2 mm became 2 in), they are
+converted now (G); Assign showed the library's values for a library rule the design already
+holds under that name, while the component takes the design's copy (it says so now); a boss
+whose two bodies are in components with different rules was built with each body's rule but
+showed the active body's rule's values for both sides (each side shows its own rule's values
+now, and the dialog names both rules). New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
+golden `plastic_boss_major_draft`, unit tests. Every builder scenario, the plastic golden
+models, the unit tests and the shared dialogs' scenarios pass after the fixes.
 
 ## Findings while building
 

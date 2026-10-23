@@ -226,6 +226,45 @@ def click_points_row():
     h.check("clicked the sketch's row", ps.click_row("Boss Points"))
 
 
+def side1_lid():
+    p = ps.boss_panel()
+    ps.settle(p)
+    ps.click(p.body_fields[1].button)
+    ps.click_row("Lid")
+
+
+def lid_picked():
+    p = ps.boss_panel()
+    ps.settle(p)
+    h.check("Side 1 Body: Lid", p and p.body_fields[1].button.text() == "Lid")
+    h.check("no error", p and p.message.text() == "", p and p.message.text())
+    ps.tab_of(p, "Boss")
+    ps.check_box(p.flip)
+
+
+def flip_moves_pick():
+    """Flip swaps head and thread: the picked lid stays above the plane, so it is Side 2's
+    body now (it was refused as Side 1's: nothing of the lid lies below the plane)."""
+    p = ps.boss_panel()
+    ps.settle(p)
+    h.check(
+        "Flip: the picked lid moves to the Side 2 box",
+        p and p.body_fields[2].button.text() == "Lid" and p.body_fields[1].button.text() == "Auto",
+        p and (p.body_fields[1].button.text(), p.body_fields[2].button.text()),
+    )
+    text = p.bodies_label.text() if p else ""
+    h.check("the lid is the thread side now", "Side 2 (thread): Lid" in text, text)
+    h.check("no error after Flip", p and p.message.text() == "", p and p.message.text())
+    ps.check_box(p.flip)
+
+
+def unflipped():
+    p = ps.boss_panel()
+    ps.settle(p)
+    h.check("Flip back: the lid in the Side 1 box", p and p.body_fields[1].button.text() == "Lid")
+    h.check("no error", p and p.message.text() == "", p and p.message.text())
+
+
 def boss_ok():
     ps.settle(ps.boss_panel())
     ps.ok()
@@ -393,6 +432,117 @@ def boss_edit_closed():
     ps.clear_library_prefs()
 
 
+# -- the lid in a component of its own, placed by the component ------------------------------------
+def comp_setup():
+    from sciforge import bodies, components
+
+    ps.clear_library_prefs()
+    doc = App.newDocument("PlasticQAComponents")
+    bottom = ps.box_body(doc, "Bottom", 0, 20, "top")
+    cover = components.new_component(doc, "Cover")
+    lid = ps.box_body(doc, "Lid", 0, 10, "bottom", component=cover)
+    cover.Placement = App.Placement(V(0, 0, 20), App.Rotation())  # the lid sits on z 20
+    sk = bottom.newObject("Sketcher::SketchObject", "BossPoints")
+    sk.Label = "Boss Points"
+    sk.MapMode = "Deactivated"
+    sk.Placement = App.Placement(V(0, 0, 20), App.Rotation())
+    sk.addGeometry(Part.Point(V(10, 10, 0)))
+    doc.recompute()
+    bodies.set_active_body(bottom)
+    s.update(cb=bottom.Name, cl=lid.Name, cvb=ps.volume(bottom), cvl=ps.volume(lid))
+    h.fit()
+    ps.plastic_tab()
+    Gui.Selection.clearSelection()
+    h.ribbon("Assign Plastic Rule")
+
+
+def comp_assign_cover():
+    """The Cover component (the lid) gets PMMA 2.5 mm; the enclosure (root) keeps none."""
+    p = ps.assign_panel()
+    ps.choose(p.combo, "Cover")
+    ps.click_tree_row(p.rules.tree, "PMMA 2.5 mm", "Library")
+    ps.ok()
+
+
+def comp_boss():
+    from sciforge import plastic
+
+    doc = App.ActiveDocument
+    cover = doc.getObject(s["cl"]).getParentGeoFeatureGroup()
+    h.check("the Cover has PMMA 2.5 mm", plastic.assigned_rule_name(doc, cover) == "PMMA 2.5 mm")
+    h.check("the root has no rule", plastic.assigned_rule_name(doc) == "")
+    Gui.Selection.clearSelection()
+    h.ribbon("Boss")
+
+
+def comp_points():
+    h.check("clicked the sketch's row", ps.click_row("Boss Points"))
+
+
+def comp_previewed():
+    p = ps.boss_panel()
+    ps.settle(p)
+    doc = App.ActiveDocument
+    b, l = doc.getObject(s["cb"]), doc.getObject(s["cl"])
+    text = p.bodies_label.text() if p else ""
+    h.check(
+        "the lid in its component is found as the head side",
+        "Side 1 (head): Lid" in text and "Side 2 (thread): Bottom" in text,
+        text,
+    )
+    h.check(
+        "the dialog names each side's rule",
+        p
+        and p.rule_label.text()
+        == "Plastic rule: Side 1: PMMA 2.5 mm; Side 2: Default (mm) (default; no rule assigned)",
+        p and p.rule_label.text(),
+    )
+    w1, w2 = (p.side_widgets[1], p.side_widgets[2]) if p else ({}, {})
+    h.check(
+        "Side 1 (the lid, PMMA) shows root radius 1.25, Side 2 (default rule) 1.0",
+        p
+        and abs(w1["root_radius"].value() - 1.25) < 1e-9
+        and abs(w2["root_radius"].value() - 1.0) < 1e-9,
+        p and (w1["root_radius"].value(), w2["root_radius"].value()),
+    )
+    r2 = 5.0 + 7.95 * ps.TAN1  # the head side's shank at the lid's inside
+    want_b = s["cvb"] + ps.thread_side_boss()
+    want_l = s["cvl"] + ps.head_side_boss() - ps.fillet_ring(r2, 1.0) + ps.fillet_ring(r2, 1.25)
+    h.check(
+        "thread side in the enclosure (by hand)",
+        ps.near(ps.volume(b), want_b, 1.0),
+        (ps.volume(b), want_b),
+    )
+    h.check(
+        "head side in the component's lid, with PMMA's 1.25 root radius (by hand)",
+        ps.near(ps.volume(l), want_l, 1.0),
+        (ps.volume(l), want_l),
+    )
+    h.check("no error", p and p.message.text() == "", p and p.message.text())
+    ps.ok()
+
+
+def comp_done():
+    doc = App.ActiveDocument
+    steps = boss_steps(doc)
+    h.check(
+        "OK: one step in each body, valid",
+        len(steps) == 2 and all("Invalid" not in o.State for o in steps),
+        [(o.Label, o.State) for o in steps],
+    )
+    ps.undo()
+
+
+def comp_undone():
+    doc = App.ActiveDocument
+    b, l = doc.getObject(s["cb"]), doc.getObject(s["cl"])
+    h.check("Ctrl+Z: no boss", boss_steps(doc) == [])
+    h.check(
+        "Ctrl+Z: both bodies as they were",
+        ps.near(ps.volume(b), s["cvb"], 1e-6) and ps.near(ps.volume(l), s["cvl"], 1e-6),
+    )
+
+
 h.run(
     "plastic_qa_tools",
     [
@@ -414,6 +564,10 @@ h.run(
         rest_closed,
         reopen_setup,
         click_points_row,
+        side1_lid,
+        lid_picked,
+        flip_moves_pick,
+        unflipped,
         boss_ok,
         boss_made,
         save_reopen,
@@ -430,5 +584,12 @@ h.run(
         boss_follows_rule,
         boss_edit_shows_rule,
         boss_edit_closed,
+        comp_setup,
+        comp_assign_cover,
+        comp_boss,
+        comp_points,
+        comp_previewed,
+        comp_done,
+        comp_undone,
     ],
 )
