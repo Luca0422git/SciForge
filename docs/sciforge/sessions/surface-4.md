@@ -147,3 +147,17 @@ the Fillet deleted in the timeline under a Press Pull and a Delete Face; Suppres
 Unsuppress Features on the Press Pull; Merge; save,
 close, reopen, edit) and `surface4_qa_reopen` (Mirror Join with Stitch Tolerance 0.5 and
 Split Body by a surface across a save and a reopen; a Split Body edit cancelled with Esc).
+
+QA results with the fixes (FreeCAD 1.1.4, run one at a time): `surface4_qa` 87 PASS,
+`surface4_qa_reopen` 41 PASS, the builder's 16 surface4 scenarios all PASS (the same counts as
+above), regression fillet 67, fillet_chamfer 48, extrude_presspull_presspull 53,
+surface_stitch 63, surface_misc 70 all PASS; `--only base`: unit 1866 OK (9 skipped), golden
+462 pass + 2 xfail, smoke 79 PASS, journey 25 PASS, restart both phases PASS. Each fix was
+shown on the code before it: a headless probe (the Press Pull red and the wrong wall deleted
+after deleting the Fillet) and `surface4_qa` on the old `surfmod.py` (the body blank, area 0,
+after Suppress Features).
+
+Left for later (also in the parity doc's Known gaps): suppressing a surface.py step
+(Extrude, Patch, Stitch...) still empties it (surface-3's files); surface Fillet / Chamfer
+take edges only (Fusion also takes faces); Scale merges a surface body's coplanar faces
+(Refine), Fusion keeps them; the builder's gaps above.

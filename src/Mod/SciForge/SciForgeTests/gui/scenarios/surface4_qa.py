@@ -17,7 +17,8 @@ found again where they were: before, the Press Pull lost its floor and the Delet
 the left wall); Ctrl+Z. Suppress Features on the Press Pull: the body shows the filleted box
 (before, a suppressed surface step came out empty and the body went blank); Unsuppress.
 MODIFY > Merge of the strip's
-two faces in one plane, OK. Save, close, reopen: every step computes, the areas and the
+two faces in one plane, OK. Click the strip's face, F: the surface Fillet opens on the strip
+(not on the box); Esc. Save, close, reopen: every step computes, the areas and the
 timeline are the same; the Fillet edits again (Radius 3 reads back); Esc.
 """
 
@@ -403,6 +404,29 @@ def merge_ok():
 def merged():
     h.check("dialog closed", s4.panel() is None)
     h.check("the strip: 2 faces", s4.faces(s["strip"]) == 2, s4.faces(s["strip"]))
+    Gui.Selection.clearSelection()
+    h.click(V(10, 40, 5))
+
+
+def f_on_strip_face():
+    h.check("the strip's face is selected", bool(Gui.Selection.getSelectionEx()))
+    h.press("f")
+
+
+def fillet_on_strip():
+    s4.settle()
+    p = s4.panel()
+    h.check(
+        "F with the strip's face selected: the surface Fillet on the strip",
+        p is not None and p.kind == "surface_fillet" and p.body is s["strip"],
+        p and p.body and p.body.Label,
+    )
+    st.esc()
+
+
+def save():
+    s4.settle()
+    h.check("Esc closed it", s4.panel() is None)
     s["strip_area"] = st.area(s["strip"])
     s["titles"] = st.timeline_titles()
     s["label"] = s["box"].Label
@@ -507,6 +531,9 @@ h.run(
         merge_second,
         merge_ok,
         merged,
+        f_on_strip_face,
+        fillet_on_strip,
+        save,
         close,
         reopen,
         reopened,
