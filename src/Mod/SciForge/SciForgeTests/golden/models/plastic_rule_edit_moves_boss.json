@@ -1,0 +1,99 @@
+{
+  "id": "plastic_rule_edit_moves_boss",
+  "title": "Editing the plastic rule moves the boss that follows it (2 mm -> 2.5 mm)",
+  "tags": [
+    "plastic",
+    "boss",
+    "rules"
+  ],
+  "steps": [
+    {
+      "op": "sf_plastic_rule",
+      "rule": "PC 2 mm"
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sf_boss",
+      "id": "b1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          30,
+          20
+        ]
+      ],
+      "side2": {
+        "shape": "constant_thickness",
+        "draft": 0,
+        "root_radius": 0,
+        "step": "none",
+        "extent": "from_top",
+        "hole_depth": 4
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 12018.719974,
+        "source": "analytic",
+        "note": "PC 2 mm: wall 0.6 x 2 = 1.2, outer diameter 2.4 + 2.4 = 4.8: 11712 + pi 2.4^2 17.95 - pi 1.2^2 4."
+      }
+    },
+    {
+      "op": "sf_plastic_rule",
+      "rule": "PC 2 mm",
+      "set": {
+        "thickness": "2.5"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12104.999104,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      40,
+      20
+    ],
+    "source": "analytic",
+    "note": "The boss was made while PC 2 mm said 2 mm (check step: outer diameter 4.8). Editing the rule to 2.5 mm moves its linked wall to 1.5: outer diameter 5.4, the same part as plastic_rule_boss_wall: Enclosure 11712. The rule PC 2 mm edited to 2.5 mm: the boss wall follows it, 0.6 x 2.5 = 1.5, outer diameter 2.4 + 3 = 5.4; the clearance is half the rule's 0.1. Shank pi 2.7^2 (20 - 0.05 - 2) = 411.094677, minus the hole pi 1.2^2 4 = 18.095574."
+  }
+}
