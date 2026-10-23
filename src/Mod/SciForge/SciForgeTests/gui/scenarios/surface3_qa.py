@@ -16,6 +16,7 @@ Path K (Untrim Keep Copy, save / reopen, delete): SURFACE > Untrim, Manual, clic
         (900 - 25 pi) are back and fine.) Delete "Untrim 1" from the timeline: the copy body
         goes and the hole is back; Undo: both back. Double-click Untrim 1: Keep Copy read
         back; clear it: the copy goes; Cancel: the copy is back, the patch still closed.
+        Edit again, Extend on, OK: Change Parameters lists its Distance; Undo: gone; Redo.
 Path I (Isoparametric Curve: an empty click, Esc, undo / redo, save / reopen): a sketch on XZ;
         Isoparametric Curve; a click on empty space: the panel asks for a face, nothing is
         kept; Esc: the tool ends, nothing kept. Again: click the cylinder, Esc: nothing kept.
@@ -475,6 +476,39 @@ def cancel_brings_copy_back():
     h.check("Cancel: the copy is back", copy is not None and st.near(st.area(copy), HOLED, 1e-6))
     patch = by_label(s["patch_label"])
     h.check("and the patch still closed", st.near(st.area(patch), 900.0, 1e-6), st.area(patch))
+    h.check("edited again", st.double_click_timeline("Untrim 1"))
+
+
+def extend_on():
+    st.settle()
+    p = st.panel()
+    h.check("Untrim dialog for editing", p is not None and p.kind == "untrim" and p.editing)
+    st.toggle_check("extend")
+
+
+def extend_ok():
+    st.settle()
+    p = st.panel()
+    h.check("the Extend Distance row shows", p is not None and p.rows["distance"][0].isVisible())
+    st.ok()
+
+
+def extend_listed():
+    h.check("dialog closed", st.panel() is None)
+    rows = _parameter_rows("Untrim")
+    h.check("Change Parameters: Extend on lists its Distance", rows == [("Distance", 0.0)], rows)
+    tl.undo()
+
+
+def extend_undone():
+    rows = _parameter_rows("Untrim")
+    h.check("Undo: Extend off, no Distance row again", rows == [], rows)
+    tl.redo()
+
+
+def extend_redone():
+    rows = _parameter_rows("Untrim")
+    h.check("Redo: the Distance row back", rows == [("Distance", 0.0)], rows)
 
 
 h.run(
@@ -517,5 +551,10 @@ h.run(
         edit_keep_copy_off,
         copy_gone_in_preview,
         cancel_brings_copy_back,
+        extend_on,
+        extend_ok,
+        extend_listed,
+        extend_undone,
+        extend_redone,
     ],
 )

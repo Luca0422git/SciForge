@@ -693,6 +693,7 @@ class SurfacePanel(BodyPanel):
         for name, _label, role, _accepts, _empty in self.boxes:
             if role == "bodies":
                 options["bodies"] = [o for o, _s in self.picks.get(name) or []]
+        options["hidden_numbers"] = self.hidden_numbers()
         return options
 
     def missing(self):
@@ -735,23 +736,19 @@ class SurfacePanel(BodyPanel):
         self.step = surface.build(self.kind, self.refs(), options, self.step)
         self.target = self.step
         self._apply_formulas(self.step)
-        self._mark_numbers(self.step)
 
-    def _mark_numbers(self, step):
-        """Change Parameters lists only the numbers the step's choices use, as Fusion lists a
-        feature's values in use (a One Side extrude has no Distance Two there): the number
-        of a row this dialog hides is hidden on the step (parameters.py passes over hidden
-        properties, as it does for FreeCAD's features)."""
-        for key, prop in surface.NUMBERS.get(self.kind, {}).items():
+    def hidden_numbers(self):
+        """The numbers whose rows the choices hide (saved with the step: Change Parameters
+        lists only the numbers a step uses, surface.apply_number_modes)."""
+        found = []
+        for key in surface.NUMBERS.get(self.kind, {}):
             row = self.rows.get(key)
-            if row is None or prop not in step.PropertiesList:
-                continue
             try:
-                hidden = row[0].isHidden()
-                if bool(step.getEditorMode(prop)) != hidden:
-                    step.setEditorMode(prop, 2 if hidden else 0)
-            except Exception as exc:
-                warn("%s: %s" % (self.title, exc))
+                if row is not None and row[0].isHidden():
+                    found.append(key)
+            except Exception:
+                pass
+        return found
 
     def check(self, options):
         """More checks before building (subclasses; raise core.SurfaceError / NeedsPick)."""

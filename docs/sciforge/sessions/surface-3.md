@@ -113,8 +113,11 @@ Fixed:
 - Sweep Perpendicular to Path with a rail shorter than the path and leaving it: the end was
   square to the rail, not the path (8 mm too far, tilted): fixed (`_section_through`), golden
   `surface3_sweep_rail_perpendicular`.
-- Change Parameters listed numbers a step's choices do not use: the dialog hides them on the
-  step (`SurfacePanel._mark_numbers`).
+- Change Parameters listed numbers a step's choices do not use: the dialog saves which rows
+  it hid (`hidden_numbers` in the choices) and the step hides those properties whenever its
+  choices change (`SurfaceFeature.onChanged`), so undo / redo / Cancel follow.
+- Patch with a Connected edge next to a Tangent one: the refusal now names the mix (it said
+  "walls this steep" though all-Tangent works there).
 - `surface_iso_ui.py` reformatted (black).
 
 FreeCAD / OpenCASCADE facts (measured in FreeCAD 1.1.4):
@@ -124,6 +127,11 @@ FreeCAD / OpenCASCADE facts (measured in FreeCAD 1.1.4):
   it returns a null shape. Compare the result's bound box with the faces'.
 - `BSplineSurface.value()` past the bounds speeds up or slows down with the last polynomial
   piece: size an extension by arc length, not by `getD1` at the edge.
+- Property editor modes (Hidden) are not part of undo: a mode set from a dialog stays after
+  Ctrl+Z or Cancel. Derive it from a saved property in the proxy's `onChanged` instead.
+- `MakeFilling` with a G0 edge next to G1 edges: the deviation from tangency spreads over a
+  third of the G1 edge whatever `setResolParam` / `setApproxParam` say (15 to 25 points,
+  2 to 3 iterations, measured).
 - Chain Selection on a box top with rounded top edges takes nine faces (the walls are tangent
   to the rounds too).
 
@@ -134,5 +142,5 @@ Traps for the scenarios:
   clear the selection before opening the dialog).
 - On the SURFACE tab there is no Create Sketch big button: switch to SOLID first.
 
-Tests added: `surface3_qa` (79 checks), `surface3_qa2` (55), `surface3_qa3`; golden
+Tests added: `surface3_qa` (86 checks), `surface3_qa2` (55), `surface3_qa3` (58); golden
 `surface3_sweep_rail_perpendicular`.

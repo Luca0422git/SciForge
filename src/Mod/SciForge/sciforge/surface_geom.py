@@ -1624,6 +1624,18 @@ def _fill(wire, boundary, order, interior, points):
         # walls that rise square to it (a cylinder's rim), and then silently stays flat.
         # Fusion would make a dome; SciForge says so instead of faking tangency.
         off = _tangency_off(face, [(e, f) for e, f, o in boundary if o > 0])
+        mixed = any(f is not None and o == 0 for _e, f, o in boundary)
+        if off > TANGENCY_TOLERANCE and mixed:
+            # Group Edges off, some edges Connected: at a corner where a Connected edge meets a
+            # Tangent one the patch cannot be tangent, and OpenCASCADE's plate surface bends
+            # back over a long stretch of the Tangent edge (QA measured 19 degrees off a third
+            # of the way along it on 45 degree walls), so it is the mix, not the slope alone
+            raise SurfaceError(
+                "Tangent continuity cannot be reached along these edges (off by %.0f degrees): "
+                "where a Connected edge meets a Tangent one, OpenCASCADE's patch bends away "
+                "from the walls for a long way. Make the edges next to it Tangent too, use "
+                "Connected for all, or patch an opening whose walls slope less." % math.degrees(off)
+            )
         if off > TANGENCY_TOLERANCE:
             raise SurfaceError(
                 "Tangent continuity cannot be reached along these edges (off by %.0f degrees): "

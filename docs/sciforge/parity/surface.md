@@ -85,9 +85,19 @@ An independent QA pass over part 3, as Luca would click it. Fixed:
   It now stops at the path's own square section through the rail's end (y 30). Golden
   `surface3_sweep_rail_perpendicular` (analytic box).
 - **Change Parameters listed every number of a surface step**, also those its choices do not
-  use (a One Side extrude showed Distance Two, Offset, Taper Angle Two). The dialog now hides
-  the number of each row it hides on the step (`SurfacePanel._mark_numbers`), and
+  use (a One Side extrude showed Distance Two, Offset, Taper Angle Two). The dialog saves the
+  numbers whose rows it hides with the step's choices (`hidden_numbers`), and the step hides
+  those properties whenever its choices change (`SurfaceFeature.onChanged` ->
+  `surface.apply_number_modes`), so undo, redo and Cancel bring the right rows back;
   `parameters.py` passes over hidden properties as it does for FreeCAD's own features.
+- **Patch, Group Edges off, a Connected edge next to a Tangent one** was refused with "walls
+  this steep" although all-Tangent works on the same walls. Measured: where a Connected edge
+  meets a Tangent one the patch cannot be tangent at the corner, and OpenCASCADE's plate
+  surface bends away over about a third of the Tangent edge (45 degree walls: 31, 19, 9
+  degrees off at 1/12, 2/12, 3/12 of it; more points or iterations in `MakeFilling` change
+  nothing). The refusal now names the mix and what to do (make the edges next to it Tangent,
+  Connected for all, or gentler walls); mixed edges build on walls up to about 15 degrees from
+  flat.
 
 Scenarios added: `surface3_qa` (Offset Sharp refused on rounded edges then Rounded; Untrim
 Keep Copy saved and reopened, deleted from the timeline with its copy, undone, edited with
@@ -97,7 +107,8 @@ change after the reopen; Change Parameters rows), `surface3_qa2` (Stitch Operati
 while the dialog is open: New Body / Cut / Intersect / New Body, Esc restores everything;
 an edit that moves a Join stitch back to New Body, undo / redo), `surface3_qa3` (Extrude of
 a flat face with a hole, To Object with Extend Faces, edit read-back, Cancel, undo / redo;
-Patch per-edge Continuity on leaning walls, saved, reopened, read back, Esc).
+Patch per-edge Continuity: refused with the mix explained on 70 degree walls, built on 15
+degree walls, saved, reopened, read back, Esc).
 
 ## Part 2: Extrude, Revolve, Sweep and Loft options (wave 5, branch `sf/surface-2`)
 
@@ -271,6 +282,7 @@ is undone or rolled back; the icon follows.
 | Isoparametric Curve inside the sketch | Fusion puts the curves in the sketch itself; FreeCAD's sketches are flat, so they live in a companion of the sketch (like Project to Surface's): drawn, hidden, listed and deleted with the sketch, but the sketch's own tools (constraints, Trim) cannot use them. Editing them again means deleting and picking again (no edit dialog yet) |
 | Environmental Map pictures | Fusion's studio images were not found; SciForge draws its own two (Studio, Horizon) |
 | Offset Sharp on rounded (tangent) edges that meet at a corner | OpenCASCADE's intersection join cannot close the corner where two rounds meet (the top of a box with rounded top edges, measured): refused with the reason, Rounded works. Fusion makes it. Thicken refuses that shape too, Sharp or Rounded (OpenCASCADE: "no image for shape") |
+| Patch: a Connected edge next to a Tangent one (Group Edges off) | Refused with the reason on walls steeper than about 15 to 20 degrees from flat (QA, measured): OpenCASCADE's plate surface spreads the forced corner over a third of the Tangent edge. Fusion builds it (its transition is not documented) |
 | Isoparametric Curve, Single after the face grows | The curve keeps its Distance (mm along the face from its first edge), as Fusion's parameter does: on a cylinder whose radius grows from 10 to 12 a curve 47.12 mm round moves from 270 to 225 degrees (measured) |
 | Boundary Fill from planes alone | Fusion is reported to need at least one body (**F**, one forum report); SciForge accepts planes alone, which does no harm, so it is kept until Luca's Fusion confirms it |
 | The design's first sketch body | A new design's first sketch lives in a body (FreeCAD needs one); when the first thing made from it is a surface, that body stays in the browser with only the sketch in it. Fusion keeps sketches outside bodies |
