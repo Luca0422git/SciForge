@@ -95,8 +95,8 @@ def chord_05():
     p = panel()
     st.settle(p, 15000)
     h.check(
-        "chord tolerance 0.5: about the golden model (2 %, start corner)",
-        st.close(vol(), 4014.366847, 0.02),
+        "chord tolerance 0.5: about the golden model (corner fans, 2 %)",
+        st.close(vol(), 3867.852, 0.02),
         vol(),
     )
     h.shot("smmore-lofted-1-brake")

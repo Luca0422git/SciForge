@@ -85,7 +85,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 |---|---|---|
 | Type Lofted inside the Flange dialog | Its own command right under Flange in the CREATE menu (one dialog later: Known gaps) | A[R44] |
 | Two profiles on separate planes, both open or both closed, lines and arcs only; auto-chain | Same: a click on a sketch curve takes its whole connected chain; mixed open / closed, splines, coplanar profiles refused with the reason | A[R15], A[R16] |
-| Forming Type Brake Form / Die Form | Brake Form: arcs become straight facets, the two profiles are matched point for point (every corner kept) and joined by flat triangular facets, each moved T along its normal; Die Form: a smooth loft of the profiles thickened in their own planes (open profiles: very fine facets) | A[R16], A[R38], G (geometry) |
+| Forming Type Brake Form / Die Form | Brake Form: arcs become straight facets; each corner of one profile fans out to the stretch of the other in the same direction round its centre, one flat facet along each side (a square-to-round transition), each facet moved T along its normal; Die Form: a smooth loft of the profiles thickened in their own planes (open profiles: very fine facets) | A[R16], A[R38], G (geometry) |
 | Facet Control Chord Tolerance / Facet Angle / Facet Distance / Face Number | Same four, with SciForge's defaults 0.1 mm / 10° / 5 mm / 6 | A[R15], A[R38], A[R44], G (values) |
 | Orientation Side 1 / Side 2 / Center | Same | A[R15] |
 | Operation New Body / Join | New Body (a new sheet metal body with the active rule) or Join (into the active sheet metal body) | G |
@@ -142,9 +142,10 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 8. **Lofted Flange is its own command**, not yet a Type of the Flange dialog (sm-forming owns
    that dialog; one dialog later).
 9. **Lofted Flange, Brake Form: the facets meet in sharp folds**, not in bends of the rule's
-   radius, and the square-to-circle facets are matched by length along the two profiles
-   (Fusion fans them from the corners). sm-flat's unfolder (planar walls + cylindrical bends)
-   may not lay sharp folds flat; Die Form says it is not developable.
+   radius. The facets are laid out like a press-brake transition (each corner of one profile
+   fans out to the part of the other profile in the same direction, one flat facet along each
+   side), but sm-flat's unfolder (planar walls + cylindrical bends) may not lay sharp folds
+   flat; Die Form says it is not developable.
 10. **Lofted Flange, Die Form: the wall is T thick measured in the profile planes** (a loft of
     the thickened profiles), slightly thinner across a sloping wall.
 11. **Join by Bend: no flip or position options** (the API shows none, research §5 item 9);

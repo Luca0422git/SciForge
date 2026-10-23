@@ -156,7 +156,8 @@ def _solve3(rows, rhs):
 
 
 def _strip(w1, w2, control, value):
-    """(a, b, closed): the two profiles as matched point lists (Brake Form facets)."""
+    """(p1, p2, closed): the two profiles as point lists (arcs turned into facets), the second
+    started and running like the first."""
     p1 = _polyline(w1, control, value)
     p2 = _polyline(w2, control, value)
     closed = w1.isClosed()
@@ -166,33 +167,115 @@ def _strip(w1, w2, control, value):
         p1[-1] - p2[0]
     ).Length:
         p2 = list(reversed(p2))
-    a, b = matched(p1, p2)
-    return a, b, closed
+    return p1, p2, closed
 
 
-def _thick_strip(a, b, closed, thickness, side, plane1, plane2):
-    """A solid of flat facets between the matched point lists a and b, side * T thick: every
-    facet moved T along its normal, each corner put where its facets' moved planes meet (and
-    kept in its profile's plane), so each facet is T thick."""
+def _angle_params(ring1, ring2):
+    """(t1, ring2 restarted, t2): where each point of two closed rings lies round its own
+    centre, as a share of a full turn from ring1's first point (the way a transition piece is
+    laid out: a square's corner meets the part of a circle in the same direction). None when
+    a ring is not seen in order from its centre (then lengths along the rings are used)."""
+    import math
+
+    c1 = sum(ring1, V()) * (1.0 / len(ring1))
+    c2 = sum(ring2, V()) * (1.0 / len(ring2))
+    normal = V()
+    for a, b in zip(ring1, ring1[1:] + ring1[:1]):
+        normal += (a - c1).cross(b - c1)
+    if normal.Length < 1e-9:
+        return None
+    normal = sb.unit(normal)
+    ex = ring1[0] - c1
+    ex = ex - normal * ex.dot(normal)
+    if ex.Length < 1e-9:
+        return None
+    ex = sb.unit(ex)
+    ey = normal.cross(ex)
+
+    def turn(points, centre):
+        out = []
+        for p in points:
+            rel = p - centre
+            ang = math.atan2(rel.dot(ey), rel.dot(ex)) / (2.0 * math.pi)
+            out.append(ang % 1.0)
+        return out
+
+    t1 = turn(ring1, c1)
+    t1[0] = 0.0
+    t2 = turn(ring2, c2)
+    start = min(range(len(t2)), key=lambda k: t2[k])
+    ring2 = ring2[start:] + ring2[:start]
+    t2 = t2[start:] + t2[:start]
+    for ts in (t1, t2):
+        if any(b <= a + 1e-9 for a, b in zip(ts, ts[1:])):
+            return None
+    return t1, ring2, t2
+
+
+def triangulate(t1, t2, closed):
+    """Triangles between two point lists placed at t1, t2 (0..1: their share of a turn or of
+    the length; closed lists without the repeated first point), walking both. Each corner
+    of one profile fans out to the stretch of the other that faces it (a square to a
+    circle: a fan of facets at each corner, one facet along each side), as a press-brake
+    transition is laid out. Index triples into
+    list1 + list2 (list2's indices shifted by len(t1))."""
+    n1, n2 = len(t1), len(t2)
+    tris = []
+    i = j = 0
+    end1 = n1 if closed else n1 - 1
+    end2 = n2 if closed else n2 - 1
+
+    def next_t(ts, k, n):
+        return ts[k + 1] if k + 1 < n else 1.0
+
+    while i < end1 or j < end2:
+        if i >= end1:
+            move_b = True
+        elif j >= end2:
+            move_b = False
+        else:
+            # the other profile's points up to the middle of this segment fan out from
+            # this point: each corner's fan is centred on it, each side's facet meets the
+            # point facing the side's middle
+            move_b = next_t(t2, j, n2) <= 0.5 * (t1[i] + next_t(t1, i, n1)) + 1e-12
+        if move_b:
+            tris.append((i % n1, n1 + (j + 1) % n2, n1 + j % n2))
+            j += 1
+        else:
+            tris.append((i % n1, (i + 1) % n1, n1 + j % n2))
+            i += 1
+    return tris
+
+
+def _thick_strip(p1, p2, closed, thickness, side, plane1, plane2):
+    """A solid of flat facets between the point lists p1 and p2 (triangulate), side * T
+    thick: every facet moved T along its normal, each corner put where its facets' moved
+    planes meet (and kept in its profile's plane), so each facet is T thick."""
     import Part
 
     if closed:
-        a, b = a[:-1], b[:-1]
-    n = len(a)
-    pts = list(a) + list(b)
-    tris = []  # index triples: 0..n-1 on profile 1, n..2n-1 on profile 2
-    for i in range(n if closed else n - 1):
-        j = (i + 1) % n
-        for tri in ((i, j, n + j), (i, n + j, n + i)):
-            p0, p1, p2 = pts[tri[0]], pts[tri[1]], pts[tri[2]]
-            if (p1 - p0).cross(p2 - p0).Length > 1e-9:
-                tris.append(tri)
+        p1, p2 = p1[:-1], p2[:-1]
+        by_angle = _angle_params(p1, p2)
+        if by_angle is not None:
+            t1, p2, t2 = by_angle
+        else:
+            t1 = _lengths(p1 + p1[:1])[:-1]
+            t2 = _lengths(p2 + p2[:1])[:-1]
+    else:
+        t1, t2 = _lengths(p1), _lengths(p2)
+    n1, n2 = len(p1), len(p2)
+    pts = list(p1) + list(p2)
+    tris = []
+    for tri in triangulate(t1, t2, closed):
+        q0, q1, q2 = pts[tri[0]], pts[tri[1]], pts[tri[2]]
+        if (q1 - q0).cross(q2 - q0).Length > 1e-9:
+            tris.append(tri)
     if not tris:
         raise sb.SheetMetalError("The profiles give no facets.")
     normals = []
     for tri in tris:
-        p0, p1, p2 = pts[tri[0]], pts[tri[1]], pts[tri[2]]
-        normals.append(sb.unit((p1 - p0).cross(p2 - p0)) * side)
+        q0, q1, q2 = pts[tri[0]], pts[tri[1]], pts[tri[2]]
+        normals.append(sb.unit((q1 - q0).cross(q2 - q0)) * side)
     moved = []
     for k, p in enumerate(pts):
         rows, rhs, near = [], [], []
@@ -201,7 +284,7 @@ def _thick_strip(a, b, closed, thickness, side, plane1, plane2):
                 rows.append((nrm.x, nrm.y, nrm.z))
                 rhs.append(nrm.dot(p) + thickness)
                 near.append(nrm)
-        plane = plane1 if k < n else plane2
+        plane = plane1 if k < n1 else plane2
         if plane is not None:
             pn, pp = plane
             rows.append((pn.x * 1000.0, pn.y * 1000.0, pn.z * 1000.0))
@@ -212,29 +295,29 @@ def _thick_strip(a, b, closed, thickness, side, plane1, plane2):
         moved.append(x)
     faces = []
 
-    def tri_face(p0, p1, p2):
-        if (p1 - p0).cross(p2 - p0).Length > 1e-10:
-            faces.append(Part.Face(Part.makePolygon([p0, p1, p2, p0])))
+    def tri_face(q0, q1, q2):
+        if (q1 - q0).cross(q2 - q0).Length > 1e-10:
+            faces.append(Part.Face(Part.makePolygon([q0, q1, q2, q0])))
 
-    def quad_faces(p0, p1, p2, p3):
+    def quad_faces(q0, q1, q2, q3):
         try:
-            face = Part.Face(Part.makePolygon([p0, p1, p2, p3, p0]))
+            face = Part.Face(Part.makePolygon([q0, q1, q2, q3, q0]))
             if face.Surface.TypeId == "Part::GeomPlane" and face.Area > 1e-10:
                 faces.append(face)
                 return
         except Exception:
             pass
-        tri_face(p0, p1, p2)
-        tri_face(p0, p2, p3)
+        tri_face(q0, q1, q2)
+        tri_face(q0, q2, q3)
 
     for tri in tris:
         tri_face(pts[tri[0]], pts[tri[1]], pts[tri[2]])
         tri_face(moved[tri[0]], moved[tri[2]], moved[tri[1]])
     if closed:
-        loops = [list(range(n)) + [0], list(range(n, 2 * n)) + [n]]
+        loops = [list(range(n1)) + [0], list(range(n1, n1 + n2)) + [n1]]
     else:
-        loops = [list(range(n)), list(range(n, 2 * n))]
-        for i, j in ((0, n), (n - 1, 2 * n - 1)):
+        loops = [list(range(n1)), list(range(n1, n1 + n2))]
+        for i, j in ((0, n1), (n1 - 1, n1 + n2 - 1)):
             quad_faces(pts[i], pts[j], moved[j], moved[i])
     for loop in loops:
         for i, j in zip(loop, loop[1:]):

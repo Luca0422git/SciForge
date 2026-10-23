@@ -50,17 +50,17 @@
     }
   ],
   "expect": {
-    "volume": 4014.3668,
+    "volume": 3867.852,
     "bbox": [
-      -21.0288,
-      -21.038,
+      -20.9273,
+      -20.963,
       -0.0,
-      21.0347,
-      21.0317,
+      20.8851,
+      20.9019,
       30.0
     ],
     "solids": 1,
-    "faces": 67,
+    "faces": 38,
     "source": "baseline-freecad-1.1.4",
     "note": "measured with FreeCAD 1.1.4: flat triangular facets, each moved T along its normal",
     "rel_tol": 1e-05,
