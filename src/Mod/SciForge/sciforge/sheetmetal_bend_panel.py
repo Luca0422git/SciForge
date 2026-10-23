@@ -299,6 +299,8 @@ class SmPanel(pickpanel.PickPanel):
         body; the dialog opened on the active one)."""
         if self.editing or not self.NEEDS_BASE or any(self.picks[b] for b in self.picks):
             return None
+        if getattr(self, "sets", None):  # Fillet / Chamfer sets already kept on this body
+            return None
         body = bodies.body_of(obj)
         if body is None or body is self.body or body.Tip is not obj:
             return None

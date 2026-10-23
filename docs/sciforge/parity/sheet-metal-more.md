@@ -99,7 +99,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 
 | Fusion | SciForge | Src |
 |---|---|---|
-| Only the edges through the thickness can be picked | Only those light up (straight, as long as the sheet is thick, square to its faces); any other is refused with the reason | A[R41] |
+| Only the edges through the thickness can be picked | Only those light up (straight, as long as the sheet is thick, square to its faces); any other does not light up and a click on it is not taken (as in Fusion); a corner that stops being one after an earlier edit makes the step say why | A[R41] |
 | Fillet radius sets (at least one) | "+ New Set" keeps the corners picked with their radius and starts another set; the sets are listed and come back on edit. A blue arrow on the corner drags the radius (value box beside it) | A[R41] |
 | Chamfer distance | Equal distance per set | A[R42], G |
 | The flat pattern keeps the rounds | The rounds are cylinders through the thickness, so they show as arcs in the outline | G |
