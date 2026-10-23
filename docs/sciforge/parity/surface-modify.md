@@ -97,7 +97,9 @@ saved with the design.
   `surface4_pattern` (rectangular and circular patterns of a surface body, undo / redo, Esc),
   `surface4_misc` (Align, Combine refusal, Physical Material, Appearance),
   `surface4_component` (fillet, press pull and delete on a surface body in a moved
-  component, undo / redo).
+  component, undo / redo),
+  `surface4_direct` (a design without history, where Fusion offers Merge: Merge, Ctrl+Z /
+  Ctrl+Y, SURFACE Delete, Fillet, history turned on again).
 - Golden models `surface4_*.json` (14): fillet + edit + reopen, variable fillet, chamfer +
   SURFACE delete, press pull + edit + reopen, press pull of a tray with slanted walls, press
   pull of a cup's round wall, merge, merge of
@@ -125,6 +127,11 @@ saved with the design.
   which need a solid). Fusion's documentation does not confirm Rule Fillet on surfaces (G).
 - **Merge with Capture Design History on**: Fusion hides Merge there; SciForge offers it as
   a timeline step (a deliberate difference: nothing is lost, the step can be edited).
+- **Without history** (Do Not Capture Design History) Merge, Delete, Fillet and the other
+  surface tools work (scenario `surface4_direct`), but a surface body's steps are not baked
+  into one Base Feature as a solid's are (`direct.freeze` bakes solids only; that file
+  belongs to the direct-modify area): they stay hidden while history is off and show in the
+  timeline again when it is turned back on.
 - **Delete on the SURFACE tab of a whole solid's faces in a body without history** (a STEP
   part): it goes through the same no-heal step after the body is adopted (as SOLID's Delete
   does); not covered by a scenario.
