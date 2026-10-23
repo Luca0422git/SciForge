@@ -39,6 +39,8 @@ _NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
 # A date in an answer (a drawing's title block takes today's): never compared as numbers, so
 # a recorded example does not fail the day after it was recorded
 _DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+# The title block's "drawn by" is the login name of the computer that ran the example
+_DRAWN_BY = re.compile(r'("DrawnBy":\s*)"[^"]*"')
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS_TESTS = os.path.join(os.path.dirname(HERE), "docs")
 RESULTS = os.path.join(DOCS_TESTS, "tool_results.json")
@@ -167,6 +169,7 @@ def same_answer(recorded, now, rel=1e-4, absolute=1e-3):
         return "the picture is %s, was %s" % (now.get("image"), recorded.get("image"))
     a, b = recorded.get("text", ""), now.get("text", "")
     a, b = _DATE.sub("<date>", a), _DATE.sub("<date>", b)
+    a, b = _DRAWN_BY.sub(r'\1"<user>"', a), _DRAWN_BY.sub(r'\1"<user>"', b)
     if _NUMBER.sub("#", a) != _NUMBER.sub("#", b):
         for i, (x, y) in enumerate(zip(a.splitlines(), b.splitlines())):
             if _NUMBER.sub("#", x) != _NUMBER.sub("#", y):

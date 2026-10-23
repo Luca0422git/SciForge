@@ -354,6 +354,13 @@ class ToolExamples(unittest.TestCase):
         self.assertIsNone(  # today's date in a title block is not a difference
             docs_runner.same_answer(dated, dict(dated, text=dated["text"].replace("22", "23")))
         )
+        drawn = {"text": 'Done.\n{"DrawnBy": "root", "sheet": "A3"}', "is_error": False}
+        self.assertIsNone(  # nor the login name of the computer that ran the example
+            docs_runner.same_answer(drawn, dict(drawn, text=drawn["text"].replace("root", "runner")))
+        )
+        self.assertTrue(
+            docs_runner.same_answer(drawn, dict(drawn, text=drawn["text"].replace("A3", "A4")))
+        )
 
     def test_expect_checks(self):
         from SciForgeTests.headless import docs_runner

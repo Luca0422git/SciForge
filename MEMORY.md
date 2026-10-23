@@ -1475,6 +1475,24 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Session log
 
+### Session log: CI red on `experimental` after the CADCraft/Draft push (2026-10-23)
+
+Luca: "the action for experimental failed. Is that something to be worried about? Seems like
+you aren't" - I had pushed without watching CI. **After every push, watch the GitHub run.**
+Three causes, all in the tests, none in SciForge itself:
+
+- **Window size leaked between scenarios** (21 + 10 failures): `export_report_card` shrinks the
+  window to 1100 x 700 and "maximize" does nothing under xvfb (no window manager); FreeCAD
+  saves it (`MainWindow/Geometry`, `Maximized`) and every later scenario of the shard got a
+  838 x 470 3D view (normal 1538 x 769). run_tests.sh now resets those keys with
+  MainWindowState before each scenario; the scenario puts the window back by hand.
+- **Relative `--freecad`** (CI passes `.sciforge-cache/freecad`): the unit tests that start
+  FreeCAD run from the module folder, so the path pointed nowhere. Made absolute.
+- **Docs example get_drawing#1**: the title block's DrawnBy is the login name (root here,
+  runner on CI); masked like dates.
+- One unit "failure" seen only on CI, not reproduced here (Python 3.12, PowerShell, fresh
+  clone, non-root all pass); run_tests.sh now prints failing unit tests into the CI log.
+
 ### Session log: Draft in real time, live pictures, safe sketch geometry (branch `experimental`, 2026-10-22/23)
 
 Luca: "draft is still extremely slow ... the angle dragger doesn't even update, it waits behind

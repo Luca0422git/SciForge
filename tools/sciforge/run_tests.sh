@@ -49,6 +49,10 @@ while [ $# -gt 0 ]; do
 done
 
 MODULE="${REPO}/src/Mod/SciForge"
+# An absolute FreeCAD folder: the unit tests run from the module folder and start FreeCAD
+# themselves (SCIFORGE_FC_CMD), so a relative --freecad (CI passes .sciforge-cache/freecad)
+# pointed nowhere there
+if [ -d "${FREECAD_DIR}" ]; then FREECAD_DIR="$(cd "${FREECAD_DIR}" && pwd)"; fi
 mkdir -p "${OUT}"
 OUT="$(cd "${OUT}" && pwd)"
 FAILED=()
@@ -98,7 +102,11 @@ run_unit() {
     (cd "${MODULE}" && python3 -m unittest discover -s SciForgeTests/unit -v) > "${OUT}/unit.log" 2>&1
     local rc=$?
     tail -3 "${OUT}/unit.log"
-    [ $rc -eq 0 ] || FAILED+=("unit")
+    if [ $rc -ne 0 ]; then
+        # The failures themselves, so a CI log says which test failed and why
+        sed -n '/^======/,/^Ran [0-9]* tests/p' "${OUT}/unit.log" | head -200
+        FAILED+=("unit")
+    fi
 }
 
 need_freecad() {
@@ -228,13 +236,18 @@ run_scenarios() {
         # Each scenario starts from FreeCAD's own window layout: one left behind in the shared
         # profile (CI #135: with the Data Panel docked, the next scenario's browser came out
         # wider and FreeCAD sent a press on a browser row to the 3D view) is not this one's.
+        # Its window size too: export_report_card shrinks the window to 1100 x 700, and
+        # without a window manager (xvfb) "maximize" does not bring it back, so every later
+        # scenario of the shard ran in a 838 x 470 3D view.
         if [ -f "${PROFILE}/user.cfg" ]; then
             python3 - "${PROFILE}/user.cfg" <<'PYEOF' || true
 import re, sys
 path = sys.argv[1]
 text = open(path, encoding="utf-8").read()
-clean = re.sub(r'\s*<FCText Name="MainWindowState"[^>]*>[^<]*</FCText>', "", text)
-clean = re.sub(r'\s*<FCText Name="MainWindowState"[^>]*/>', "", clean)
+clean = text
+for kind, name in (("FCText", "MainWindowState"), ("FCText", "Geometry"), ("FCBool", "Maximized")):
+    clean = re.sub(r'\s*<%s Name="%s"[^>]*>[^<]*</%s>' % (kind, name, kind), "", clean)
+    clean = re.sub(r'\s*<%s Name="%s"[^>]*/>' % (kind, name), "", clean)
 if clean != text:
     open(path, "w", encoding="utf-8").write(clean)
 PYEOF

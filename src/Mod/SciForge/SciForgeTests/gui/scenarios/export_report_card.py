@@ -166,8 +166,13 @@ def b_check():
 
 
 # -- C ----------------------------------------------------------------------------------------
+_before = {}
+
+
 def c_shrink():
     window = Gui.getMainWindow()
+    _before["geometry"] = window.geometry()
+    _before["maximized"] = window.isMaximized()
     window.showNormal()
     window.resize(1100, 700)
 
@@ -201,7 +206,13 @@ def c_check():
 
 
 def c_restore():
-    Gui.getMainWindow().showMaximized()
+    # The size it had, put back by hand: without a window manager (CI's xvfb) "maximize"
+    # alone leaves it at 1100 x 700, and FreeCAD keeps that size for the next start
+    window = Gui.getMainWindow()
+    if "geometry" in _before:
+        window.setGeometry(_before["geometry"])
+    if _before.get("maximized"):
+        window.showMaximized()
     QtWidgets.QApplication.processEvents()
 
 
