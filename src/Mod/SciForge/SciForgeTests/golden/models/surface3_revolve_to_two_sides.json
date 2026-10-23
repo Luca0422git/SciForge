@@ -1,0 +1,64 @@
+{
+  "id": "surface3_revolve_to_two_sides",
+  "title": "Surface Revolve To with Two Sides: a line 10 from Z turned one way to YZ, the other way to XZ",
+  "tags": [
+    "surface",
+    "revolve",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            10,
+            0,
+            10,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "r1",
+      "kind": "revolve",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            10
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "axis": "Z"
+        }
+      ],
+      "refs3": [
+        {
+          "plane": "YZ"
+        },
+        {
+          "plane": "XZ"
+        }
+      ],
+      "options": {
+        "type": "to",
+        "direction": "two_sides"
+      }
+    }
+  ],
+  "expect": {
+    "area": 942.4777960769379,
+    "faces": 1,
+    "solids": 0,
+    "source": "analytic",
+    "note": "the first side turns the right-handed way a quarter turn to YZ, the second the other way half a turn to the XZ plane's far half: three quarters of a cylinder r 10, h 20"
+  }
+}

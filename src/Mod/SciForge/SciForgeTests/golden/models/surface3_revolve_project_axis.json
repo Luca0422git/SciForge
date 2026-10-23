@@ -1,0 +1,74 @@
+{
+  "id": "surface3_revolve_project_axis",
+  "title": "Surface Revolve Project Axis: a profile 5 in front of the Z axis turned 90 about the axis laid into its plane",
+  "tags": [
+    "surface",
+    "revolve",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XZ",
+      "offset": 5,
+      "curves": [
+        {
+          "line": [
+            10,
+            0,
+            10,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "r1",
+      "kind": "revolve",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            10
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "axis": "Z"
+        }
+      ],
+      "options": {
+        "type": "angle",
+        "angle": 90
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 314.1592653589793,
+        "faces": 1,
+        "solids": 0,
+        "source": "analytic",
+        "note": "Project Axis (on): the Z axis moved into the sketch's plane, so the line 10 from it makes a quarter cylinder r 10, h 20"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "r1",
+      "set": {
+        "project_axis": false
+      }
+    }
+  ],
+  "expect": {
+    "area": 351.2407365520363,
+    "faces": 1,
+    "solids": 0,
+    "source": "analytic",
+    "note": "Project Axis off: turned about the Z axis itself, the line is sqrt(10^2 + 5^2) from it: a quarter cylinder of that radius, h 20"
+  }
+}

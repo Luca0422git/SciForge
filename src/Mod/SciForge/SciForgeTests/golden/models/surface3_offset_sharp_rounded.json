@@ -1,0 +1,89 @@
+{
+  "id": "surface3_offset_sharp_rounded",
+  "title": "Surface Offset Type: a 20 x 20 x 10 box's six faces offset 2, Sharp then Rounded",
+  "tags": [
+    "surface",
+    "offset",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "sf_surface",
+      "id": "o1",
+      "kind": "offset",
+      "refs": [
+        {
+          "step": "e1",
+          "faces": {
+            "all": true,
+            "count": 6
+          }
+        }
+      ],
+      "options": {
+        "distance": 2
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 2496,
+        "faces": 6,
+        "solids": 0,
+        "bbox": [
+          -2,
+          -2,
+          -2,
+          22,
+          22,
+          12
+        ],
+        "source": "analytic",
+        "note": "Sharp (the default): the faces carried on until they meet, a 24 x 24 x 14 box surface: 2 (576 + 336 + 336)"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "o1",
+      "set": {
+        "offset_type": "rounded"
+      }
+    }
+  ],
+  "expect": {
+    "area": 2278.5840131753953,
+    "faces": 26,
+    "solids": 0,
+    "bbox": [
+      -2,
+      -2,
+      -2,
+      22,
+      22,
+      12
+    ],
+    "source": "analytic",
+    "note": "Rounded: the six faces moved out 2 (1600), a quarter cylinder of radius 2 along each of the 12 edges (pi x 200 mm of edges) and an eighth of a sphere at each corner (4 pi 2^2)"
+  }
+}

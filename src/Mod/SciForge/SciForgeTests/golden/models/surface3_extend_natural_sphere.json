@@ -1,0 +1,95 @@
+{
+  "id": "surface3_extend_natural_sphere",
+  "title": "Surface Extend Natural on a revolved quarter arc (a sphere piece): the face's own surface carried on 5 past its meridian edge",
+  "tags": [
+    "surface",
+    "extend",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            0,
+            0,
+            10,
+            0,
+            90
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "r1",
+      "kind": "revolve",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            7.0710678118654755,
+            7.071067811865475
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "axis": "Z"
+        }
+      ],
+      "options": {
+        "type": "angle",
+        "angle": 90,
+        "project_axis": false
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 157.07963267948966,
+        "faces": 1,
+        "solids": 0,
+        "source": "analytic",
+        "note": "an eighth of a sphere r 10"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "x1",
+      "kind": "extend",
+      "refs": [
+        {
+          "step": "r1",
+          "edges": {
+            "at": [
+              {
+                "axis": "x",
+                "value": "min"
+              },
+              {
+                "axis": "z",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "distance": 5,
+        "extend_type": "natural"
+      }
+    }
+  ],
+  "expect": {
+    "area": 227.7903107981444,
+    "faces": 1,
+    "solids": 0,
+    "source": "analytic",
+    "note": "the sphere piece turned on by 5 / (r cos 45) radians past the meridian at 90 degrees (5 mm along the surface at the edge's middle): r^2 (pi/2 + that angle); one face, still the sphere"
+  }
+}

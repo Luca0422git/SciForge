@@ -52,7 +52,13 @@ NUMBERS = {
         "taper2": "Taper2",
     },
     "revolve": {"angle": "Angle", "angle2": "Angle2"},
-    "sweep": {"distance": "Ratio", "distance2": "Ratio2", "twist": "Angle", "taper": "Taper"},
+    "sweep": {
+        "distance": "Ratio",
+        "distance2": "Ratio2",
+        "rail_distance": "Ratio3",
+        "twist": "Angle",
+        "taper": "Taper",
+    },
     "loft": {
         "start_weight": "Weight",
         "end_weight": "Weight2",
@@ -77,6 +83,7 @@ PROPERTY_TYPES = {
     "Angle2": "App::PropertyAngle",
     "Ratio": "App::PropertyFloat",
     "Ratio2": "App::PropertyFloat",
+    "Ratio3": "App::PropertyFloat",
     "Weight": "App::PropertyFloat",
     "Weight2": "App::PropertyFloat",
     "Tolerance": "App::PropertyLength",
@@ -85,7 +92,7 @@ PROPERTY_TYPES = {
 ROLES = {
     "extrude": ("profile", "to_object (All: the bodies it goes through)", "start_object"),
     "revolve": ("profile", "axis", "to_object"),
-    "sweep": ("profile", "path", "rail"),
+    "sweep": ("profile", "path", "rail (Guide Surface: its faces)"),
     "loft": ("sections", "rails", "centerline"),
     "patch": ("boundary", "interior", None),
     "ruled": ("edges", "direction", None),
@@ -93,9 +100,9 @@ ROLES = {
     "boundary_fill": ("tools", None, None),
     "thicken": ("faces", None, None),
     "trim": ("tool", "others", None),
-    "untrim": ("faces", None, None),
+    "untrim": ("faces (Manual: the loops' edges)", None, None),
     "extend": ("edges", None, None),
-    "stitch": ("bodies", None, None),
+    "stitch": ("bodies (Join / Cut / Intersect: all of them)", None, None),
     "unstitch": ("faces", None, None),
     "reverse_normal": (None, None, None),
     "piece": (None, None, None),
@@ -189,7 +196,7 @@ class SurfaceFeature:
         if kind == "piece":
             add("App::PropertyLinkGlobal", "Source", "The Unstitch it comes from")
             add("App::PropertyInteger", "Index", "Which face (1 = first)")
-        if kind == "unstitch" and "Pieces" not in obj.PropertiesList:
+        if kind in ("unstitch", "untrim") and "Pieces" not in obj.PropertiesList:
             obj.addProperty("Part::PropertyPartShape", "Pieces", "Surface", "", 4 | 16)
         for option, prop in NUMBERS.get(kind, {}).items():
             if add(PROPERTY_TYPES[prop], prop, option.replace("_", " ").capitalize()):
@@ -244,7 +251,7 @@ def options_of(obj):
     source = leader_of(obj)
     kind = kind_of(source)
     meta = bodies.load_meta(source, META)
-    options = core.with_defaults(kind, meta.get("options") or {})
+    options = core.with_saved(kind, meta.get("options") or {})
     for option, prop in NUMBERS.get(kind, {}).items():
         try:
             value = getattr(source, prop)
@@ -281,7 +288,10 @@ def read(step):
     if kind in ("thicken", "boundary_fill") and core.is_solid_operation(options.get("operation")):
         options["target"] = bodies.body_of(leader)
     if kind == "stitch":
-        refs["refs"] = [(bodies.body_of(leader), "")] + refs["refs"]
+        if core.is_solid_operation(options.get("operation")):
+            options["target"] = bodies.body_of(leader)
+        else:
+            refs["refs"] = [(bodies.body_of(leader), "")] + refs["refs"]
     return kind, refs, options
 
 
@@ -335,6 +345,9 @@ def edges_of(refs):
             continue
         if sub.startswith("Edge"):
             found.append(element_of(obj, sub))
+        elif sub.startswith("Face"):
+            # a flat face as a profile (Extrude): the curves round it, holes too
+            found.extend(element_of(obj, sub).Edges)
         elif not sub and curves.is_sketch(obj):
             found.extend(_global(obj, obj.Shape).Edges)
         elif not sub:
@@ -395,6 +408,16 @@ def sketch_normal(refs):
             "Pick curves of one sketch."
         )
     return flat[1]
+
+
+def profile_plane(refs):
+    """(point, normal) of the sketch every profile curve comes from, or None (curves of
+    several sketches or edges of bodies: the plane they lie in is used instead)."""
+    sketches = {obj.Name: obj for obj, _sub in refs if curves.is_sketch(obj)}
+    if len(sketches) != 1 or any(not curves.is_sketch(obj) for obj, _sub in refs):
+        return None
+    place = list(sketches.values())[0].getGlobalPlacement()
+    return App.Vector(place.Base), place.Rotation.multVec(App.Vector(0, 0, 1))
 
 
 def _edge_faces(obj, sub):
@@ -493,18 +516,27 @@ def _c_revolve(obj, leader, o, refs):
     if not refs[1]:
         raise NeedsPick("Select the axis: a sketch line, a straight edge or an axis.")
     point, direction = axis_of_ref(refs[1][0])
+    edges = edges_of(refs[0])
+    if o.get("project_axis"):
+        point, direction = g.project_axis(edges, point, direction, profile_plane(refs[0]))
     directions = None
+    second = None
     if o["type"] == "to":
         if not refs[2]:
             raise NeedsPick(
                 "Select the object to revolve to: a plane or flat face through the axis, an "
                 "edge or a point."
             )
+        two = o.get("direction") == "two_sides"
+        if two and len(refs[2]) < 2:
+            raise NeedsPick("Select the object the second side revolves to.")
         try:
             directions = revolve.target_directions(refs[2][0], point, direction)
+            if two:
+                second = revolve.target_directions(refs[2][1], point, direction)
         except Exception as exc:
             raise SurfaceError(problem_text(exc))
-    return g.revolve_curves(edges_of(refs[0]), point, direction, o, directions)
+    return g.revolve_curves(edges, point, direction, o, directions, second)
 
 
 def _c_sweep(obj, leader, o, refs):
@@ -519,6 +551,7 @@ def _c_sweep(obj, leader, o, refs):
     except curves.CurveError as exc:
         raise SurfaceError(str(exc))
     rail = None
+    guide = None
     if o.get("type") == "rail":
         if not refs[2]:
             raise NeedsPick("Select the guide rail: sketch curves or edges of a body.")
@@ -526,7 +559,11 @@ def _c_sweep(obj, leader, o, refs):
             rail = curves.Path(edges_of(refs[2]), start_near=path.start)
         except curves.CurveError as exc:
             raise SurfaceError("Guide rail: %s" % exc)
-    return g.sweep_curves(edges_of(refs[0]), path, o, rail)
+    elif o.get("type") == "surface":
+        guide = faces_of([r for r in refs[2] if r[1].startswith("Face")])
+        if not guide:
+            raise NeedsPick("Select the guide surface: faces the path runs along.")
+    return g.sweep_curves(edges_of(refs[0]), path, o, rail, guide)
 
 
 def _c_loft(obj, leader, o, refs):
@@ -629,21 +666,25 @@ def _c_patch(obj, leader, o, refs):
     if not refs[0]:
         raise NeedsPick("Select the boundary: edges of a body or sketch curves.")
     boundary = []
-    for ref in refs[0]:
+    per_edge = list(o.get("edge_continuity") or [])
+    for index, ref in enumerate(refs[0]):
         target, sub = ref
+        order = None  # Group Edges: the one Continuity for all
+        if not o.get("group_edges", True) and index < len(per_edge):
+            order = core.CONTINUITY.get(per_edge[index], 0)
         if sub.startswith("Edge") and not curves.is_sketch(target):
             edge, faces, _shape = _edge_faces(target, sub)
-            boundary.append((edge, faces[0] if faces else None))
+            boundary.append((edge, faces[0] if faces else None, order))
         else:
             for edge in edges_of([ref]):
-                boundary.append((edge, None))
+                boundary.append((edge, None, order))
     interior, points = [], []
     for ref in refs[1]:
         if ref[1].startswith("Vertex"):
             points.append(element_of(*ref))
         else:
             interior.extend(edges_of([ref]))
-    return g.patch(boundary, o["continuity"], interior, points)
+    return g.patch(boundary, o["continuity"], interior, points, bool(o.get("reverse")))
 
 
 def _c_ruled(obj, leader, o, refs):
@@ -685,7 +726,7 @@ def _c_offset(obj, leader, o, refs):
     faces = faces_of(refs[0])
     if not faces:
         raise NeedsPick("Select the faces to offset.")
-    return g.offset_faces(faces, o["distance"])
+    return g.offset_faces(faces, o["distance"], o.get("offset_type", "sharp"))
 
 
 def _c_thicken(obj, leader, o, refs):
@@ -793,11 +834,26 @@ def _c_trim(obj, leader, o, refs):
 def _c_untrim(obj, leader, o, refs):
     from . import surface_geom as g
 
+    import Part
+
     base = _base(obj)
-    faces = []
+    faces, loops = [], []
     for ref in refs[0]:
-        faces.append(_matching(base, element_of(*ref), "Face"))
-    return g.untrim(base, faces, o["loop_type"], o["distance"] if o.get("extend") else 0.0)
+        if ref[1].startswith("Edge"):
+            loops.append(_matching(base, element_of(*ref), "Edge"))
+        else:
+            faces.append(_matching(base, element_of(*ref), "Face"))
+    if o["loop_type"] == "manual":
+        if not loops:
+            raise NeedsPick("Select the loops to remove: click an edge of each.")
+        result = g.untrim_loops(base, loops, o["distance"] if o.get("extend") else 0.0)
+    else:
+        if not faces:
+            raise NeedsPick("Select the faces to untrim.")
+        result = g.untrim(base, faces, o["loop_type"], o["distance"] if o.get("extend") else 0.0)
+    # Keep Copy: the surface as it was goes on in a body of its own (the step's piece)
+    obj.Pieces = Part.makeCompound([base.copy()]) if o.get("keep_copy") else Part.Shape()
+    return result
 
 
 def _matching(shape, element, kind):
@@ -831,8 +887,15 @@ def _c_extend(obj, leader, o, refs):
 def _c_stitch(obj, leader, o, refs):
     from . import surface_geom as g
 
-    base = _base(obj)
     others = [whole_shape(b) for b, _s in refs[0]]
+    if core.is_solid_operation(o.get("operation")):
+        # Join / Cut / Intersect: the step is in the solid body it acts on; every surface
+        # picked is stitched, and the closed result combined with that solid
+        if not others:
+            raise NeedsPick("Select the surface bodies to stitch.")
+        shape, _open = g.stitch(others, o["tolerance"])
+        return g.stitched_operation(_base(obj, "solid"), shape, o["operation"])
+    base = _base(obj)
     if not others:
         raise NeedsPick("Select the other surface bodies to stitch to this one.")
     shape, _open = g.stitch([base] + others, o["tolerance"])
@@ -859,6 +922,12 @@ def _compute_piece(obj):
         if obj.Shape.isNull():
             raise SurfaceError("The Unstitch this face came from is gone.")
         return bodies.global_shape(obj)  # keeps its last shape
+    if kind_of(source) == "untrim":  # Untrim's Keep Copy: the surface before the untrim
+        if source.Pieces.isNull() or not source.Pieces.Faces:
+            raise SurfaceError("The Untrim this copy came from no longer keeps a copy.")
+        kept = source.Pieces.copy()
+        shapes = kept.childShapes() if kept.ShapeType == "Compound" else [kept]
+        return shapes[0] if len(shapes) == 1 else kept
     faces = source.Pieces.Faces if not source.Pieces.isNull() else []
     if obj.Index - 1 >= len(faces) or obj.Index < 1:
         raise SurfaceError("The Unstitch it came from no longer makes this face.")
@@ -1017,7 +1086,8 @@ def _attach_view_provider(step):
 
 def _host_for(kind, refs, options, doc):
     """(body the step goes into, True when that body is new)."""
-    if kind in ("thicken", "boundary_fill") and core.is_solid_operation(options["operation"]):
+    solid_op = core.is_solid_operation(options.get("operation"))
+    if kind in ("thicken", "boundary_fill", "stitch") and solid_op:
         target = options.get("target")
         if target is None or not bodies.has_solid(target):
             raise SurfaceError(
@@ -1103,6 +1173,8 @@ def build(kind, refs, options, feature=None, name=None):
     _save(feature, kind, options, extra)
     if kind == "unstitch":
         _sync_pieces(feature, len(_flat(refs.get("refs"))))
+    if kind == "untrim":
+        _sync_pieces(feature, 1 if options.get("keep_copy") else 0, copy=True)
     return feature
 
 
@@ -1245,9 +1317,10 @@ def _reverse_member(feature, body):
 
 
 # -- Unstitch pieces -------------------------------------------------------------------------------
-def _sync_pieces(step, picked):
+def _sync_pieces(step, picked, copy=False):
     """One new surface body per face that leaves the body (all but one when every face was
-    picked), each starting with a hidden step that takes its face from the Unstitch."""
+    picked), each starting with a hidden step that takes its face from the Unstitch. With
+    copy (Untrim's Keep Copy): `picked` is 0 or 1, one body holding the surface as it was."""
     doc = step.Document
     pieces = pieces_of(step)
     source = bodies.body_of(step)
@@ -1256,7 +1329,7 @@ def _sync_pieces(step, picked):
         total = len(base.Faces) if base is not None else picked
     except Exception:
         total = picked
-    count = picked - 1 if picked >= total else picked
+    count = picked - 1 if (picked >= total and not copy) else picked
     for piece in pieces[count:]:
         _remove_piece(piece)
     for index in range(len(pieces) + 1, count + 1):

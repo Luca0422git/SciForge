@@ -1,0 +1,188 @@
+{
+  "id": "surface3_stitch_join",
+  "title": "Stitch Operation Join: four walls and two patches stitched shut, joined to the box they overlap",
+  "tags": [
+    "surface",
+    "stitch",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "b1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "b1",
+      "distance": 10
+    },
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              5,
+              0
+            ],
+            [
+              15,
+              0
+            ],
+            [
+              15,
+              10
+            ],
+            [
+              5,
+              10
+            ],
+            [
+              5,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "curves": [
+        {
+          "polyline": [
+            [
+              5,
+              0
+            ],
+            [
+              15,
+              0
+            ],
+            [
+              15,
+              10
+            ],
+            [
+              5,
+              10
+            ],
+            [
+              5,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "p2",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s2",
+          "at": [
+            10,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "j1",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        },
+        {
+          "step": "p2"
+        }
+      ],
+      "options": {
+        "operation": "join"
+      },
+      "target": "e1"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 1500,
+          "solids": 1
+        }
+      },
+      "used_up": [
+        "w1",
+        "p1",
+        "p2"
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 1500,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      15,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "the stitched 10 x 10 x 10 cube from x 5 to 15 joined to the box from x 0 to 10: 15 x 10 x 10"
+  }
+}
