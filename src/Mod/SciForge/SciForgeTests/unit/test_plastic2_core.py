@@ -233,6 +233,35 @@ class AdviceChecks(unittest.TestCase):
         self.assertAlmostEqual(hits[1], 3.0)
         self.assertIsNone(hits[2])
         self.assertAlmostEqual(advice._first_hit_py((1, 1, 0), (0, 0, 1), tri, 1e-6), 5.0)
+        # with the triangle met, and a distance to pass for each ray
+        hits = advice.first_hits([(1, 1, 0), (1, 1, 0)], [(0, 0, 2)] * 2, tri, index=True)
+        self.assertAlmostEqual(hits[0][0], 2.5)
+        self.assertEqual(hits[0][1], 0)
+        grid = advice.RayGrid(tri)
+        hits = grid.cast([(1, 1, 0), (1, 1, 0)], [(0, 0, 1)] * 2, [1e-6, 5.5], True)
+        self.assertEqual([h[1] for h in hits], [0, 1])
+        self.assertAlmostEqual(hits[1][0], 9.0)
+
+    def test_ray_grid_agrees_with_every_triangle(self):
+        """The grid only tests the triangles near a ray: it must find what testing every
+        triangle finds (a cube's 12 triangles, rays from all over in all directions)."""
+        c = [(x, y, z) for x in (0, 10) for y in (0, 7) for z in (0, 3)]
+        quads = [(0, 1, 3, 2), (4, 6, 7, 5), (0, 4, 5, 1), (2, 3, 7, 6), (0, 2, 6, 4), (1, 5, 7, 3)]
+        tri = []
+        for a, b, cc, d in quads:
+            tri += [(c[a], c[b], c[cc]), (c[a], c[cc], c[d])]
+        origins, directions = [], []
+        for i in range(7):
+            for j in range(5):
+                origins.append((-2 + 2.3 * i, -1 + 2.1 * j, 1.5 + 0.1 * i - 3 * (j % 2)))
+                directions.append((math.cos(i + j), math.sin(2 * i - j), 0.6 * (j - 2)))
+        grid = advice.first_hits(origins, directions, tri, index=True)
+        every = [advice._first_hit_py(o, d, tri, 1e-6, True) for o, d in zip(origins, directions)]
+        self.assertGreater(sum(1 for h in every if h[0] is not None), 10)
+        for g, e in zip(grid, every):
+            self.assertEqual(g[0] is None, e[0] is None)
+            if e[0] is not None:
+                self.assertAlmostEqual(g[0], e[0])
 
     def test_rows_and_summary(self):
         results = {

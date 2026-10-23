@@ -12,7 +12,8 @@ Analysis folder; its eye hides and shows the colours. Double-click the row: the 
 with its list; Esc. The block made 3 mm tall: the analysis checks again by itself (no
 thickness issue). Save, close, reopen: the analysis is back with its results. A second
 Design Advice with its bodies box cleared: OK refused with the reason; Cancel leaves one.
-An empty design: Design Advice says what is needed, no dialog.
+An empty design: Design Advice says what is needed, no dialog. A round boss reads its
+1.5 mm wall from both of its round faces, and its hole is no undercut.
 """
 
 import os
@@ -323,6 +324,41 @@ def empty_design():
     )
 
 
+def round_walls():
+    """A round boss (radius 3 mm, a 1.5 mm hole through it: a 1.5 mm wall). The display
+    triangles cut corners off its round faces: the walls must still read 1.5 mm from both
+    sides (not the corner the triangles cut), and the hole is no undercut."""
+    from sciforge import plastic, plastic_advice
+
+    d = App.newDocument("Round")
+    body = d.addObject("PartDesign::Body", "Boss")
+    outer = body.newObject("PartDesign::AdditiveCylinder", "Outer")
+    outer.Radius, outer.Height = 3, 10
+    hole = body.newObject("PartDesign::SubtractiveCylinder", "Hole")
+    hole.Radius, hole.Height = 1.5, 10
+    body.Tip = hole
+    plastic.assign_rule(d, "ABS 2 mm", None)
+    d.recompute()
+    obj = plastic_advice.make(d, [body])
+    d.recompute()
+    faces = (plastic_advice.results(obj).get("bodies") or [{}])[0].get("faces", {})
+    round_faces = [
+        n for n in faces if body.Shape.getElement(n).Surface.TypeId == "Part::GeomCylinder"
+    ]
+    h.check("both round faces measured", len(round_faces) == 2, sorted(faces))
+    readings = [(faces[n]["t_min"], faces[n]["t_max"]) for n in round_faces]
+    h.check(
+        "the round walls read 1.5 mm from both sides",
+        all(abs(a - 1.5) < 1e-3 and abs(b - 1.5) < 1e-3 for a, b in readings),
+        readings,
+    )
+    h.check(
+        "the hole is no undercut",
+        not any("undercut" in data["issues"] for data in faces.values()),
+        {n: data["issues"] for n, data in faces.items()},
+    )
+
+
 h.run(
     "plastic2_advice",
     [
@@ -355,5 +391,6 @@ h.run(
         refused,
         one_left,
         empty_design,
+        round_walls,
     ],
 )

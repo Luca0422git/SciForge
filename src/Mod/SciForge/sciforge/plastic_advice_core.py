@@ -230,52 +230,167 @@ def summary_text(results):
 
 
 # -- ray casting --------------------------------------------------------------------------------
-def first_hits(origins, directions, triangles, near=1e-6, chunk=128):
+def first_hits(origins, directions, triangles, near=1e-6, index=False):
     """For each ray (origin, direction): the distance to the first triangle it meets beyond
-    `near`, or None. triangles: [((x, y, z), (x, y, z), (x, y, z))]. numpy when there is one."""
+    `near` (in lengths of its direction), or None. triangles: [((x, y, z), (x, y, z),
+    (x, y, z))]. With index: (distance, triangle index) pairs instead. numpy when there is
+    one (RayGrid), plain Python otherwise."""
     if not origins:
         return []
-    try:
+    grid = RayGrid.of(triangles)
+    if grid is None:
+        found = [_first_hit_py(o, d, triangles, near, True) for o, d in zip(origins, directions)]
+        return found if index else [hit[0] for hit in found]
+    return grid.cast(origins, directions, near, index)
+
+
+class RayGrid:
+    """The triangles of a body sorted into a grid of cubes, so a ray only tests the triangles
+    in the cubes it passes through (a part's thousands of display triangles against its
+    thousands of sample rays would otherwise be millions of tests).
+
+    Along a ray, points are taken every `step`; a triangle is listed in every cube its box,
+    grown by half a step, reaches. A ray meeting a triangle passes within half a step of one
+    of its points, and that point's cube lists the triangle."""
+
+    CELLS = 48  # cubes along the longest side of the body
+
+    @classmethod
+    def of(cls, triangles):
+        if not triangles:
+            return None
+        try:
+            import numpy  # noqa: F401
+        except ImportError:
+            return None
+        return cls(triangles)
+
+    def __init__(self, triangles, cells=None):
         import numpy as np
-    except ImportError:
-        np = None
-    if np is None or not triangles:
-        return [_first_hit_py(o, d, triangles, near) for o, d in zip(origins, directions)]
-    T = np.asarray(triangles, dtype=float)
-    A = T[:, 0, :]
-    E1 = T[:, 1, :] - A
-    E2 = T[:, 2, :] - A
-    O = np.asarray(origins, dtype=float)
-    D = np.asarray(directions, dtype=float)
-    out = []
-    for start in range(0, len(O), chunk):
-        o = O[start : start + chunk]
-        d = D[start : start + chunk]
-        pvec = np.cross(d[:, None, :], E2[None, :, :])  # (m, t, 3)
-        det = (E1[None, :, :] * pvec).sum(axis=2)  # (m, t)
+
+        self.np = np
+        T = np.asarray(triangles, dtype=float).reshape(-1, 3, 3)
+        self.A = T[:, 0, :]
+        self.E1 = T[:, 1, :] - self.A
+        self.E2 = T[:, 2, :] - self.A
+        lo = T.min(axis=(0, 1))
+        hi = T.max(axis=(0, 1))
+        span = max(float((hi - lo).max()), 1e-9)
+        self.size = span / float(cells or self.CELLS)
+        self.step = 0.5 * self.size
+        grow = 0.5 * self.step + 1e-9 * span
+        self.lo = lo - grow - 1e-9 * span
+        self.hi = hi + grow + 1e-9 * span
+        self.dims = np.maximum(1, np.ceil((self.hi - self.lo) / self.size).astype(np.int64))
+        first = self._cell(T.min(axis=1) - grow)
+        last = self._cell(T.max(axis=1) + grow)
+        span3 = last - first + 1
+        counts = span3.prod(axis=1)
+        owner = np.repeat(np.arange(len(T)), counts)
+        offset = np.arange(int(counts.sum())) - np.repeat(np.cumsum(counts) - counts, counts)
+        width = span3[owner]
+        cx = first[owner, 0] + offset % width[:, 0]
+        rest = offset // width[:, 0]
+        cy = first[owner, 1] + rest % width[:, 1]
+        cz = first[owner, 2] + rest // width[:, 1]
+        flat = self._flat(cx, cy, cz)
+        order = np.argsort(flat, kind="stable")
+        self.keys, self.starts = np.unique(flat[order], return_index=True)
+        self.ends = np.append(self.starts[1:], len(order))
+        self.owners = owner[order]
+
+    def _cell(self, points):
+        np = self.np
+        found = np.floor((points - self.lo) / self.size).astype(np.int64)
+        return np.clip(found, 0, self.dims - 1)
+
+    def _flat(self, cx, cy, cz):
+        return (cx * self.dims[1] + cy) * self.dims[2] + cz
+
+    def _span(self, o, d):
+        """The part of the ray inside the grid's box: (enter, leave) or None."""
+        enter, leave = -math.inf, math.inf
+        for k in range(3):
+            if abs(d[k]) < 1e-15:
+                if o[k] < self.lo[k] or o[k] > self.hi[k]:
+                    return None
+                continue
+            a = (self.lo[k] - o[k]) / d[k]
+            b = (self.hi[k] - o[k]) / d[k]
+            enter = max(enter, min(a, b))
+            leave = min(leave, max(a, b))
+        return (enter, leave) if leave >= enter else None
+
+    def candidates(self, o, d, near):
+        """Indices of the triangles listed in the cubes the unit ray o + t d (t > near)
+        passes through."""
+        np = self.np
+        span = self._span(o, d)
+        if span is None or span[1] < near:
+            return None
+        start = max(span[0], near)
+        count = int(math.ceil((span[1] - start) / self.step)) + 1
+        t = start + np.arange(count + 1) * self.step
+        cells = self._cell(o[None, :] + t[:, None] * d[None, :])
+        flat = np.unique(self._flat(cells[:, 0], cells[:, 1], cells[:, 2]))
+        pos = np.searchsorted(self.keys, flat)
+        inside = pos < len(self.keys)
+        pos, flat = pos[inside], flat[inside]
+        pos = pos[self.keys[pos] == flat]
+        if not len(pos):
+            return None
+        parts = [self.owners[self.starts[p] : self.ends[p]] for p in pos]
+        return np.unique(np.concatenate(parts))
+
+    def cast(self, origins, directions, near=1e-6, index=False):
+        """first_hits for these rays; near: one distance for all, or one for each ray."""
+        np = self.np
+        out = []
+        nears = near if isinstance(near, (list, tuple)) else [near] * len(origins)
+        for origin, direction, near in zip(origins, directions, nears):
+            o = np.asarray(origin, dtype=float)
+            d = np.asarray(direction, dtype=float)
+            length = float(np.sqrt((d * d).sum()))
+            if length < 1e-15:
+                out.append((None, None) if index else None)
+                continue
+            u = d / length
+            hit = self._first(o, u, near * length)
+            if hit[0] is not None:
+                hit = (hit[0] / length, hit[1])
+            out.append(hit if index else hit[0])
+        return out
+
+    def _first(self, o, d, near):
+        np = self.np
+        cand = self.candidates(o, d, near)
+        if cand is None or not len(cand):
+            return (None, None)
+        A, E1, E2 = self.A[cand], self.E1[cand], self.E2[cand]
+        pvec = np.cross(d[None, :], E2)
+        det = (E1 * pvec).sum(axis=1)
         good = np.abs(det) > 1e-14
         inv = np.where(good, 1.0 / np.where(good, det, 1.0), 0.0)
-        s = o[:, None, :] - A[None, :, :]
-        u = (s * pvec).sum(axis=2) * inv
-        q = np.cross(s, E1[None, :, :])
-        v = (q * d[:, None, :]).sum(axis=2) * inv
-        t = (q * E2[None, :, :]).sum(axis=2) * inv
-        hit = (
-            good & (u >= -1e-9) & (u <= 1 + 1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9) & (t > near)
-        )
-        t = np.where(hit, t, np.inf)
-        best = t.min(axis=1)
-        out += [None if not math.isfinite(x) else float(x) for x in best]
-    return out
+        s = o[None, :] - A
+        u = (s * pvec).sum(axis=1) * inv
+        q = np.cross(s, E1)
+        v = (q * d[None, :]).sum(axis=1) * inv
+        t = (q * E2).sum(axis=1) * inv
+        hit = good & (u >= -1e-9) & (u <= 1 + 1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9)
+        t = np.where(hit & (t > near), t, np.inf)
+        k = int(np.argmin(t))
+        if not math.isfinite(t[k]):
+            return (None, None)
+        return (float(t[k]), int(cand[k]))
 
 
-def _first_hit_py(origin, direction, triangles, near):
-    best = None
-    for a, b, c in triangles:
+def _first_hit_py(origin, direction, triangles, near, index=False):
+    best, which = None, None
+    for k, (a, b, c) in enumerate(triangles):
         t = _ray_triangle(origin, direction, a, b, c)
         if t is not None and t > near and (best is None or t < best):
-            best = t
-    return best
+            best, which = t, k
+    return (best, which) if index else best
 
 
 def _ray_triangle(o, d, a, b, c):

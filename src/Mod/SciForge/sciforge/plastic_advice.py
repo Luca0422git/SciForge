@@ -243,15 +243,105 @@ def face_samples(face, tolerance, count=SAMPLES):
 
 
 def _triangles(shape, tolerance):
-    found = []
-    for face in shape.Faces:
+    """The display triangles of the shape and, for each, the index of its face."""
+    found, owners = [], []
+    for i, face in enumerate(shape.Faces):
         try:
             pts, tris = face.tessellate(tolerance)
         except Exception:
             continue
         p = [(q.x, q.y, q.z) for q in pts]
         found += [(p[a], p[b], p[c]) for a, b, c in tris]
-    return found
+        owners += [i] * len(tris)
+    return found, owners
+
+
+class Rays:
+    """Rays against one shape: cast on its display triangles (a grid of them, see
+    core.RayGrid), the hit then moved onto the exact face it lies on."""
+
+    def __init__(self, shape, tolerance):
+        self.faces = shape.Faces
+        self.surfaces = {}
+        self.tolerance = tolerance
+        triangles, self.owners = _triangles(shape, tolerance)
+        self.grid = core.RayGrid.of(triangles)
+        self.triangles = triangles if self.grid is None else None
+
+    def cast(self, origins, directions, near):
+        if not origins:
+            return []
+        if self.grid is not None:
+            return self.grid.cast(origins, directions, near, True)
+        return [
+            core._first_hit_py(o, d, self.triangles, near, True)
+            for o, d in zip(origins, directions)
+        ]
+
+    def distances(self, origins, directions, near, own=None):
+        """The exact distance to the first face along each unit ray, or None. own: the index
+        of the face each ray starts on. A ray starting on a convex face starts outside the
+        triangles that cut its corner; it meets them at once and that hit lands back on its
+        own face: such a hit is passed."""
+        count = len(origins)
+        nears = [near] * count
+        out = [None] * count
+        todo = list(range(count))
+        for _round in range(4):
+            found = self.cast(
+                [origins[k] for k in todo], [directions[k] for k in todo], [nears[k] for k in todo]
+            )
+            again = []
+            for k, hit in zip(todo, found):
+                t = self.exact(origins[k], directions[k], hit)
+                if (
+                    t is not None
+                    and own is not None
+                    and self.owners[hit[1]] == own[k]
+                    and t < 2.0 * self.tolerance
+                ):
+                    nears[k] = hit[0] + 1e-9 + 1e-6 * self.tolerance
+                    again.append(k)
+                else:
+                    out[k] = t
+            todo = again
+            if not todo:
+                break
+        return out
+
+    def blocked(self, origins, direction, near):
+        found = self.cast(origins, [direction] * len(origins), near)
+        return [hit[0] is not None for hit in found]
+
+    def exact(self, origin, direction, hit):
+        """The display triangles cut corners off round faces (a ray stops a little short of a
+        boss's side, or runs a little past a hole's): Newton steps along the ray onto the
+        face of the triangle it met."""
+        t0, tri = hit
+        if t0 is None:
+            return None
+        try:
+            i = self.owners[tri]
+            if i not in self.surfaces:
+                self.surfaces[i] = self.faces[i].Surface
+            surface = self.surfaces[i]
+            o, d = V(*origin), V(*direction)
+            t = t0
+            for _k in range(4):
+                x = o + d * t
+                u, v = surface.parameter(x)
+                q = surface.value(u, v)
+                n = surface.normal(u, v)
+                along = d.dot(n)
+                if abs(along) < 0.2:
+                    return t0
+                step = (q - x).dot(n) / along
+                t += step
+                if abs(step) < 1e-7:
+                    break
+            return t if abs(t - t0) < 3.0 * self.tolerance + 1e-6 else t0
+        except Exception:
+            return t0
 
 
 def measure_shape(shape, rule, pull, checks):
@@ -259,30 +349,28 @@ def measure_shape(shape, rule, pull, checks):
     size = max(shape.BoundBox.DiagonalLength, 1e-6)
     tolerance = max(0.005, size / 400.0)
     eps = max(1e-4, size * 1e-6)
-    triangles = _triangles(shape, tolerance)
     p = (pull.x, pull.y, pull.z)
     samples = []  # (face index, point, normal)
     for i, face in enumerate(shape.Faces):
         for point, normal in face_samples(face, tolerance):
             samples.append((i, point, normal))
     need_t = any(c in checks for c in ("thickness", "variation"))
+    rays = Rays(shape, tolerance) if samples and (need_t or "undercut" in checks) else None
     thick = [None] * len(samples)
     if need_t and samples:
         origins = [tuple(pt - n * eps) for _i, pt, n in samples]
         dirs = [tuple(n * -1.0) for _i, _pt, n in samples]
-        thick = core.first_hits(origins, dirs, triangles, near=eps * 0.5)
+        thick = rays.distances(origins, dirs, eps * 0.5, [i for i, _pt, _n in samples])
         thick = [None if t is None else t + eps for t in thick]
-        thick = confirmed(shape, samples, thick, rule, eps)
-        thick = inscribed(shape, samples, thick)
+        thick = inscribed(shape, rays, samples, thick, rule)
     along = against = [False] * len(samples)
     if "undercut" in checks and samples:
-        origins = [tuple(pt + n * eps) for _i, pt, n in samples]
-        up = core.first_hits(origins, [p] * len(samples), triangles, near=eps * 0.5)
-        down = core.first_hits(
-            origins, [(-p[0], -p[1], -p[2])] * len(samples), triangles, near=eps * 0.5
-        )
-        along = [t is not None for t in up]
-        against = [t is not None for t in down]
+        # from outside the triangles that cut the corners off a hole's side (inside them a
+        # ray up the hole would meet the top face's triangles)
+        out = eps + 1.5 * tolerance
+        origins = [tuple(pt + n * out) for _i, pt, n in samples]
+        along = rays.blocked(origins, p, eps * 0.5)
+        against = rays.blocked(origins, (-p[0], -p[1], -p[2]), eps * 0.5)
     faces = {}
     for k, (i, _pt, n) in enumerate(samples):
         name = "Face%d" % (i + 1)
@@ -319,69 +407,47 @@ def measure_shape(shape, rule, pull, checks):
     return {"faces": faces, "edges": edges, "pull": list(p)}
 
 
-def confirmed(shape, samples, thick, rule, eps):
-    """The display triangles cut corners off round faces, so a ray next to a hole can stop
-    short: a thickness that breaks the rule is measured again on the exact shape."""
-    import Part
-
-    out = list(thick)
-    for k, ((_i, point, normal), t) in enumerate(zip(samples, thick)):
-        if t is None:
-            continue
-        if not (core.thickness_issue(t, rule) or core.variation_issue(t, rule)):
-            continue
-        start = point - normal * eps
-        seg = Part.LineSegment(start, start - normal * (max(t, 1.0) * 4.0 + 1.0)).toShape()
-        try:
-            inside = shape.common(seg)
-        except Exception:
-            continue
-        best = None
-        for edge in inside.Edges:
-            ends = [v.Point for v in edge.Vertexes]
-            if not ends:
-                continue
-            near = min((q - start).Length for q in ends)
-            if near < 10 * eps:
-                best = edge.Length + eps if best is None else min(best, edge.Length + eps)
-        if best is not None:
-            out[k] = best
-    return out
+def _long(t, rule):
+    """True when a reading is longer than the rule allows (only such a reading can be a ray
+    that ran along inside a wall; a shorter one is right, or the wall's sides show it)."""
+    if t is None:
+        return False
+    if core.thickness_issue(t, rule) == "thick":
+        return True
+    return t > rule["thickness"] and core.variation_issue(t, rule)
 
 
-def inscribed(shape, samples, thick):
+def inscribed(shape, rays, samples, thick, rule):
     """The wall thickness at each sample: the ray's length along the inward normal, unless
     the ray ran along inside a wall (a rim's top, a hole through a wall: halfway along it
     the nearest face is much closer than half the ray); then the wall across there: from the
     nearest face straight through to the face opposite."""
     import Part
 
-    boundary = Part.makeCompound(list(shape.Faces))
-    out = []
-    for (_i, point, normal), t in zip(samples, thick):
-        if t is None:
-            out.append(None)
+    out = list(thick)
+    boundary = None
+    across = []  # (sample, distance to the nearest face, middle, away)
+    for k, ((_i, point, normal), t) in enumerate(zip(samples, thick)):
+        if not _long(t, rule):
             continue
+        if boundary is None:
+            boundary = Part.makeCompound(list(shape.Faces))
         middle = point - normal * (0.5 * t)
         try:
             d, pairs, _info = boundary.distToShape(Part.Vertex(middle))
             if not (1e-9 < 2.0 * d < 0.5 * t):
-                out.append(t)
                 continue
-            near = pairs[0][0]
-            away = middle - near
+            away = middle - pairs[0][0]
             away.normalize()
-            seg = Part.LineSegment(middle, middle + away * (t + 1.0)).toShape()
-            inside = shape.common(seg)
-            across = None
-            for edge in inside.Edges:
-                ends = [v.Point for v in edge.Vertexes]
-                if any((q - middle).Length < 1e-6 for q in ends):
-                    across = edge.Length
-                    break
-            out.append(d + across if across is not None else 2.0 * d)
+            across.append((k, d, middle, away))
         except Exception:
-            out.append(t)
+            continue
+    if across:
+        found = rays.distances(
+            [tuple(m) for _k, _d, m, _a in across], [tuple(a) for _k, _d, _m, a in across], 1e-9
+        )
+        for (k, d, _m, _a), t in zip(across, found):
+            out[k] = d + t if t is not None else 2.0 * d
     return out
 
 
