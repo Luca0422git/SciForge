@@ -109,13 +109,14 @@ Rip (a face, along an edge, or between two points).
 - The scratchpad folder is shared with other sessions: another builder overwrote probe files
   with the same names (p5.py, p6.py). Use names with the area in them.
 
-**Tests run (real FreeCAD 1.1.4)**, on the branch with sm-forming and sm-more merged: all 11
-`flatpattern_*` scenarios pass (counts in the branch report); golden `sm_flat_*` 17/17 and
-the whole golden set 507 + 2 known xfail; unit tests 1909 OK; `--only base` (unit, golden,
-smoke, journey) passes; every sm-forming (6) and sm-more (8) scenario passes;
-`drawing_new`, `drawing_annotations` pass; `ribbon_sweep` with
-`SWEEP_TABS=sheet_metal,flat_pattern,drawing` passes (175 checks). `ribbon_customize` failed
-once under load in an earlier full run and passed alone.
+**Tests run (real FreeCAD 1.1.4)**, on the branch with sm-forming (ca79f2b) and sm-more
+(0d6f795) merged: all 11 `flatpattern_*` scenarios pass (counts in the branch report);
+golden `sm_flat_*` 18/18 and the whole golden set 509 + 2 known xfail; unit tests 1909 OK;
+`--only base` (unit, golden, smoke, journey) passes; every sm-more scenario (8) passes, and
+every sm-forming scenario (6) passed after the sm-forming merge; `drawing_new`,
+`drawing_annotations` pass; `ribbon_sweep` with `SWEEP_TABS=sheet_metal,flat_pattern,drawing`
+passes (175 checks). `ribbon_customize` failed once under load in an earlier full run and
+passed alone.
 
 **Gaps** (details in the parity doc): Refold has no inputs (folds back everything its Unfold
 laid flat); material added across a bend in the flat state is refused at the Refold; the
