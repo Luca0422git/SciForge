@@ -77,6 +77,8 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Gap (rule's Miter/Rip/Seam gap by default) | Rule Gap on by default, or your own Gap | A[R39] |
 | Overlap 0..1, Flip Overlap | Same | A[R39] |
 | Extend Aligned (default on) | Shown on (off greyed: Known gaps) | A[R39] |
+| Bend Transition Smooth / Straight Line / Trim To Bend | The row is shown; Trim To Bend is built, the other two are greyed with the reason | A[R39] |
+| Relief Placement Tangent / Intersection / Vertex | The row is shown for Round / Square; Intersection is built, the other two are greyed | A[R39] |
 | Relief shapes, Bend Transition | Trim To Bend (the bends end where they are, the corner stays open under the closed walls); Round (Size = diameter) and Square (Size = side), the rule's 2-bend size or your own, Placement Intersection: the closed part is laid flat with sm-flat's unfolder, the shape cut where the two bends' centre lines cross, and the cut folded back onto bends and walls (sm-flat's refold). With Overlap a relief is refused (the overlapped corner lies over itself when laid flat) | A[R39], A[R22], A[R1] |
 
 ### Lofted Flange (Fusion: the Lofted type of the Flange dialog)
