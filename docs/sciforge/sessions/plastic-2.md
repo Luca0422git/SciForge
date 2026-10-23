@@ -43,7 +43,7 @@ edited (this file is the session log entry).
 - Icons `pl_snap_fit`, `pl_lip`, `pl_design_advice`, `pl_snap_groove`
   (`tools/sciforge/icons_plastic2.py`); the three ribbon entries wired.
 - Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (94), `plastic2_lip` (85),
-  `plastic2_advice` (77); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
+  `plastic2_advice` (81); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
   `test_plastic2_core.py` (34).
 
 ## FreeCAD facts and traps found

@@ -8,7 +8,8 @@ are coloured and the issues listed: the walls have no draft, the block is too th
 on an issue selects its face (the view zooms to it). Draft unticked: no draft issues left.
 Display Thickness: still drawn. A click on the block in the view leaves it out (1 body, no
 thickness issue), a second click takes it back. OK: "Design Advice1" in the browser's
-Analysis folder; its eye hides and shows the colours. Double-click the row: the dialog again
+Analysis folder; Undo takes it away, Redo brings it back (drawn); its eye hides and shows
+the colours. Double-click the row: the dialog again
 with its list; Esc. The block made 3 mm tall: the analysis checks again by itself (no
 thickness issue). Save, close, reopen: the analysis is back with its results. A second
 Design Advice with its bodies box cleared: OK refused with the reason; Cancel leaves one.
@@ -194,6 +195,23 @@ def kept():
     titles = ps.titles()
     h.check("not a timeline step", not any("Advice" in t for t in titles), titles)
     h.check("shown", s["analysis"].ViewObject.Visibility)
+    ps.undo()
+
+
+def undone():
+    QtTest.QTest.qWait(300)
+    h.check("Undo takes the analysis away", ps.by_label("Design Advice1") is None)
+    ps.redo()
+
+
+def redone():
+    QtTest.QTest.qWait(500)
+    obj = ps.by_label("Design Advice1")
+    if not h.check("Redo brings it back", obj is not None):
+        return
+    s["analysis"] = obj
+    h.check("with its results", counts()["thickness"] >= 6, counts())
+    h.check("drawn again", len(obj.ViewObject.Proxy.drawn) == 2, obj.ViewObject.Proxy.drawn)
     ps.click_eye("Design Advice1")
 
 
@@ -428,6 +446,8 @@ h.run(
         pull_cleared,
         unflipped,
         kept,
+        undone,
+        redone,
         hidden,
         shown_again,
         edit_again,

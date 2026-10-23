@@ -118,7 +118,7 @@ between the bottom and top offsets. Lip and groove volumes are exact (golden mod
 | Checks | **Thickness** (outside the rule's range), **Thickness Variation** (more than the rule's percentage from its Thickness), **Draft** (less than the rule's Minimum Draft Angle against the pull either way; faces square to the pull are fine), **Knife Edges** (convex edges sharper than 2 atan(1/2) = 53.13 degrees: thinner than the knife-edge threshold one threshold in), **Undercuts** (faces a two-part mould cannot reach along the pull). Each can be switched off. |
 | Overlay | Display **Issues**: green fine, blue too thin, orange too thick, yellow draft / variation, purple undercut, knife edges drawn red; **Thickness**: a map from the rule's minimum (blue) to its maximum (red). |
 | Issues list | Check, body and face (edge), and the worst value; a click selects the face and zooms to it. A summary line counts each check. |
-| Browser | OK keeps it in the Analysis folder (eye shows / hides, double-click reopens the dialog, Delete removes it); never a timeline step; saved with the design. It checks again whenever one of its bodies changes. |
+| Browser | OK keeps it in the Analysis folder (eye shows / hides, double-click reopens the dialog, Delete removes it); Undo takes it away, Redo brings it back; never a timeline step; saved with the design. It checks again whenever one of its bodies changes. |
 
 Wall thickness at a point: the distance along the inward normal to the next face; where that
 ray runs along inside a wall (a rim's top, a hole through a wall), the wall across there
@@ -148,8 +148,9 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
     Face Guide; a direction picked along the rim refused; OK; undo / redo; edit; Esc; save /
     reopen; a lip ring on a cone's round rim (Pull Direction exact, Face Guide leaning with
     the cone, exact); walls of different draft refused.
-  - `plastic2_advice` (77): checks, colours, click-to-zoom, Draft unticked, Thickness display,
-    a body left out and back, the pull direction picked and flipped, browser eye, reopen from
+  - `plastic2_advice` (81): checks, colours, click-to-zoom, Draft unticked, Thickness display,
+    a body left out and back, the pull direction picked and flipped, OK, Undo / Redo (gone,
+    back and drawn), browser eye, reopen from
     the browser, it follows the design (and waits while hidden), save / reopen, the empty
     bodies refusal, an empty design, a round boss (its 1.5 mm wall read exactly from both
     round faces, its hole no undercut), a box rounded 4 mm outside with 2 mm walls (the thin
