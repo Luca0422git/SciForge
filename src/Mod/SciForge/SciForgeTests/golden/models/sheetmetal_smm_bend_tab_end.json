@@ -1,0 +1,103 @@
+{
+  "id": "sheetmetal_smm_bend_tab_end",
+  "title": "Bend a tab on a short line at its root with Bend Line End (the zone in the plate): the reliefs run the whole zone into the plate",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              100,
+              0
+            ],
+            [
+              100,
+              40
+            ],
+            [
+              60,
+              40
+            ],
+            [
+              60,
+              60
+            ],
+            [
+              40,
+              60
+            ],
+            [
+              40,
+              40
+            ],
+            [
+              0,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            30,
+            40,
+            70,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        10,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "end"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4396.575664,
+    "bbox": [
+      0.0,
+      0.0,
+      0.0,
+      100.0,
+      40.0,
+      22.0
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "as sheetmetal_smm_bend_tab with the zone (BA) below the line, in the plate: each slot is BA + 0.5 long less its round end (BA x 1 + pi / 8)"
+  }
+}

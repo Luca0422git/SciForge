@@ -97,7 +97,7 @@
     }
   ],
   "expect": {
-    "volume": 9043.2881,
+    "volume": 9041.4421,
     "bbox": [
       0.0,
       0.0,
@@ -107,9 +107,9 @@
       21.0
     ],
     "solids": 1,
-    "faces": 18,
+    "faces": 24,
     "source": "baseline-freecad-1.1.4",
-    "note": "measured with FreeCAD 1.1.4: each flange's end (wall and bend) is taken in line to 0.5 mm short of the corner's bisector",
+    "note": "measured with FreeCAD 1.1.4: each flange's end (wall and bend) is taken in line to 0.5 mm short of the corner's bisector, then Trim To Bend (the default relief) cuts away what lies inside both bend zones",
     "rel_tol": 1e-05,
     "abs_tol": 0.001
   }

@@ -2,9 +2,11 @@
 """SHEET METAL > MODIFY > Corner Closure the way a Fusion user does it, only real input: a
 notched plate with two edge flanges (an open corner), the MODIFY menu's Corner Closure, click
 the dominant flange's corner edge then the submissive one's: both are taken in line to half the
-rule's gap short of the corner's bisector (Symmetric Gap); Overlap with a 0 gap (the dominant
-runs over the other's end); the Round relief is greyed with its reason; OK; the timeline's
-Corner Closure 1; Ctrl+Z / Ctrl+Y; edit back to Symmetric Gap; Cancel keeps it."""
+rule's gap short of the corner's bisector (Symmetric Gap), Trim To Bend; Tear; Round and
+Square corner reliefs; Relief Placement Tangent (refused for a Square, cuts more for a Round)
+and Vertex; Overlap with a relief refused with its reason, then Trim To Bend with a 0 gap (the
+dominant runs over the other's end); OK; the timeline's Corner Closure 1; Ctrl+Z / Ctrl+Y;
+edit back to Symmetric Gap; Cancel keeps it."""
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -55,13 +57,11 @@ def waiting():
         p is not None and p.value("alignment") == "symmetric" and p.value("use_rule_gap"),
     )
     box = p.fields["relief"] if p else None
-    item = box.model().item(1) if box else None
+    item = box.model().item(0) if box else None
     h.check(
-        "Round relief greyed with its reason",
-        item is not None
-        and not item.isEnabled()
-        and "Not available" in (item.toolTip() or box.itemData(1, 3) or ""),
+        "Round relief offered", item is not None and item.isEnabled() and item.text() == "Round"
     )
+    h.check("Trim To Bend by default", p is not None and p.value("relief") == "trim_to_bend")
 
 
 def click_dominant():
@@ -92,9 +92,137 @@ def closed():
     s["sym"] = st.volume(s["body"])
 
 
+def choose_tear():
+    st.choose(panel(), "relief", "Tear")
+
+
+def tear_result():
+    p = panel()
+    st.settle(p, 15000)
+    v = st.volume(s["body"])
+    h.check(
+        "Tear: the bends are carried into the corner (more than Trim To Bend)",
+        v > s["sym"] + 0.1,
+        (v, s["sym"]),
+    )
+    h.check("no message", st.message(p) == "", st.message(p))
+    s["tear"] = v
+
+
+def choose_round():
+    st.choose(panel(), "relief", "Round")
+
+
+def round_cut():
+    p = panel()
+    st.settle(p, 15000)
+    v = st.volume(s["body"])
+    h.check(
+        "Round relief cut where the bends meet",
+        s["tear"] - 40 < v < s["tear"] - 0.5,
+        (v, s["tear"]),
+    )
+    h.check(
+        "relief size rows shown (rule size)",
+        p.rows["use_rule_relief"][0].isVisible() and not p.rows["relief_value"][0].isVisible(),
+    )
+    h.check("no message", st.message(p) == "", st.message(p))
+    h.shot("smmore-corner-1b-round")
+    s["round"] = v
+
+
+def choose_square():
+    st.choose(panel(), "relief", "Square")
+
+
+def square_cut():
+    p = panel()
+    st.settle(p, 15000)
+    v = st.volume(s["body"])
+    h.check(
+        "Square relief cut (more than the round of the same size)",
+        v < s["round"] - 0.1,
+        (v, s["round"]),
+    )
+    s["square"] = v
+
+
+def square_tangent():
+    st.choose(panel(), "placement", "Tangent")
+
+
+def square_tangent_refused():
+    p = panel()
+    st.settle(p)
+    h.check(
+        "Tangent with a Square relief is explained",
+        "Round relief only" in st.message(p),
+        st.message(p),
+    )
+
+
+def round_tangent():
+    st.choose(panel(), "relief", "Round")
+
+
+def round_tangent_cut():
+    p = panel()
+    st.settle(p, 15000)
+    v = st.volume(s["body"])
+    h.check(
+        "Tangent: the round touches the far side of both bends (cuts more)",
+        v < s["round"] - 0.5,
+        (v, s["round"]),
+    )
+    h.check("no message", st.message(p) == "", st.message(p))
+    h.shot("smmore-corner-1c-tangent")
+
+
+def vertex():
+    st.choose(panel(), "placement", "Vertex")
+
+
+def vertex_result():
+    p = panel()
+    st.settle(p, 15000)
+    msg = st.message(p)
+    v = st.volume(s["body"])
+    h.check(
+        "Vertex: cut at the inner corner, or refused saying what to try",
+        (msg == "" and v < s["sym"] - 0.1) or "Relief Placement" in msg,
+        (msg, v),
+    )
+    s["vertex_msg"] = msg
+
+
+def back_to_square():
+    p = panel()
+    st.choose(p, "placement", "Intersection")
+    st.choose(p, "relief", "Square")
+
+
+def square_again():
+    p = panel()
+    st.settle(p, 15000)
+    h.check(
+        "back at Intersection: the same square relief",
+        st.close(st.volume(s["body"]), s["square"]) and st.message(p) == "",
+        (st.volume(s["body"]), s["square"], st.message(p)),
+    )
+
+
 def overlap():
     p = panel()
     st.choose(p, "alignment", "Overlap")
+
+
+def overlap_refused():
+    p = panel()
+    st.settle(p)
+    h.check(
+        "a relief with Overlap is explained", "lies over itself" in st.message(p), st.message(p)
+    )
+    st.choose(p, "relief", "Trim To Bend")
 
 
 def zero_gap():
@@ -204,7 +332,22 @@ h.run(
         click_dominant,
         click_submissive,
         closed,
+        choose_tear,
+        tear_result,
+        choose_round,
+        round_cut,
+        choose_square,
+        square_cut,
+        square_tangent,
+        square_tangent_refused,
+        round_tangent,
+        round_tangent_cut,
+        vertex,
+        vertex_result,
+        back_to_square,
+        square_again,
         overlap,
+        overlap_refused,
         zero_gap,
         type_zero,
         overlapped,

@@ -160,6 +160,32 @@ class ClosureTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             core.closure_reach("overlap", 0.0, T, 1.5)
 
+    # two 90 degree bends meeting at a square corner, flat: bend A runs along y (centre line
+    # x = 10), bend B along x (centre line y = 20), both zones BA wide, flanges outward
+    BEND_A = ((10.0, 0.0), (0.0, 1.0), (1.0, 0.0), BA90 / 2)
+    BEND_B = ((0.0, 20.0), (1.0, 0.0), (0.0, 1.0), BA90 / 2)
+
+    def test_relief_placements(self):
+        x, y = core.relief_centre("intersection", self.BEND_A, self.BEND_B, 4.0)
+        self.assertAlmostEqual(x, 10.0)
+        self.assertAlmostEqual(y, 20.0)
+        # Vertex: where both bends start (the inner corner of the stationary side)
+        x, y = core.relief_centre("vertex", self.BEND_A, self.BEND_B, 4.0, "square")
+        self.assertAlmostEqual(x, 10.0 - BA90 / 2)
+        self.assertAlmostEqual(y, 20.0 - BA90 / 2)
+        # Tangent: the circle (radius 2) touches the far side of both zones
+        x, y = core.relief_centre("tangent", self.BEND_A, self.BEND_B, 4.0)
+        self.assertAlmostEqual(x + 2.0, 10.0 + BA90 / 2)
+        self.assertAlmostEqual(y + 2.0, 20.0 + BA90 / 2)
+
+    def test_relief_placement_refusals(self):
+        with self.assertRaises(ValueError):
+            core.relief_centre("tangent", self.BEND_A, self.BEND_B, 4.0, "square")
+        with self.assertRaises(ValueError):
+            core.relief_centre("middle", self.BEND_A, self.BEND_B, 4.0)
+        with self.assertRaises(ValueError):
+            core.relief_centre("intersection", self.BEND_A, self.BEND_A, 4.0)
+
 
 class FacetTests(unittest.TestCase):
     def test_controls(self):
@@ -176,6 +202,31 @@ class FacetTests(unittest.TestCase):
         for control in ("facet_angle", "facet_distance", "chord_tolerance"):
             with self.assertRaises(ValueError):
                 core.facets_for_arc(15, 90, control, 0)
+
+
+class TriangulateTests(unittest.TestCase):
+    def test_square_to_circle_fans_from_corners(self):
+        # square corners at 1/8, 3/8, 5/8, 7/8 of a turn, 16 circle points
+        t1 = [0.0, 0.25, 0.5, 0.75]
+        t2 = [i / 16.0 for i in range(16)]
+        tris = core.triangulate(t1, t2, True)
+        self.assertEqual(len(tris), 4 + 16)  # one per square side + one per circle chord
+        per_corner = {}
+        for tri in tris:
+            corners = [k for k in tri if k < 4]
+            if len(corners) == 1:
+                per_corner[corners[0]] = per_corner.get(corners[0], 0) + 1
+        self.assertEqual(sorted(per_corner.values()), [4, 4, 4, 4])  # a fan of 4 at each
+
+    def test_equal_counts_give_quads(self):
+        tris = core.triangulate([0.0, 0.5], [0.0, 0.5], True)
+        self.assertEqual(len(tris), 4)
+        used = sorted(set(k for tri in tris for k in tri))
+        self.assertEqual(used, [0, 1, 2, 3])
+
+    def test_open_strip(self):
+        tris = core.triangulate([0.0, 1.0], [0.0, 0.5, 1.0], False)
+        self.assertEqual(len(tris), 3)
 
 
 class ThicknessEdgeTests(unittest.TestCase):

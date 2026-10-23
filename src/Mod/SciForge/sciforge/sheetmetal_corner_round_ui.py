@@ -123,6 +123,76 @@ class RoundPanel(smp.SmPanel):
         self.picks["edges"] = [(base, n, None) for n in last["edges"]]
         return {"value": last["value"]}
 
+    # -- the size arrow ---------------------------------------------------------------------
+    def fields_changed(self, key):
+        if key == "value":
+            self.after_preview()
+
+    def after_preview(self):
+        try:
+            self._make_arrow()
+        except Exception as exc:
+            warn("%s arrow unavailable: %s" % (self.title, exc))
+
+    def _make_arrow(self):
+        """A blue arrow on the corner being picked, pointing into the plate along the
+        corner's bisector: drag it for the radius (distance), with its value box."""
+        import Part
+
+        if self._closed:
+            return
+        arrow = self.handles.get("value")
+        if arrow is not None:
+            try:
+                if arrow.busy():
+                    return
+            except Exception:
+                pass
+            arrow.remove()
+            self.handles.pop("value", None)
+        if not self.picks["edges"] or self.base is None:
+            return
+        shape = self.base.Shape
+        edge = shape.getElement(self.picks["edges"][0][1])
+        outward = App.Vector()
+        for face in shape.ancestorsOfType(edge, Part.Face):
+            if sb.is_plane(face):
+                outward += sb.plane_normal(face)
+        if outward.Length < 1e-9:
+            return
+        into = sb.unit(outward) * -1.0
+        place = self.body.getGlobalPlacement()
+        origin = place.multVec(edge.CenterOfMass)
+        direction = place.Rotation.multVec(into)
+        size = max(3.0, min(shape.BoundBox.DiagonalLength * 0.06, 12.0))
+        handle = pickpanel.Arrow(
+            origin,
+            direction,
+            float(self.value("value")),
+            size * 2.2,
+            on_drag=self._dragged,
+            on_release=self._dragged,
+        )
+        self.handles["value"] = handle
+        field = self.fields["value"]
+        self.value_boxes.attach(handle, "value", lambda: field.widget.text(), self._typed)
+
+    def _dragged(self, distance):
+        if self._closed:
+            return
+        self.set_value("value", max(0.1, round(float(distance), 2)))
+        self.schedule()
+
+    def _typed(self, text):
+        if self._closed:
+            return
+        field = self.fields["value"]
+        try:
+            field.take(field.parse(text))
+        except Exception:
+            pass
+        self.schedule()
+
 
 class ChamferPanel(RoundPanel):
     title = "Sheet Metal Chamfer"

@@ -406,8 +406,60 @@ def line_intersection(p, u, q, v):
 # -- Corner Closure --------------------------------------------------------------------------------
 CLOSURE_ALIGNMENTS = ("symmetric", "overlap")
 CLOSURE_LABELS = {"symmetric": "Symmetric Gap", "overlap": "Overlap"}
-CLOSURE_RELIEFS = ("round", "square", "trim_to_bend")
-CLOSURE_RELIEF_LABELS = {"round": "Round", "square": "Square", "trim_to_bend": "Trim To Bend"}
+CLOSURE_RELIEFS = ("round", "square", "tear", "trim_to_bend")
+CLOSURE_RELIEF_LABELS = {
+    "round": "Round",
+    "square": "Square",
+    "tear": "Tear",
+    "trim_to_bend": "Trim To Bend",
+}
+CLOSURE_PLACEMENTS = ("intersection", "tangent", "vertex")
+CLOSURE_PLACEMENT_LABELS = {
+    "intersection": "Intersection",
+    "tangent": "Tangent",
+    "vertex": "Vertex",
+}
+
+
+def relief_centre(placement, bend_a, bend_b, size, shape="round"):
+    """Where a 2-bend corner relief is centred in the flat state (2D).
+
+    Each bend is (point, direction, outward, half_width): a point on its centre line, the
+    line's direction, the unit vector across the bend from the stationary side toward the
+    flange, and half the bend zone's width (half the bend allowance).
+
+    * intersection: where the two centre lines cross;
+    * vertex: where the bends start on the stationary side (the inner corner);
+    * tangent (Round only): the circle (diameter `size`) touches the far side of both bend
+      zones, so it clears their whole crossing.
+    Raises ValueError with the reason."""
+    if placement not in CLOSURE_PLACEMENTS:
+        raise ValueError("Relief Placement must be Intersection, Tangent or Vertex.")
+    if placement == "tangent" and shape != "round":
+        raise ValueError(
+            "Tangent placement is for a Round relief only; use Intersection or Vertex."
+        )
+    offsets = []
+    for _point, _direction, _outward, half in (bend_a, bend_b):
+        if placement == "intersection":
+            offsets.append(0.0)
+        elif placement == "vertex":
+            offsets.append(-half)
+        else:
+            offsets.append(half - size / 2.0)
+    return _offset_meet(bend_a, offsets[0], bend_b, offsets[1])
+
+
+def _offset_meet(bend_a, off_a, bend_b, off_b):
+    """Where bend_a's centre line moved off_a across it meets bend_b's moved off_b (2D)."""
+    lines = []
+    for (point, direction, outward, _half), offset in ((bend_a, off_a), (bend_b, off_b)):
+        lines.append(((point[0] + outward[0] * offset, point[1] + outward[1] * offset), direction))
+    (p, u), (q, v) = lines
+    meet = line_intersection(p, u, q, v)
+    if meet is None:
+        raise ValueError("The two bends are parallel: they do not meet at a corner.")
+    return (p[0] + u[0] * meet[0], p[1] + u[1] * meet[0])
 
 
 def closure_reach(alignment, gap, thickness, overlap=1.0, dominant=True):
@@ -479,6 +531,41 @@ def facets_for_arc(radius, sweep_deg, control, value):
         per = 2.0 * math.acos(1.0 - value / radius)
         return max(1, int(math.ceil(sweep / per - 1e-9)))
     raise ValueError("unknown facet control %r" % control)
+
+
+def triangulate(t1, t2, closed):
+    """Triangles between two point lists placed at t1, t2 (0..1: their share of a turn or of
+    the length; closed lists without the repeated first point), walking both. Each corner
+    of one profile fans out to the stretch of the other that faces it (a square to a
+    circle: a fan of facets at each corner, one facet along each side), as a press-brake
+    transition is laid out. Index triples into
+    list1 + list2 (list2's indices shifted by len(t1))."""
+    n1, n2 = len(t1), len(t2)
+    tris = []
+    i = j = 0
+    end1 = n1 if closed else n1 - 1
+    end2 = n2 if closed else n2 - 1
+
+    def next_t(ts, k, n):
+        return ts[k + 1] if k + 1 < n else 1.0
+
+    while i < end1 or j < end2:
+        if i >= end1:
+            move_b = True
+        elif j >= end2:
+            move_b = False
+        else:
+            # the other profile's points up to the middle of this segment fan out from
+            # this point: each corner's fan is centred on it, each side's facet meets the
+            # point facing the side's middle
+            move_b = next_t(t2, j, n2) <= 0.5 * (t1[i] + next_t(t1, i, n1)) + 1e-12
+        if move_b:
+            tris.append((i % n1, n1 + (j + 1) % n2, n1 + j % n2))
+            j += 1
+        else:
+            tris.append((i % n1, (i + 1) % n1, n1 + j % n2))
+            i += 1
+    return tris
 
 
 # -- sheet metal Fillet / Chamfer ----------------------------------------------------------------

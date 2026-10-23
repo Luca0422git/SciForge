@@ -1,0 +1,91 @@
+{
+  "id": "sheetmetal_smm_lofted_join",
+  "title": "Lofted Flange joined to a plate: a 40 mm square on the plate to a 30 mm circle above it",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -30,
+            -30,
+            30,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f0",
+      "kind": "base",
+      "profile": "s0"
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -20,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 31,
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_lofted_flange",
+      "id": "l1",
+      "profile1": "s1",
+      "profile2": "s2",
+      "operation": "join",
+      "options": {
+        "forming": "brake",
+        "control": "facet_number",
+        "value": 8
+      }
+    }
+  ],
+  "expect": {
+    "volume": 7544.3294,
+    "bbox": [
+      -30.0,
+      -30.0,
+      0.0,
+      30.0,
+      30.0,
+      31.0
+    ],
+    "solids": 1,
+    "faces": 35,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: one solid, the plate plus the transition standing on it",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}
