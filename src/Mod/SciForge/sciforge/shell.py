@@ -63,7 +63,12 @@ def on_workbench(name):
             enable()
             _set_sketch_mode(False)
         elif name == SKETCH_WB and _state["on"]:
-            # FreeCAD just put the Sketcher's toolbars up; hide them after it is done.
+            # FreeCAD just put the Sketcher's toolbars up; hide them at once, before Qt lays
+            # the window out and draws it with them (that layout, the 3D view resized and
+            # drawn again, then the same once more when they went: part of the wait on
+            # entering a sketch), and again after FreeCAD's own timers are done.
+            if config.USE_RIBBON:
+                _safely(_hide_toolbars)
             _hide_toolbars_soon()
             _set_sketch_mode(True)
         elif _state["on"]:
@@ -180,6 +185,9 @@ def enable():
             _safely(_sketch_mode_on)
         return
     if _state["on"]:
+        # back from the Sketcher (Finish Sketch): FreeCAD just put the SciForge workbench's
+        # toolbars up; hidden at once as on entering (on_workbench), and again later
+        _safely(_hide_toolbars)
         _hide_toolbars_soon()
         return
     from . import navbar_ui, shortcuts, theme, timeline_ui
