@@ -98,6 +98,11 @@ Fixed (details in `docs/sciforge/parity/sheet-metal.md`, "QA pass"):
 - A Sheet Metal component's active rule could be deleted from the design.
 - New Component + a Rule chosen after the pick left the component's active rule behind.
 - A library rule tried in the Flange's Rule box and then left stayed In This Design.
+- A base flange Join standing on the sheet (a T or a sharp L, no bend) was accepted: refused
+  now unless the new plate lies in the plane of one of the body's sheets.
+- Editing a stand-alone contour flange (Distance, Orientation, Direction hidden: the dialog
+  took the flange's own edge for the sheet edge it starts from); the dialog's own preview
+  body also counted as the Join target (Join enabled, then "pick or make one first").
 - Inserting a design with its own rule into one that already had sheet metal silently
   rebuilt the inserted parts in the default rule (copied rule stores were never read).
 

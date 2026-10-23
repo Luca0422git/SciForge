@@ -475,6 +475,14 @@ def compute(obj):
                     "The new sheet lies on the body's sheet (that would double its thickness): "
                     "draw the profile beside it, against one of its edges."
                 )
+            if kind == "base" and not _in_sheet_plane(base, result, normal):
+                # standing on the sheet or across its edge: a sharp corner between two
+                # sheets, which no flat pattern can unfold (a corner needs a bend) (QA)
+                raise FormError(
+                    "The new sheet does not lie in the plane of the body's sheet: a corner "
+                    "between two sheets needs a bend. Draw the profile in the sheet's plane, "
+                    "against one of its edges, or use an edge or contour flange."
+                )
             joined = form._clean(base.fuse(result))
             if len(joined.Solids) > len(base.Solids):
                 raise FormError(
@@ -485,6 +493,42 @@ def compute(obj):
     if result.isNull() or not result.Solids:
         raise FormError("The flange made no solid.")
     return bodies.to_local(result, body)
+
+
+def _in_sheet_plane(base, plate, normal):
+    """True when the plate (a base flange for Join) carries a sheet of the body on in its
+    own plane: both of the plate's faces square to `normal` (its top and bottom) lie in the
+    plane of a face of the body that faces the same way, and touch it (a plate standing on
+    the sheet flush with its edge has only one)."""
+    n = App.Vector(normal)
+    if n.Length < 1e-12:
+        return True
+    n.normalize()
+
+    def flat(shape):
+        out = []
+        for face in shape.Faces:
+            if face.Surface.__class__.__name__ != "Plane":
+                continue
+            u0, u1, v0, v1 = face.ParameterRange
+            normal_here = face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+            if abs(abs(normal_here.dot(n)) - 1.0) < 1e-6:
+                out.append((face, normal_here))
+        return out
+
+    body_faces = flat(base)
+    sides = set()
+    for face, nf in flat(plate):
+        point = face.Vertexes[0].Point
+        for other, no in body_faces:
+            if nf.dot(no) < 1.0 - 1e-6:
+                continue
+            if abs((other.Vertexes[0].Point - point).dot(no)) > 1e-6:
+                continue
+            if face.distToShape(other)[0] < 1e-6:
+                sides.add(nf.dot(n) > 0)
+                break
+    return len(sides) == 2
 
 
 # -- making and editing -------------------------------------------------------------------------

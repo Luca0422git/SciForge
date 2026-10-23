@@ -77,7 +77,7 @@ its **diameter** (said in the tooltip).
 | Live preview, drag arrow with its value box, OK / Cancel | Same: the preview is the real step; the height arrow stands on the Height Datum point and points along the wall; an angle handle turns about the bend's axis (G); every field and value box takes a number, a user parameter or a formula | A[R2], G |
 | Timeline "Flange<n>" with the flange icon; edit from the timeline | Same (double-click opens the dialog with the picks and values) | G |
 | A later Flange on a plate edge next to an earlier flange | Works: the edge's side face runs on into the earlier flange's end face (one coplanar face), and the edge is still recognised as a sheet edge by probing the solid's thickness under it (QA; it was refused as "not on the sheet's thickness") | G |
-| Errors: curved edge, an edge not on a sheet metal body, a flange that runs into the part, a height that does not reach past the bend | Refused in the dialog with the reason (OK keeps it open): curved edge, edge across the thickness, edge of another body, overlapping flanges, a flange that would run into the part, Height Datum Inner / Outer or Bend Position Inside / Outside at 180 degrees, a contour line too short for its bends, a closed or branched contour, a spline in a contour, a Join sheet laid on the body's sheet (double thickness) or apart from it | G |
+| Errors: curved edge, an edge not on a sheet metal body, a flange that runs into the part, a height that does not reach past the bend | Refused in the dialog with the reason (OK keeps it open): curved edge, edge across the thickness, edge of another body, overlapping flanges, a flange that would run into the part, Height Datum Inner / Outer or Bend Position Inside / Outside at 180 degrees, a contour line too short for its bends, a closed or branched contour, a spline in a contour, a Join sheet laid on the body's sheet (double thickness), standing on it or across its edge (not in its plane: a sharp corner, QA) or apart from it | G |
 
 Geometry rule (what sm-flat's unfolder relies on): every solid is flat walls plus cylindrical
 bends of the rule's thickness whose inner radius is the rule's bend radius (or the override);
@@ -163,8 +163,22 @@ Fixed on `sf/sm-forming-qa`:
   only a console warning): FreeCAD copies the rule store the flanges link under another name
   (`SheetMetalRules001`), which `find_rule` never read. Copied stores' rules now count as
   the design's (`sheetmetal.design_rules`), and the next rule save keeps them in the store.
+- **Editing a stand-alone contour flange from the timeline hid its options.** The dialog
+  looked for a sheet edge the contour starts from in the flange's own solid (the body's
+  first step has no sheet before it), took it for a contour on a sheet edge and hid
+  Distance, Orientation, Direction and Flip ("it runs the whole edge"). A flange that is its
+  body's first step is never attached now, and neither the Join target nor an attachment is
+  looked for in the body the dialog's own preview made.
+- **A base flange Join standing on the sheet (or across its edge)** was fused into a T or a
+  sharp L: a solid no flat pattern can unfold (a corner between two sheets needs a bend).
+  Join now needs the new plate in the plane of one of the body's sheets, touching it; the
+  dialog says why and points to the edge and contour flanges.
 
 Left as they are (reported, not fixed):
+
+- A contour flange Join that is not drawn from a sheet edge is joined wherever it touches
+  (a contour standing on the sheet makes a sharp corner); only the base flange checks the
+  plane.
 
 - Two separate profiles in one base flange make one body with two solids (Fusion probably
   makes a body per plate: not checked).

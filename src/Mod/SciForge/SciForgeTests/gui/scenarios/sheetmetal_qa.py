@@ -16,7 +16,9 @@ that rule in Sheet Metal Rules is refused (it is the component's active rule). A
 design: a plate made as New Component with the Rule Copper (mm), then Aluminum (mm), chosen
 after the pick: the component's active rule follows, Copper (mm) is not left in the design;
 two edges with Bend Position Outside: the walls run on to the
-mitre and close the corner up to the gap.
+mitre and close the corner up to the gap. A third design: a plate, then a sketch standing on
+it (XZ): Flange Join is refused with the reason (a corner between two sheets needs a bend),
+OK keeps the dialog open, Esc leaves the plate as it was.
 """
 
 import os
@@ -585,6 +587,94 @@ def d2_done():
     h.check("dialog closed", sm.panel() is None)
 
 
+# -- a Join that would stand on the sheet is refused (a third design) --------------------------
+def design_3():
+    App.newDocument("SheetQA3")
+    h.fit()
+
+
+def d3_sketch():
+    h.ribbon("Create Sketch")
+
+
+def d3_plate_flange():
+    h.ribbon("Finish Sketch")
+    h.fit()
+    h.click_empty()
+    sm.tab()
+    h.ribbon("Flange")
+
+
+def d3_plate_profile():
+    h.fit()
+    h.click(V(25, 15, 0))
+
+
+def d3_plate_ok():
+    sm.settle()
+    s["body3"] = sm.target_body()
+    sm.ok()
+
+
+def d3_upright_sketch():
+    h.check("dialog closed", sm.panel() is None)
+    s["v_d3"] = sm.volume(s["body3"])
+    h.check("a 1 mm plate", sm.near(s["v_d3"], 1500.0), s["v_d3"])
+    h.fit()
+    h.click_empty()
+    h.ribbon("Create Sketch")
+
+
+def d3_xz():
+    st.open_sketch_clicked(V(12, 0, 30))
+
+
+def d3_upright_rect():
+    # standing on the plate's top face, along its front edge
+    s["upright"] = sm.rect_sketch(10, 1, 40, 20)
+
+
+def d3_upright_flange():
+    h.ribbon("Finish Sketch")
+    h.fit()
+    h.click_empty()
+    h.ribbon("Flange")
+
+
+def d3_upright_profile():
+    h.fit()
+    h.click(V(25, 0, 10))
+
+
+def d3_join():
+    sm.settle()
+    p = sm.panel()
+    h.check("a base flange", p is not None and p.kind == "base", p and p.kind)
+    sm.choose("operation", "Join")
+
+
+def d3_join_refused():
+    sm.settle()
+    text = sm.message()
+    h.check("Join standing on the sheet: refused with why", "plane of the body" in text, text)
+    h.check("the plate as it was", sm.near(sm.volume(s["body3"]), s["v_d3"], 1e-7))
+
+
+def d3_join_ok_refused():
+    sm.ok()
+
+
+def d3_join_stays():
+    h.check("OK keeps the dialog open", sm.panel() is not None)
+    sm.esc()
+
+
+def d3_join_escaped():
+    h.check("Esc closed it", sm.panel() is None)
+    h.check("still the plate as it was", sm.near(sm.volume(s["body3"]), s["v_d3"], 1e-7))
+    h.check("no new body", len(sm.sheet_bodies()) == 1, [b.Label for b in sm.sheet_bodies()])
+
+
 h.run(
     "sheetmetal_qa",
     [
@@ -672,5 +762,22 @@ h.run(
         d2_closed_corner,
         d2_ok_corner,
         d2_done,
+        design_3,
+        d3_sketch,
+        pick_xy,
+        draw_rect,
+        d3_plate_flange,
+        d3_plate_profile,
+        d3_plate_ok,
+        d3_upright_sketch,
+        d3_xz,
+        d3_upright_rect,
+        d3_upright_flange,
+        d3_upright_profile,
+        d3_join,
+        d3_join_refused,
+        d3_join_ok_refused,
+        d3_join_stays,
+        d3_join_escaped,
     ],
 )

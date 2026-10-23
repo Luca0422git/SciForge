@@ -127,8 +127,21 @@ class FlangePanel(Panel):
         except ValueError:
             return None
 
+    def _own_body(self):
+        """The body this dialog's preview made or marked sheet metal (New Body / New
+        Component), or None: it is no body to join to or to attach a contour to (QA)."""
+        try:
+            if self.target is not None and not self.editing and flange.made_body(self.target):
+                return flange.owner_body(self.target)
+        except Exception:
+            pass
+        return None
+
     def _join_body(self):
-        return sheetmetal.find_sheet_body(self.doc, active=self.body)
+        own = self._own_body()
+        return sheetmetal.find_sheet_body(
+            self.doc, active=self.body, exclude=(own,) if own is not None else ()
+        )
 
     # -- form ---------------------------------------------------------------------------------
     def _row(self, key, label, widget):
@@ -534,12 +547,17 @@ class FlangePanel(Panel):
         self.attached = None
         if self.kind != "contour" or not self.refs:
             return
-        body = sheetmetal.find_sheet_body(self.doc, active=self.body)
+        body = self._join_body()
         if body is None:
             return
         base_obj = None
         if self.target is not None and flange.owner_body(self.target) is body:
             base_obj = self.target.BaseFeature
+            if base_obj is None:
+                # the flange is its body's first step: there is no sheet before it to be
+                # drawn from (its own solid is not one: editing an L contour found its own
+                # edge and hid Distance, Orientation and Direction, QA)
+                return
         self.attached = flange.attachment(self.refs, body, base_obj)
         if self.attached is not None and not self.editing:
             self._quiet = True

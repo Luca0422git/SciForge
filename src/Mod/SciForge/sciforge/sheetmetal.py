@@ -220,14 +220,15 @@ def sheet_metal_bodies(doc):
     return [b for b in bodies.list_bodies(doc) if is_sheet_metal_body(b)]
 
 
-def find_sheet_body(doc, active=None, component=None):
+def find_sheet_body(doc, active=None, component=None, exclude=()):
     """The sheet metal body a SHEET METAL tool works on (sm-forming, wave 6): the active body
     when it is sheet metal, else the first sheet metal body of the component (None: the
     active one, or the root) that exists at the history marker, else None. SOLID tools keep
-    using commands.find_body, which takes sheet metal bodies too."""
+    using commands.find_body, which takes sheet metal bodies too. `exclude`: bodies passed
+    over (a dialog's own preview body, QA)."""
     if doc is None:
         return None
-    if active is not None and is_sheet_metal_body(active):
+    if active is not None and is_sheet_metal_body(active) and active not in exclude:
         return active
     try:
         from . import components
@@ -238,7 +239,7 @@ def find_sheet_body(doc, active=None, component=None):
     except Exception:
         candidates = bodies.list_bodies(doc)
     for body in candidates:
-        if not is_sheet_metal_body(body):
+        if not is_sheet_metal_body(body) or body in exclude:
             continue
         if body.Tip is None and any(o.isDerivedFrom("PartDesign::Feature") for o in body.Group):
             continue  # rolled back before its first step: not made yet at the marker
