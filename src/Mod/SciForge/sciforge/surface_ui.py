@@ -1686,6 +1686,19 @@ class LoftPanel(SurfacePanel):
             self.add_combo(end + "_condition", title, loft_ends_labels("sketch"))
             self.add_number(end + "_weight", "Takeoff Weight", "")
             self.add_number(end + "_angle", "Takeoff Angle", "deg")
+        why = (
+            "Not in SciForge yet: OpenCASCADE's loft gives no control of the side curves' "
+            "direction at a profile's ends, so the sides leave the edge freely"
+        )
+        self.add_combo(
+            "edge_alignment",
+            "Edge Alignment",
+            [
+                ("Free Edges", "free"),
+                ("Align Edges", "align", False, why),
+                ("Align to Surface", "surface", False, why),
+            ],
+        )
         self.add_operation()
 
     def _flat(self):
@@ -1824,6 +1837,12 @@ class LoftPanel(SurfacePanel):
             self.show_option(end + "_angle", shown and condition == "direction")
             caption = self.rows[end + "_weight"][1]
             caption.setText("Takeoff Weight" if condition == "direction" else "Tangency Weight")
+        # Fusion: with a tangent or curvature end on an edge of a body
+        smooth = any(
+            self.options.get(end + "_condition", "free") in ("tangent", "curvature")
+            for end, _title in END_ROWS
+        )
+        self.show_option("edge_alignment", smooth)
 
     def _refill(self, key, choices):
         box = self.rows[key][0]

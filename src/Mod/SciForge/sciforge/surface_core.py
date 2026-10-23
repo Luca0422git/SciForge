@@ -169,6 +169,7 @@ KINDS = {
             "end_condition": "free",
             "end_weight": 1.0,
             "end_angle": 0.0,
+            "edge_alignment": "free",
             "chain": True,
             "operation": "new_body",
         },
