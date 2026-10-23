@@ -99,7 +99,7 @@ item 11).
 | Pick tangent edges | Click the rim's edges; **Tangent Chain** (on) takes the edges joined smoothly to the one clicked (a filleted rim in one click); a click on the rim's flat face takes its inside edge, the face's inner loop (SciForge's shortcut: the brief's "edges / faces"; Fusion's help only speaks of edges). Edges of one body; they must lie on the flat rim (the parting face, one plane) and join end to end (a closed loop or an open chain). |
 | Lip / Groove / Lip And Groove | **Lip**: a lip stands on the rim from the picked edges towards the wall. **Groove**: a groove cut into the rim (its own Groove Width / Depth). **Lip And Groove**: the lip on this body and the groove (lip + Clearance each side, + Clearance Height deeper, the same drafts) in the body touching the rim, found and named in the dialog, or picked in its **Other Body** box; **Swap Lip and Groove** puts the lip on the other body. |
 | Guide Type | **Pull Direction**: the section is extruded along the rim's normal, or along a direction picked in the **Direction** box (a plane, flat face or straight edge; one along the rim is refused). **Face Guide**: the section leans with the wall beside the edges (a drafted wall: the lip's faces go on at the wall's angle, the groove's too); walls of different draft along the chain are refused with the reason. |
-| Advanced | Lip Width, Lip Height, Inner Draft, Outer Draft, Clearance, Clearance Height, Groove Width, Groove Depth, Tip Radius (round on the lip's top edges), Root Radius (blend where the lip meets the rim; the groove's mouth gets the same round, so the clearance is kept). |
+| Advanced | Lip Width, Lip Height, Inner Draft, Outer Draft, Clearance, Clearance Height, Groove Width, Groove Depth, Tip Radius (round on the lip's top edges), Root Radius (blend where the lip meets the rim; the groove's mouth gets the same round, so the clearance is kept). Shown, not typed: the wall at the edges and the shoulder (reveal) left beside the lip (research: Shoulder Width = wall - lip width, derived). |
 | Rule values (L9) | Lip Width = Thickness / 2, Lip Height = Reveal Height, Clearance and Clearance Height = Clearance, drafts = Draft Angle; they follow the rule until typed. |
 | Manipulators | Arrows with value boxes: Lip Height and Lip Width. |
 | Timeline | One step "Lip N" in the picked edges' body; the other body's change is a hidden follower step. Double-click edits. |
@@ -143,12 +143,12 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
     rotation handle dragged), Align To a clicked face and a clicked edge, the other body
     picked, Hide Other Body, the catch-length refusal, Esc, components (a moved component),
     Hook Body picked (refused, then Flip), an empty design.
-  - `plastic2_lip` (95): lip on a base and groove in its lid; drafts; height typed and
-    dragged; the edges' body refused as the other body; Swap; Groove; Lip; the wall refusal;
-    Face Guide; a direction picked along the rim refused; OK; undo / redo; edit; Esc; save /
-    reopen; a lip ring on a cone's round rim (Pull Direction exact, Face Guide leaning with
-    the cone, exact); walls of different draft refused; a click on the rim's flat face (its 4
-    inside edges, the same lip and groove), Cancel.
+  - `plastic2_lip` (96): lip on a base and groove in its lid (the shoulder shown); drafts;
+    height typed and dragged; the edges' body refused as the other body; Swap; Groove; Lip;
+    the wall refusal; Face Guide; a direction picked along the rim refused; OK; undo / redo;
+    edit; Esc; save / reopen; a lip ring on a cone's round rim (Pull Direction exact, Face
+    Guide leaning with the cone, exact); walls of different draft refused; a click on the
+    rim's flat face (its 4 inside edges, the same lip and groove), Cancel.
   - `plastic2_advice` (81): checks, colours, click-to-zoom, Draft unticked, Thickness display,
     a body left out and back, the pull direction picked and flipped, OK, Undo / Redo (gone,
     back and drawn), browser eye, reopen from

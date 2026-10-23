@@ -141,6 +141,11 @@ class LipPanel(Panel):
             advanced.addRow(label, field.widget)
             self.fields[key] = field
             self.labels[key] = label
+        # the wall at the edges and the shoulder (reveal) left beside the lip: read only
+        self.shoulder = QtWidgets.QLabel("")
+        self.shoulder.setObjectName("SciForgeLip_shoulder")
+        self.shoulder.setWordWrap(True)
+        advanced.addRow(self.shoulder)
         form.addRow(box)
         rule = self.rule or {}
         self.rule_label = QtWidgets.QLabel(
@@ -470,6 +475,7 @@ class LipPanel(Panel):
     def show_status(self):
         mate = plastic_lip.mate_of(self.target) if self.target is not None else None
         self.mate_label.setText(mate.Label if mate is not None else "(none)")
+        self.shoulder.setText(self._shoulder_text())
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
@@ -486,6 +492,23 @@ class LipPanel(Panel):
                 self.message.setText("Note: " + "; ".join(notes))
                 return
         self.message.setText("⚠ " + text if text else "")
+
+    def _shoulder_text(self):
+        """ "Wall at the edges: 2.00 mm; shoulder beside the lip: 1.00 mm" (the reveal width
+        when the lip is on the edges' body), or "" when there is nothing to measure."""
+        try:
+            if self.target is None or self.error:
+                return ""
+            wall = plastic_lip.rim_of(self.target).wall
+            if not wall:
+                return ""
+            text = "Wall at the edges: %.2f mm" % wall
+            kind = self.options["type"]
+            if kind == "lip" or (kind == "lip_and_groove" and not self.options["swap"]):
+                text += "; shoulder beside the lip: %.2f mm" % (wall - self.options["lip_width"])
+            return text
+        except Exception:
+            return ""
 
     # -- arrows ------------------------------------------------------------------------------------
     def _remove_arrows(self):

@@ -97,6 +97,11 @@ def lip_and_groove():
     h.check("the other body is the lid", p.mate_label.text() == "Lid", p.mate_label.text())
     h.check("no error", "⚠" not in ps.message(p), ps.message(p))
     h.check("two arrows (height, width)", set(p.arrows) == {"lip_height", "lip_width"})
+    h.check(
+        "the shoulder left beside the 1 mm lip on the 2 mm wall",
+        "Wall at the edges: 2.00 mm; shoulder beside the lip: 1.00 mm" in p.shoulder.text(),
+        p.shoulder.text(),
+    )
     h.shot("plastic2_lip_drafted")
     ps.ui.click(p.mate_field.button)
 
