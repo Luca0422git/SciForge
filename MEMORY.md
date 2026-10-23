@@ -40,9 +40,17 @@ fast-forward to the tested develop commit). So the tag is Luca's: `git tag scifo
 anywhere with a browser, a GitHub Codespace (repo > Code > Codespaces > Create codespace on
 Release; delete it afterwards). A future release session must say so at the START.
 
-**0.1.0-beta.2 (2026-10-23): tested develop `fe50c786` (CI run #261 green), `Release` moved to
-it by the session; waiting for Luca to push the tag `sciforge-v0.1.0-beta.2` on `fe50c786`**
-(the tag starts `sciforge-build.yml`, about 3 hours, which publishes the GitHub pre-release).
+**PUBLISHED 2026-10-23 21:25 UTC: SciForge 0.1.0-beta.2** (pre-release),
+https://github.com/Luca0422git/SciForge-Parametric-Design/releases/tag/sciforge-v0.1.0-beta.2, tag
+on `fe50c786` (= `Release`), build run #12 (Windows compile 2 h 16 min, Linux 1 h 22 min, no
+re-run needed). Core id `fd4a01850d`, the same as 0.1.0-beta: Update now from beta 1 is the 7 MB
+module-only update. Assets: installer 506 MB, portable .7z 428 MB, AppImage 826 MB, quick update,
+sciforge-release.json, SHA256SUMS.txt (the notes' checksums = GitHub's asset digests). Next:
+Luca's test (install over beta 1, Update now from beta 1), then the AI tools for wave 6.
+**Repo name**: the repository was renamed to SciForge-Parametric-Design; `update_core.REPO`, the
+release notes' links and `notes_url` still say `Luca0422git/SciForge`, which works only through
+GitHub's rename redirect (it breaks if a new repo named SciForge is ever created). Point them at
+the new name in the next release (beta 1 installs keep using the redirect).
 
 **Start here (2026-10-17):** read the newest session log ("Luca's improvement list").
 Every item of Luca's list (IMPROVEMENTS_AND_STUFF_TO_FIX.txt, 18 fixes + 3 additions) is
@@ -1654,6 +1662,10 @@ The session was started on `Release`.
   (Codespaces steps given; he may be at work without Git Bash). After that: watch the build
   (run #11 of beta 1 needed a re-run of a hung Windows job), check the release page's files
   and SHA256SUMS, and "Update now" from 0.1.0-beta (a module-only update: same core id).
+- Luca pushed the tag from a GitHub Codespace (18:43 UTC). Build run #12: quick checks, Linux
+  build + its tests, Windows build + its golden models, release job: all green; **published
+  21:25 UTC** (see the top of this file). The build's 6 scenario parts on the AppImage were
+  still running then (they do not hold the release back).
 
 ### Session log: wave 6, SHEET METAL + PLASTIC tabs, SURFACE complete (`develop`, 2026-10-23 night)
 
