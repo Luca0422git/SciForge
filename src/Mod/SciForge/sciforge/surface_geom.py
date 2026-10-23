@@ -1771,6 +1771,8 @@ def offset_faces(faces, distance, offset_type="sharp"):
             result = piece.makeOffsetShape(d, 1e-6, False, False, 0, join, False)
             if join == 2 and (result.isNull() or not result.Faces or not result.isValid()):
                 raise ValueError("the sharp corners do not close")
+            if join == 2 and _runaway(piece, result, d):
+                raise ValueError("OpenCASCADE could not close the sharp corners")
         except Exception as exc:
             if join == 2:
                 raise SurfaceError(
@@ -1783,6 +1785,24 @@ def offset_faces(faces, distance, offset_type="sharp"):
             )
         out.extend(result.Faces)
     return surface_result(sew(out))
+
+
+# How far past the picked faces a sharp offset may reach, in offset distances: a sharp corner
+# carries the faces on by d / cos(half the turn between them), 11.5 d at a 170 degree turn.
+SHARP_REACH = 25.0
+
+
+def _runaway(piece, result, d):
+    """OpenCASCADE's intersection join can come back "valid" with faces carried on without
+    end where it could not close a corner (measured in FreeCAD 1.1.4: the top of a box whose
+    top edges are filleted, offset 2 mm, gave faces 2e7 mm across). True when the result
+    reaches farther past the faces than any sharp corner does."""
+    try:
+        box = piece.BoundBox
+        box.enlarge(SHARP_REACH * abs(d) + 1e-3)
+        return not box.isInside(result.BoundBox)
+    except Exception:
+        return False
 
 
 # -- CREATE: Thicken -------------------------------------------------------------------------------
@@ -2361,6 +2381,38 @@ def _speed(surface, u, v, along_u):
     return max((du if along_u else dv).Length, 1e-9)
 
 
+def _grow_by(surface, u, v, along_u, sign, d):
+    """The parameter step past (u, v) (sign -1: below it, +1: above) that carries the surface
+    on `d` mm along its iso-line. A free-form surface carried past its bounds (or a spline
+    revolved or extruded) speeds up or slows down, so the step is measured along the curve,
+    not taken from the speed at the edge (measured: an extruded spline carried on by the
+    edge's speed went 14.0 mm for 10)."""
+
+    def at(t):
+        x = sign * t
+        return surface.value(u + x, v) if along_u else surface.value(u, v + x)
+
+    def length(t, n=64):
+        total, last = 0.0, at(0.0)
+        for i in range(1, n + 1):
+            here = at(t * i / float(n))
+            total += (here - last).Length
+            last = here
+        return total
+
+    first = d / _speed(surface, u, v, along_u)
+    t = first
+    try:
+        for _i in range(25):
+            reached = length(t)
+            if reached < 1e-12 or abs(reached - d) <= 1e-7 * max(1.0, d):
+                break
+            t *= d / reached
+    except Exception:
+        return first
+    return t if t > 0 and math.isfinite(t) else first
+
+
 def _grow_rectangle(face, picked, d):
     """Natural Extend of a face that is its surface's parameter rectangle: the rectangle
     made bigger past each picked side by about `d` mm along the surface. Analytic surfaces
@@ -2384,13 +2436,13 @@ def _grow_rectangle(face, picked, d):
         except Exception:
             return None
         if abs(u - u0) < 1e-6:
-            grow[0] = d / _speed(surface, u0, v, True)
+            grow[0] = _grow_by(surface, u0, v, True, -1.0, d)
         elif abs(u - u1) < 1e-6:
-            grow[1] = d / _speed(surface, u1, v, True)
+            grow[1] = _grow_by(surface, u1, v, True, 1.0, d)
         elif abs(v - v0) < 1e-6:
-            grow[2] = d / _speed(surface, u, v0, False)
+            grow[2] = _grow_by(surface, u, v0, False, -1.0, d)
         elif abs(v - v1) < 1e-6:
-            grow[3] = d / _speed(surface, u, v1, False)
+            grow[3] = _grow_by(surface, u, v1, False, 1.0, d)
         else:
             return None
     # every edge of the face must lie on the rectangle (a trimmed face is not one)
