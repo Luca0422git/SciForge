@@ -127,7 +127,8 @@ did not. What it found and fixed, in plain words for Luca:
 New tests: scenarios `plastic_qa_rules` and `plastic_qa_tools` (an empty design, reassigning
 a rule and Ctrl+Z, Esc in Manage after a followed edit, renaming a rule, the zero-draft rule,
 Boss on a face then Esc, a drafted Rest then Esc, a boss edited after save and reopen, a rule
-assigned after reopen, Flip with a picked body, the inch rule), golden
-`plastic_boss_major_draft`, four unit tests. Gaps found but not fixed are in the parity doc's
-Known gaps (rules of nested components; the plastic library settings are not reset between
-scenarios by the test harness: every plastic scenario resets them itself in its setup).
+assigned after reopen, Flip with a picked body, the inch rule, a lid in its own component
+with its own rule), golden `plastic_boss_major_draft`, three unit tests (24 in all). Gaps
+found but not fixed are in the parity doc's Known gaps (rules of nested components; the
+plastic library settings are not reset between scenarios by the test harness: every plastic
+scenario resets them itself in its setup).
