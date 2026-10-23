@@ -5,9 +5,10 @@ boss point, in a component of its own, made from the boss's settings (no Qt).
 The screw's head sits on the head side's seat: the counterbore's floor, the countersink
 (flush with the outside), or the outside face for a simple hole. Its shank (the thread
 diameter) runs from there towards the thread side and stops 0.5 mm short of the pilot hole's
-bottom (Length 0 = that, Auto), or is the Length typed. Head types: Pan (a round head 0.6 d
-high), Flat (countersunk, its cone the countersink's angle), Hex (across flats = the
-counterbore's diameter - 0.5). The thread is not modelled (Fusion's fastener carries it as a
+bottom (Length 0 = that, Auto), or is the Length typed. Head types: Pan (a flat-topped head 0.6 d
+high), Round (a dome as wide and as high), Flat (countersunk, its cone the countersink's
+angle), Hex (across flats = the counterbore's diameter - 0.5), Hex Washer (a hex on a washer
+0.15 d thick). The thread is not modelled (Fusion's fastener carries it as a
 cosmetic thread). The step (``SciForge::BossFastener``) lives in the fastener component's
 body and follows the boss: edit the boss, the screws move with it.
 
@@ -23,7 +24,7 @@ from . import bodies, curves, warn
 
 FP_TYPE = "PartDesign::FeaturePython"
 TYPE = "BossFastener"
-HEADS = ("pan", "flat", "hex")
+HEADS = ("pan", "round", "flat", "hex", "hex_washer")
 DEFAULTS = {"create": False, "head": "pan", "length": 0.0}
 
 
@@ -105,6 +106,22 @@ def screw_shapes(pb, options, head_frames, head_base, thread_frames, thread_base
             height = 0.6 * d
             if f["head"] == "pan":
                 head = Part.makeCylinder(width / 2.0, height, seat_point, up)
+            elif f["head"] == "round":
+                # a dome: the cap of a sphere, the head's width across, 0.6 d high
+                r = width / 2.0
+                radius = (r * r + height * height) / (2.0 * height)
+                ball = Part.makeSphere(radius, seat_point + up * (height - radius))
+                slab = Part.makeCylinder(r + 1.0, height + 0.01, seat_point, up)
+                head = ball.common(slab)
+            elif f["head"] == "hex_washer":
+                # a hex on a thin washer the width of its corners
+                washer_t = 0.15 * d
+                r_corner = width / 2.0 / math.cos(math.radians(30.0))
+                washer = Part.makeCylinder(r_corner, washer_t, seat_point, up)
+                hexagon = _hex_prism(
+                    frame, seat_point + up * washer_t, up, width, height - washer_t
+                )
+                head = washer.fuse(hexagon)
             else:
                 head = _hex_prism(frame, seat_point, up, width, height)
             screw = head.fuse(shank)

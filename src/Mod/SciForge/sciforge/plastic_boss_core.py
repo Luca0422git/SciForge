@@ -170,7 +170,7 @@ def apply_rule(options, rule):
     return out
 
 
-FASTENER_HEADS = ("pan", "flat", "hex")
+FASTENER_HEADS = ("pan", "round", "flat", "hex", "hex_washer")
 FASTENER_DEFAULTS = {"create": False, "head": "pan", "length": 0.0}
 
 

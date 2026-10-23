@@ -93,7 +93,25 @@ def hexed():
     h.check("hex heads by hand (%.3f)" % HEX, ps.near(v, HEX, 1e-6), v)
 
 
+def round_head():
+    p = ps.boss_panel()
+    ps.choose(p.head, "Round")
+
+
+def rounded():
+    p = ps.boss_panel()
+    ps.settle(p)
+    found = fasteners()
+    cap = math.pi * 1.8**2 * (3 * 3.4 - 1.8) / 3  # a dome r 3 x 1.8: sphere r 3.4
+    want = 2 * (cap + math.pi * 1.5**2 * 20.55)
+    v = found[0].Shape.Volume if found else 0
+    h.check("round heads by hand (%.3f)" % want, ps.near(v, want, 1e-6), v)
+    ps.choose(p.head, "Hex")
+
+
 def ok():
+    p = ps.boss_panel()
+    ps.settle(p)
     ps.ok()
 
 
@@ -157,6 +175,8 @@ h.run(
         screws,
         hex_head,
         hexed,
+        round_head,
+        rounded,
         ok,
         done,
         edit,

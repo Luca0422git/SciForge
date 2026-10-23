@@ -84,9 +84,9 @@ rule when the component has none, and say so in the dialog.
 | Diameter, draft (wider towards the root), hole diameter and draft, major diameter and depth, countersink angle (90) | Same | A |
 | Alignment Step None / In / Out with diameter, depth, draft | Same. Defaults: Side 1 In with a recess of Side 2's diameter + 2 x clearance (Fusion's sample sizes the recess to the mate's diameter), Side 2 Out of its own diameter (its tip carried on 1 mm - clearance into the recess) | A (critic C8), G (clearance, Out) |
 | Offset Clearance pulls each side's tip back from the parting face | Same (rule Clearance / 2 per side) | A, G (default) |
-| Root Radius, Tip Radius | Same (root: the rule's Nominal Radius; tip: 0) | A, G (defaults) |
+| Root Radius, Tip Radius, Hole Start / End Radius | Same (root: the rule's Nominal Radius; the others 0); the hole's start radius rounds its mouth (a simple hole; the head side's hole at the tip), the end radius its blind bottom | A, G (defaults) |
 | Ribs per side: Quantity, Total Angle (360), Rotation from the sketch X, Thickness, Draft, Outer Draft, Length from the axis or To Next, Step Offset, a Chamfer (angle, size) or Fillet top corner; a To Next rib is web-shaped | Same; the Side 1 / Side 2 check boxes switch ribs on (Fusion's rib shape None = no ribs) | A (critic C2, CP.2 #6) |
-| Fastener: Create Component (a screw at every boss, in a component of its own), Head Type, Drive, Thread Form, Length, material / finish text | Create Component with Head Type Pan / Flat (countersunk) / Hex and Length (0 = Auto: 0.5 mm short of the pilot hole's bottom); the head sits on the counterbore's floor, in the countersink, or on the outside face; the screws follow the boss (editing them opens the boss) | A (section), G (sizes) |
+| Fastener: Create Component (a screw at every boss, in a component of its own), Head Type, Drive, Thread Form, Length, material / finish text | Create Component with Head Type Pan / Round / Flat (countersunk) / Hex / Hex Washer and Length (0 = Auto: 0.5 mm short of the pilot hole's bottom); the head sits on the counterbore's floor, in the countersink, or on the outside face; the screws follow the boss (editing them opens the boss) | A (section), G (sizes) |
 | Defaults from the screw size (Thread Diameter) | M3 by default: head side clearance hole d + 0.4, outer 2.5 d + 2.5, counterbore 2 d + 0.5, material under the head = Thickness; thread side pilot 0.8 d, outer 2.5 d, floor Thickness / 2; changing the Thread Diameter re-sizes both sides | G |
 
 ### Rest (PLASTIC > CREATE)
@@ -111,23 +111,24 @@ rule when the component has none, and say so in the dialog.
 |---|---|---|
 | Scenario | `plastic_rules` (67 checks) | Assign (lists, values, library rule copied, material), undo / redo, Shell / Draft / Rib / thin Extrude open with the rule's values, Manage (edit with a refused range, Save, in-use and default rules not deleted, New, Copy, Set As Default, Esc drops design changes), a component's own rule picked by clicking its body, Rule Fillet's type and radius, save and reopen |
 | Scenario | `plastic_boss` (53 checks) | enclosure and lid, Boss waits, points from the sketch's browser row, both sides' volumes by hand, ribs turned 45, a too wide hole refused (OK waits), OK, undo / redo, edit from the timeline with Flip then Esc, a second Boss cancelled with Esc, save and reopen |
-| Scenario | `plastic_boss_face` (28 checks) | Boss and Rest in an empty design (nothing opens), a boss by clicking the floor (point sketch, standoff by hand), a second point, a body picked for Side 1 that its direction does not meet (refused) then back to Auto, another face refused, OK, undo |
-| Scenario | `plastic_boss_fastener` (19 checks) | Create Component: a Fastener component with pan-head screws (volume by hand, clear of the lid), Hex heads, OK, edit and untick (the component goes), undo |
+| Scenario | `plastic_boss_face` (30 checks) | Boss and Rest in an empty design (nothing opens), a boss by clicking the floor (point sketch, standoff by hand), a second point, a body picked for Side 1 that its direction does not meet (refused) then back to Auto, another face refused, OK, undo |
+| Scenario | `plastic_boss_fastener` (20 checks) | Create Component: a Fastener component with pan-head screws (volume by hand, clear of the lid), Hex and Round heads, OK, edit and untick (the component goes), undo |
 | Scenario | `plastic_rest` (39 checks) | a shelled half pipe, Rest waits, a click in the profile, the pedestal by hand, the Body box (picked, then Auto), thicker wall, Flip refused, OK, undo / redo, edit from the timeline and Esc, save and reopen |
 | Golden | `plastic_boss_enclosure` | both sides, counterbore and alignment, no drafts / fillets: exact |
 | Golden | `plastic_rest_cylinder` | a solid pedestal on a round bar |
 | Golden | `plastic_rule_boss_wall` | a rule edited to 2.5 mm drives a Constant Thickness boss |
 | Golden | `plastic_rule_edit_moves_boss` | editing the rule after the boss moves it |
 | Golden | `plastic_boss_fastener` | the enclosure's bosses with their pan-head screws (exact) |
+| Golden | `plastic_boss_hole_radii` | the pilot holes' mouth and bottom rounded (Pappus, exact) |
 | Unit | `test_plastic_core.py` (17) | the library against the research table, inch rules, expressions, refusals, describe, materials; Boss defaults, rule links, refusals, rib angles; the PLASTIC tab's wiring |
 
 ## Known gaps (not built, with the reason)
 
-- **Boss fastener details**: Round / Round Washer / Oval / Hex Washer heads, Drive Type,
+- **Boss fastener details**: Round Washer and Oval heads, Drive Type,
   Thread Form and Thread Angle, the material and finish text, and a modelled thread (the
   screw is plain; Fusion carries the thread cosmetically). Fusion's fastener has no API
   (critic CP.2 #10) so the sizes are SciForge's.
-- **Boss blends beyond root and tip**: hole start / end radius, counterbore tip / root
+- **Boss blends beyond root, tip and the hole's start / end radius**: counterbore tip / root
   radius, alignment tip / root radius, rib outer fillet and rib base fillet as a separate
   value (the ribs' base takes the root radius in the same fillet).
 - **Per-rib extent** (each rib By Length / To Next / Suppressed): one extent for all ribs of a

@@ -131,7 +131,7 @@ def check_steps(model):
             for key, value in fastener.items():
                 if key == "create" and not isinstance(value, bool):
                     schema._fail(here, "'fastener.create' is true or false")
-                elif key == "head" and value not in ("pan", "flat", "hex"):
+                elif key == "head" and value not in ("pan", "round", "flat", "hex", "hex_washer"):
                     schema._fail(here, "'fastener.head' is pan, flat or hex")
                 elif key == "length":
                     schema._check_number(here + ".fastener.length", value)
@@ -140,7 +140,7 @@ def check_steps(model):
         elif op == "sf_boss_fastener":
             if seen.get(step["boss"]) != "sf_boss":
                 schema._fail(here, "'boss' names an earlier sf_boss step")
-            if step.get("head", "pan") not in ("pan", "flat", "hex"):
+            if step.get("head", "pan") not in ("pan", "round", "flat", "hex", "hex_washer"):
                 schema._fail(here, "'head' is pan, flat or hex")
             if "length" in step:
                 schema._check_number(here + ".length", step["length"])

@@ -23,7 +23,7 @@ SOLID dialogs, Boss, Rest and Rule Fillet. Spec and gaps: `docs/sciforge/parity/
 - MODIFY > **Rule Fillet**: the Fillet dialog in its Rule Fillet type, the radius from the
   rule.
 - Boss > **Fastener > Create Component**: real (plain) screws at every boss, in a "Fastener"
-  component; Pan, Flat or Hex heads; they follow the boss.
+  component; Pan, Round, Flat, Hex or Hex Washer heads; they follow the boss.
 - The browser shows "Plastic Rule: <name>" under Document Settings; click it to assign.
 
 **Commits**: a807084 (Boss / Rest geometry), f7c8248 (dialogs, commands, defaults, tab),
@@ -75,9 +75,9 @@ function beside sm-forming's `_settings_rows`, one call, one click branch, two m
 one MENUS row). `sf/sm-forming` is merged into this branch (7f7e786) for that hook. No
 FreeCAD core change.
 
-**Tests**: scenarios `plastic_rules` (67), `plastic_boss` (53), `plastic_boss_face` (28),
-`plastic_boss_fastener` (19), `plastic_rest` (39) pass; golden `plastic_boss_enclosure`,
-`plastic_boss_fastener`, `plastic_rest_cylinder`, `plastic_rule_boss_wall`,
+**Tests**: scenarios `plastic_rules` (67), `plastic_boss` (53), `plastic_boss_face` (30),
+`plastic_boss_fastener` (20), `plastic_rest` (39), `ribbon_sweep` with SWEEP_TABS=plastic (114) pass; golden `plastic_boss_enclosure`,
+`plastic_boss_fastener`, `plastic_boss_hole_radii`, `plastic_rest_cylinder`, `plastic_rule_boss_wall`,
 `plastic_rule_edit_moves_boss` pass (exact, analytic); existing scenarios of the touched
 dialogs pass (shell_draft 103, shell_draft_draft 85, sweep_loft_rib 68, sweep_loft_web 57,
 gaps_thin_extrude 215, extrude_feel_box 108, fillet2_rule 30, sheetmetal_rules 60,

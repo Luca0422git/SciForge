@@ -32,7 +32,13 @@ STEP_LABELS = [("None", "none"), ("In", "in"), ("Out", "out")]
 # Fusion's rib shapes: chamfered or filleted top corner (its None means no ribs: the Side
 # check boxes here)
 RIB_PROFILE_LABELS = [("Chamfer", "chamfer"), ("Fillet", "fillet")]
-HEAD_LABELS = [("Pan", "pan"), ("Flat (countersunk)", "flat"), ("Hex", "hex")]
+HEAD_LABELS = [
+    ("Pan", "pan"),
+    ("Round", "round"),
+    ("Flat (countersunk)", "flat"),
+    ("Hex", "hex"),
+    ("Hex Washer", "hex_washer"),
+]
 RIB_EXTENT_LABELS = [("Length", "length"), ("To Next", "to_next")]
 
 SIDE_FIELDS = [
