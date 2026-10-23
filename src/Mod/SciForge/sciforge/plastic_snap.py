@@ -538,11 +538,7 @@ def hook_base(shape, origin, axes, options, k=0):
     ex, ey, ez = axes
     centre = origin - ex * (0.5 * options["thickness"])
     if options["extent"] == "distance":
-        hit = ray_hit(shape, centre - ez * 1e-3, ez * -1.0)
-        margin = 0.0
-        if hit is not None and hit[0] <= options["extent_distance"] + 1e-6:
-            margin = 0.0
-        return options["extent_distance"], margin
+        return options["extent_distance"], 0.0
     hit = ray_hit(shape, centre + ez * 1e-3, ez * -1.0)
     if hit is None:
         raise SnapError(
@@ -666,7 +662,9 @@ def find_hook_body(doc, sketch, options, indices=()):
         return None
     origin, axes = placed[0]
     ex, ey, ez = axes
-    centre = origin - ex * (0.5 * options["thickness"]) + ez * 1e-3
+    # from the parting plane itself: a start a hair on the other side would begin inside a
+    # body touching the plane from there (a panel under a lid) and take it for the hook's
+    centre = origin - ex * (0.5 * options["thickness"])
     best, best_d = None, None
     for body in bodies.solid_bodies(doc):
         try:
