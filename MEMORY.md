@@ -1478,11 +1478,13 @@ Control", `parity/timeline-browser.md` "The 3D view's hover lights the browser r
 #### Tests
 - Unit: all 1830 OK (new in it: `test_data_panel_core` 20, `test_opacity_core` 8,
   `test_browser_core.HoverTests` 6). `check_install.sh`: all 1607 files installed.
-- Scenarios (real FreeCAD 1.1.4 under xvfb): `data_panel_fusion` PASS (59, +1 check added after),
-  `browser_opacity_hover` PASS (46); on the new panel the old `versions_data_panel`,
-  `polish2_data_panel`, `exchange2_link`, `exchange2_step_open` PASS; also `bodies_combine`,
-  `components_basic`, `components2_move`, `components2_copy` PASS. The full sweep runs on
-  GitHub (CI on develop).
+- Scenarios (real FreeCAD 1.1.4 under xvfb), one run on the pushed code, all PASS:
+  `data_panel_fusion` (60), `browser_opacity_hover` (46), and on the new panel / browser the
+  old `versions_data_panel`, `polish2_data_panel`, `exchange2_link`, `exchange2_step_open`,
+  `timeline_browser`, `timeline_browser_2`, `timeline_browser_qa`, `bodies_combine`,
+  `components_basic`, `components2_move`, `components2_copy`. The full sweep runs on GitHub.
+- Quick update for Luca: `SciForge-quick-update-5e4cb76.zip` (make_quick_update.sh + a
+  WHATS_NEW.txt in plain words).
 
 #### Open
 - Not checked by Luca on Windows. Not built: Fusion's Active Component Visibility, People /
