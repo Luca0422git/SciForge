@@ -62,7 +62,7 @@ class RibPanel(Panel):
         self.options = dict(rib.DEFAULTS)
         self.options["kind"] = kind
         if feature is None:
-            # SCIFORGE (plastic-1): a component with a plastic rule: 0.6 x its wall
+            # plastic-1: a component with a plastic rule: 0.6 x its wall
             plastic.apply_defaults(self.options, self.body, "rib")
         self.error = ""
         self.dirty = False
@@ -523,7 +523,7 @@ class RibPanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
-        plastic.remember_links(feature, "rib", self.body)  # SCIFORGE (plastic-1)
+        plastic.remember_links(feature, "rib", self.body)  # plastic-1: rule links
         rib.hide_sketches(self.refs)
         self._shown = []
         self.cleanup()

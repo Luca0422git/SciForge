@@ -574,7 +574,7 @@ class ExtrudePanel(Panel):
             # type a distance (Luca, R5). extrude.DEFAULTS keeps 10 for scripts.
             self.options["distance"] = 0.0
             self.options["distance2"] = 0.0
-            # SCIFORGE (plastic-1): a thin extrude in a component with a plastic rule
+            # plastic-1: a thin extrude in a component with a plastic rule
             plastic.apply_defaults(self.options, self.body, "extrude")
         self.user_picked_operation = feature is not None
         self.error = ""
@@ -2636,7 +2636,7 @@ class ExtrudePanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
-        plastic.remember_links(feature, "extrude", self.body)  # SCIFORGE (plastic-1)
+        plastic.remember_links(feature, "extrude", self.body)  # plastic-1: rule links
         # Fusion hides the profile's sketch once the extrude is made (inside this step:
         # Undo shows it again). A sketch shown for the edit is hidden again after the step
         # (_close), not in it.
