@@ -21,11 +21,15 @@ SOLID dialogs, Boss, Rest and Rule Fillet. Spec and gaps: `docs/sciforge/parity/
   wall under it.
 - MODIFY > **Rule Fillet**: the Fillet dialog in its Rule Fillet type, the radius from the
   rule.
+- Boss > **Fastener > Create Component**: real (plain) screws at every boss, in a "Fastener"
+  component; Pan, Flat or Hex heads; they follow the boss.
+- The browser shows "Plastic Rule: <name>" under Document Settings; click it to assign.
 
 **Commits**: a807084 (Boss / Rest geometry), f7c8248 (dialogs, commands, defaults, tab),
 c477760 / d506fba / 59026c1 (scenarios), d103e0f (golden), 3c708d7 (core split, unit tests),
-f3d4434 (critic pass), 1599346, 1c99d05, d22b14a (Boss on a face), then the Side bodies and
-docs.
+f3d4434 (critic pass), 1599346, 1c99d05, d22b14a (Boss on a face), e0764ea (Side bodies,
+docs), 45ca6b0 (fastener), 715b74d (merge of `sf/sm-forming` for its browser settings-row
+hook), 98a1d05 (Plastic Rule row).
 
 **FreeCAD facts and traps found**
 
@@ -64,15 +68,21 @@ library and use the user's default rule.
 
 **Shared files touched** (one guarded line each, plus an import line): `shell_ui.py`,
 `draft_ui.py`, `rib_ui.py`, `extrude_ui.py` (`plastic.apply_defaults`); `ribbon_config.py`
-(the five plastic-1 lines only). No FreeCAD core change.
+(the five plastic-1 lines only); `browser_ui.py` / `browser_core.py` (a `_plastic_rows`
+function beside sm-forming's `_settings_rows`, one call, one click branch, two menu entries,
+one MENUS row). `sf/sm-forming` is merged into this branch (7f7e786) for that hook. No
+FreeCAD core change.
 
-**Tests**: scenarios `plastic_rules` (63), `plastic_boss` (53), `plastic_boss_face`,
-`plastic_rest` (32) pass; golden `plastic_boss_enclosure`, `plastic_rest_cylinder`,
-`plastic_rule_boss_wall`, `plastic_rule_edit_moves_boss` pass (exact, analytic);
+**Tests**: scenarios `plastic_rules` (66), `plastic_boss` (53), `plastic_boss_face` (28),
+`plastic_boss_fastener` (19), `plastic_rest` (32) pass; golden `plastic_boss_enclosure`,
+`plastic_boss_fastener`, `plastic_rest_cylinder`, `plastic_rule_boss_wall`,
+`plastic_rule_edit_moves_boss` pass (exact, analytic); existing scenarios of the touched
+dialogs pass (shell_draft 103, shell_draft_draft 85, sweep_loft_rib 68, sweep_loft_web 57,
+gaps_thin_extrude 215, extrude_feel_box 108, fillet2_rule 30, sheetmetal_rules 60,
+timeline_browser 92);
 `test_plastic_core.py` (17) passes; `--only base`: unit 1858 OK, golden 444 pass + 2 xfail
 (existing).
 
-**Open** (see the parity doc's Known gaps): Boss fastener component, more boss blends,
-per-rib extents, rule links in the SOLID steps (defaults only), Thicken / Emboss defaults,
-Rib draft, a "Plastic Rule" row in the browser (would share sm-forming's `browser_ui.py`
-lines), the Shell Sharp half-pipe finding.
+**Open** (see the parity doc's Known gaps): more fastener heads / drives / thread, more
+boss blends, per-rib extents, rule links in the SOLID steps (defaults only), Thicken /
+Emboss defaults, Rib draft, the Shell Sharp half-pipe finding.
