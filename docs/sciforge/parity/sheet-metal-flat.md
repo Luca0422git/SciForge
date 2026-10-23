@@ -124,7 +124,7 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 - Scenarios (real clicks): `flatpattern_l_bracket`, `flatpattern_u_channel_dxf`,
   `flatpattern_unfold_refold`, `flatpattern_rip_convert`, `flatpattern_component_rip`,
   `flatpattern_refusals`, `flatpattern_environment`, `flatpattern_flange`,
-  `flatpattern_drawing`.
+  `flatpattern_drawing`, `flatpattern_tray`.
 - Unit tests: `SciForgeTests/unit/test_flatpattern_core.py` (DXF writer and read-back, the
   bend maths of the flat sizes, the FLAT PATTERN tab, the browser node, the golden format).
 
@@ -151,6 +151,9 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   made (sm-forming's gap), so an Unfold / Refold does not show it; Tangent placement and the
   weld shapes are not built; flange-level relief overrides are not read (the body's rule is).
   Bend reliefs are whatever the folded part has (sm-forming's flanges cut them).
+- **sm-more's Brake Form lofted flange** meets in sharp folds (no bend radius): the flat
+  pattern refuses it naming a sharp edge; with bends of the rule's radius between its facets
+  it would lay flat. Die Form (curved two ways) is refused as not developable.
 - **Along Edge between two walls** cuts symmetrically about the corner's bisector plane;
   Fusion's exact gap placement is not documented (research §5 item 6).
 - **The DXF is R12**: a SPLINE entity in an R12 file is read by FreeCAD, LibreCAD and most
