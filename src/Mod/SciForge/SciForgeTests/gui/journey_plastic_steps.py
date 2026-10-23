@@ -301,7 +301,7 @@ def lid_steps():
 
 
 # -- 2. the plastic rule --
-def assign_steps(label, rule="ABS 2 mm"):
+def assign_steps(label, rule="ABS 2 mm", check=True):
     def open_assign():
         tab("plastic")
         Gui.Selection.clearSelection()
@@ -351,6 +351,9 @@ def assign_steps(label, rule="ABS 2 mm"):
             plastic.assigned_rule_name(doc(), part) == rule,
             plastic.assigned_rule_name(doc(), part),
         )
+        h.check("%s: not a timeline step" % label, not named(r".*Rule.*"), titles())
+        if not check:
+            return
         b = body_of(label)
         h.check("%s: rule thickness 2" % label, plastic.default_for(b, "thickness") == 2.0)
         h.check("%s: ABS" % label, material.key_of(b) == "abs", material.key_of(b))
@@ -359,7 +362,6 @@ def assign_steps(label, rule="ABS 2 mm"):
             [r["name"] for r in plastic.design_rules(doc())] == [rule],
             [r["name"] for r in plastic.design_rules(doc())],
         )
-        h.check("%s: not a timeline step" % label, not named(r".*Rule.*"), titles())
 
     return [
         step(open_assign, "%s_assign" % label),
@@ -451,16 +453,11 @@ def shell_steps():
         h.check("Base shown again", cs.component("Base").Visibility)
         # the components' eyes show back what they hid: not their origin planes, nor the
         # sketches the extrudes hid
-        extras = [
-            o.Label
-            for o in doc().Objects
-            if o.ViewObject is not None
-            and o.ViewObject.Visibility
-            and (
-                o.TypeId == "Sketcher::SketchObject"
-                or o.TypeId in ("App::Plane", "App::Line", "App::Point")
-            )
-        ]
+        listed = [o for o in doc().Objects if o.TypeId == "Sketcher::SketchObject"]
+        for name in ("Base", "Lid"):
+            origin = getattr(cs.component(name), "Origin", None)
+            listed += list(getattr(origin, "OriginFeatures", []) or [])
+        extras = [o.Label for o in listed if o.ViewObject is not None and o.ViewObject.Visibility]
         h.check("no sketch or origin plane turned on by the eyes", not extras, extras)
         h.fit()
         ok_errors("shells")
@@ -811,6 +808,19 @@ def lip_steps():
     def shown():
         h.check("Lid shown again", cs.component("Lid").Visibility)
         ok_errors("lip")
+        tl.undo()
+
+    def lip_undone():
+        h.check("Ctrl+Z: no Lip", not lips(), [o.Label for o in lips()])
+        h.check("Ctrl+Z: Base without the lip", near(vol(base()), s["v_base_snap"]), vol(base()))
+        h.check("Ctrl+Z: Lid without the groove", near(vol(lid()), s["v_lid_snap"]), vol(lid()))
+        tl.redo()
+
+    def lip_redone():
+        h.check("Ctrl+Y: the Lip again", len(lips()) == 1)
+        h.check("Ctrl+Y: Base with the lip", near(vol(base()), s["v_base_lip"]), vol(base()))
+        h.check("Ctrl+Y: Lid with the groove", near(vol(lid()), s["v_lid_lip"]), vol(lid()))
+        ok_errors("lip redo")
 
     return [
         step(hide_lid, "lip_hide_lid"),
@@ -822,6 +832,10 @@ def lip_steps():
         step(made_preview, "lip_preview"),
         step(made, "lip_made"),
         step(shown, "lip_lid_shown"),
+        h.idle_step("lip_undo_idle"),
+        step(lip_undone, "lip_undone"),
+        h.idle_step("lip_redo_idle"),
+        step(lip_redone, "lip_redone"),
     ]
 
 
@@ -976,7 +990,42 @@ def advice_steps():
         same = near(vol(base()), s["v_base_rest"]) and near(vol(lid()), s["v_lid_rest"])
         h.check("Advice changed no body", same)
 
-    return [step(start, "advice_start"), step(looked, "advice_looked"), step(kept, "advice_kept")]
+    def pc_assigned():
+        """The Base gets "PC 2 mm" (Assign again): the part becomes polycarbonate, the Lid
+        keeps ABS, the 2 mm walls stay (same thickness), Design Advice names both rules."""
+        from sciforge import material, plastic, plastic_advice
+
+        h.check(
+            "Base: PC 2 mm", plastic.assigned_rule_name(doc(), cs.component("Base")) == "PC 2 mm"
+        )
+        h.check("Base: polycarbonate", material.key_of(base()) == "polycarbonate")
+        h.check("Lid: still ABS", material.key_of(lid()) == "abs", material.key_of(lid()))
+        h.check("Base: same walls", near(vol(base()), s["v_base_rest"]), vol(base()))
+        found = objects(plastic_advice.is_advice)
+        if found:
+            doc().recompute()
+            res = plastic_advice.results(found[0])
+            names = sorted({str(b.get("rule")) for b in res.get("bodies", [])})
+            h.check("Advice follows: both rules", names == ["ABS 2 mm", "PC 2 mm"], names)
+        ok_errors("PC assigned")
+        tl.undo()
+
+    def pc_undone():
+        from sciforge import material, plastic
+
+        name = plastic.assigned_rule_name(doc(), cs.component("Base"))
+        h.check("Ctrl+Z: Base back to ABS 2 mm", name == "ABS 2 mm", name)
+        h.check("Ctrl+Z: Base ABS again", material.key_of(base()) == "abs", material.key_of(base()))
+
+    return (
+        [step(start, "advice_start"), step(looked, "advice_looked"), step(kept, "advice_kept")]
+        + assign_steps("Base", "PC 2 mm", check=False)
+        + [
+            step(pc_assigned, "pc_assigned"),
+            h.idle_step("pc_undo_idle"),
+            step(pc_undone, "pc_undone"),
+        ]
+    )
 
 
 def build_steps():
