@@ -1,0 +1,93 @@
+{
+  "id": "surface4_merge",
+  "title": "Merge two faces in one plane of an extruded surface (a polyline 0-10-20 then a turn): 3 faces become 2",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "merge"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              10,
+              0
+            ],
+            [
+              20,
+              0
+            ],
+            [
+              20,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            5,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 300,
+        "faces": 3,
+        "solids": 0,
+        "source": "analytic",
+        "note": "three 10 x 10 faces"
+      }
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "m1",
+      "kind": "surface_merge",
+      "faces": {
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "count": 2
+      }
+    }
+  ],
+  "expect": {
+    "area": 300,
+    "faces": 2,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      20,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "the two faces in the plane y = 0 are one 20 x 10 face"
+  }
+}

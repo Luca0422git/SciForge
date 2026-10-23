@@ -1,0 +1,98 @@
+{
+  "id": "surface4_split_by_surface",
+  "title": "Split Body of a 40 x 30 x 20 box with a curved surface body (an arc extruded, half as deep as the box: Extend Splitting Tool carries it on)",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "split-body",
+    "hybrid"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 20
+    },
+    {
+      "op": "sf_curves",
+      "id": "s2",
+      "plane": "XZ",
+      "curves": [
+        {
+          "arc": [
+            20,
+            -40,
+            52,
+            40,
+            140
+          ]
+        }
+      ],
+      "comment": "z = -40 + sqrt(52^2 - (x - 20)^2): 8 at the box's sides, 12 in the middle"
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s2"
+        }
+      ],
+      "options": {
+        "distance": 7.5,
+        "direction": "symmetric"
+      }
+    },
+    {
+      "op": "split_body",
+      "id": "x1",
+      "body": "e1",
+      "tool": {
+        "body": "w1"
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "x1": {
+          "volume": 12825.455630044657,
+          "solids": 1
+        },
+        "w1": {
+          "solids": 0
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 24000,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      20
+    ],
+    "source": "analytic",
+    "note": "the two pieces make the box; the piece below the arc (kept by the box's body, the bigger one) is 30 x (20 x 48 + 52^2 asin(20/52) - 1600) = 12825.46"
+  }
+}

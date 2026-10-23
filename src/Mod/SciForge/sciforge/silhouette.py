@@ -243,6 +243,14 @@ def check(options):
     if options["operation"] not in OPERATIONS:
         raise SilhouetteError("Pick what to split.")
     if not bodies.has_solid(options["body"]):
+        from . import surfmod
+
+        if surfmod.is_surface_body(options["body"]):  # Fusion: one solid body (surface-4)
+            raise SilhouetteError(
+                "%s is a surface body: Silhouette Split works on a solid body. Split its faces "
+                "with Split Face, or make it a solid first (Stitch, Thicken)."
+                % options["body"].Label
+            )
         raise SilhouetteError("%s has no solid to split." % options["body"].Label)
 
 

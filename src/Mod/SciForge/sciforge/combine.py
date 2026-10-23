@@ -293,6 +293,13 @@ def check(options):
         raise CombineError("The target body cannot be one of its own tool bodies.")
     for body in ([target] if target is not None else []) + tools:
         if not bodies.has_solid(body):
+            from . import surfmod
+
+            if surfmod.is_surface_body(body):  # Fusion combines solids only (surface-4)
+                raise CombineError(
+                    "%s is a surface body: Combine works on solids. Join surfaces with Stitch "
+                    "(SURFACE > MODIFY), or make it a solid with Thicken." % body.Label
+                )
             raise CombineError("%s has no solid to combine." % body.Label)
 
 
