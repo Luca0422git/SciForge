@@ -210,4 +210,6 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   before it that renumbers faces can make it take another face; Tangent placement is
   also applied to Square corner reliefs (the research has it for Round only); a second
   converted body with the same thickness but another bend radius replaces the first one's
-  "Converted <T> mm" template rule.
+  "Converted <T> mm" template rule; a bend added to the part after its Bend Table was made
+  gets a table row but no identifier balloon, and a bend removed keeps its old balloon (the
+  refresh runs from a timer outside an undo step, so it only moves what exists).
