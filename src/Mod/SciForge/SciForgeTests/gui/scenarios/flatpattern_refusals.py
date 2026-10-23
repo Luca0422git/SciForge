@@ -5,6 +5,7 @@ Sheet Metal says there is no solid. A shelled box with sharp corners: Convert na
 edge and says to fillet it or rip it; OK waits; Esc closes, nothing changed. A stepped block
 (two thicknesses): "not one sheet of even thickness"; Cancel. Never a pop-up or a Report
 error."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 

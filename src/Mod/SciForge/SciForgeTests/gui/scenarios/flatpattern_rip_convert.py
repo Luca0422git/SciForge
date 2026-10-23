@@ -9,6 +9,7 @@ waits, Esc closes. Rip: Type Face, a click on the outside of the back-right corn
 corner is cut away (preview), OK; undo / redo. Create Flat Pattern from the front wall now
 lays it flat: 36 + 26 + 36 + 26 + 3 BA = 130.78584 long, 20 wide. Rip edited from the timeline
 keeps its type and face; Cancel."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -55,8 +56,14 @@ def click_front():
 def thickness_shown():
     fs.settle()
     p = fs.sheet_panel()
-    h.check("thickness 1.000 mm shown", p is not None and p.thickness.text() == "1.000 mm", p and p.thickness.text())
-    h.check("thickness is read only (a label)", p is not None and not hasattr(p.thickness, "setValue"))
+    h.check(
+        "thickness 1.000 mm shown",
+        p is not None and p.thickness.text() == "1.000 mm",
+        p and p.thickness.text(),
+    )
+    h.check(
+        "thickness is read only (a label)", p is not None and not hasattr(p.thickness, "setValue")
+    )
     h.check("4 bends found", "4 bend" in fs.message(), fs.message())
     h.check("Template Rule first", p is not None and p.rule.currentText() == "Template Rule")
     h.check("matching thickness only by default", p is not None and p.matching.isChecked())
@@ -78,7 +85,11 @@ def converted():
     h.check("the body is sheet metal", sheetmetal.is_sheet_metal_body(body))
     h.check("its rule is 1 mm thick", fs.close(sheetmetal.rule_for_body(body)["thickness"], 1.0))
     titles = fs.timeline_titles()
-    h.check("Convert to Sheet Metal in the timeline", any(t.startswith("Convert to Sheet Metal") for t in titles), titles)
+    h.check(
+        "Convert to Sheet Metal in the timeline",
+        any(t.startswith("Convert to Sheet Metal") for t in titles),
+        titles,
+    )
     h.check("shape unchanged", fs.close(fs.volume(), s["volume"]), fs.volume())
 
 
@@ -95,7 +106,9 @@ def flat_click():
 def closed_refused():
     fs.settle()
     text = fs.message()
-    h.check("closed tube refused with the reason", "closes on itself" in text and "Rip" in text, text)
+    h.check(
+        "closed tube refused with the reason", "closes on itself" in text and "Rip" in text, text
+    )
 
 
 def closed_ok():
@@ -149,7 +162,11 @@ def rip_preview():
     h.check("corner face picked", p is not None and len(p.picks["face"]) == 1, p and p.picks)
     v = fs.volume()
     corner = (3.141592653589793 / 4) * 3 * 20
-    h.check("preview: the corner bend is cut away", fs.close(v, s["volume"] - corner), (v, s["volume"] - corner))
+    h.check(
+        "preview: the corner bend is cut away",
+        fs.close(v, s["volume"] - corner),
+        (v, s["volume"] - corner),
+    )
     h.check("no message", "⚠" not in fs.message(), fs.message())
     h.shot("1-rip")
 
@@ -203,7 +220,11 @@ def flat_again_ok():
 def flattened():
     fs.settle()
     bb = fs.flat_box()
-    h.check("ripped tube flat: 130.78584 long", bb is not None and fs.close(bb.XLength, fs.TUBE_FLAT), bb)
+    h.check(
+        "ripped tube flat: 130.78584 long",
+        bb is not None and fs.close(bb.XLength, fs.TUBE_FLAT),
+        bb,
+    )
     h.check("20 wide", bb is not None and fs.close(bb.YLength, 20), bb)
     h.check("3 bends", fs.flat() is not None and fs.flat().BendCount == 3)
     h.shot("2-flat")

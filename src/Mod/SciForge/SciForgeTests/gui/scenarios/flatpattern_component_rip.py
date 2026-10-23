@@ -7,6 +7,7 @@ bottom (20 mm3 gone), OK. Along Edge on a bend's tangent edge is refused ("rip t
 instead"). Create Flat Pattern from the right wall: 123 + 4 BA = 132.0478 long (the front
 wall in two halves 17.5 long), 4 bends; the Flat Pattern lives in the component and its
 browser row is under it."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -61,8 +62,12 @@ def click_bottom_edge():
 def points_picked():
     fs.settle()
     p = fs.sheet_panel()
-    h.check("point 1 on an edge", p is not None and p.pick("point1").startswith("Edge"), p and p.picks)
-    h.check("point 2 on an edge", p is not None and p.pick("point2").startswith("Edge"), p and p.picks)
+    h.check(
+        "point 1 on an edge", p is not None and p.pick("point1").startswith("Edge"), p and p.picks
+    )
+    h.check(
+        "point 2 on an edge", p is not None and p.pick("point2").startswith("Edge"), p and p.picks
+    )
     h.check("offsets shown for points", p is not None and p.offset1.widget.isVisible())
 
 
@@ -76,7 +81,9 @@ def type_offsets():
 def slot_preview():
     fs.settle()
     v = fs.volume()
-    h.check("a 1 mm slot down the front wall (20 mm3)", fs.close(v, s["volume"] - 20), (v, s["volume"]))
+    h.check(
+        "a 1 mm slot down the front wall (20 mm3)", fs.close(v, s["volume"] - 20), (v, s["volume"])
+    )
     h.check("no message", "⚠" not in fs.message(), fs.message())
     h.shot("1-rip-points")
 
@@ -146,7 +153,9 @@ def flat_made():
     bb = fs.flat_box(fp)
     h.check("flat 132.0478 long", bb is not None and fs.close(bb.XLength, FLAT), bb)
     h.check("4 bends", fp is not None and fp.BendCount == 4)
-    h.check("flat pattern in component Box", fp is not None and components.container_of(fp) is s["comp"])
+    h.check(
+        "flat pattern in component Box", fp is not None and components.container_of(fp) is s["comp"]
+    )
     h.shot("2-flat")
 
 
@@ -161,7 +170,11 @@ def browser_row():
     inside = comp is not None and any(
         c.get("kind") == "flat_pattern" for c in comp.get("children") or []
     )
-    h.check("its row is under the component", inside, comp and [c.get("kind") for c in comp.get("children") or []])
+    h.check(
+        "its row is under the component",
+        inside,
+        comp and [c.get("kind") for c in comp.get("children") or []],
+    )
 
 
 h.run(

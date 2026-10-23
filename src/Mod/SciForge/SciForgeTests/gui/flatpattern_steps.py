@@ -336,8 +336,6 @@ def redo():
 
 def browser_node(kind):
     """The browser's first node of this kind (a dict), or None."""
-    from sciforge import browser_core
-
     from SciForgeTests.gui import timeline_input as tl
 
     widget = tl.tree()

@@ -9,6 +9,7 @@ into the bend (it spans 2 / 1.44 rad there: (2 / 1.44) (2^2 - 1^2) / 2 * 10 remo
 Unfold ... Refold steps are one timeline group. Undo / redo; Refold with nothing unfolded
 says why and opens nothing; Edit the Unfold from the timeline (its picks come back),
 Cancel leaves the part as it was."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
@@ -43,7 +44,9 @@ def waiting():
     h.check("Unfold dialog open", p is not None and fs.dialog_open())
     text = fs.message()
     h.check("asks for the stationary face", "Stationary" in text, text)
-    h.check("Unfold All Bends off by default (Fusion)", p is not None and not p.all_bends.isChecked())
+    h.check(
+        "Unfold All Bends off by default (Fusion)", p is not None and not p.all_bends.isChecked()
+    )
     h.check("model unchanged while waiting", fs.close(fs.volume(), s["folded"]))
     fs.no_popups("Unfold")
 

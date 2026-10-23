@@ -536,9 +536,54 @@ def _check_loop(cur, other, edge, T):
         )
 
 
+def _opposite_area(solid, start, T, adj):
+    """Area of the sheet's far side: the faces walked (across tangent edges) from the face a
+    ray from the stationary face hits through the thickness. None when not found."""
+    p = inner_point(start)
+    n = normal_at(start, p)
+    far = p - n * T
+    found = None
+    for i, face in enumerate(solid.Faces):
+        if face.isSame(start):
+            continue
+        try:
+            if face.distToShape(Part.Vertex(far))[0] < 10 * LIN_TOL:
+                found = i
+                break
+        except Exception:
+            continue
+    if found is None:
+        return None
+    faces = solid.Faces
+    seen = {found}
+    queue = [found]
+    while queue:
+        cur = queue.pop(0)
+        for edge in faces[cur].Edges:
+            for other in adj.get(_edge_key(edge), []):
+                if other in seen or not _tangent(faces[cur], faces[other], edge):
+                    continue
+                seen.add(other)
+                queue.append(other)
+    return sum(faces[i].Area for i in seen)
+
+
 def _check_fill(solid, maps, T):
+    """The walls and bends found must hold the whole solid: an even sheet. Its volume is T x
+    the mean of its two sides' areas (exact for walls, bends, and side faces cut at an angle
+    through the thickness, like a mitre); without the far side, the slabs under the
+    stationary side."""
     want = solid.Volume
     have = sum(folded_slab_volume(m, T) for m in maps)
+    if abs(have - want) > max(1e-2, want * 2e-3):
+        try:
+            far = _opposite_area(solid, maps[0].face, T, _adjacency(solid))
+        except Exception:
+            far = None
+        if far is not None:
+            mean = T * (sum(m.face.Area for m in maps) + far) / 2.0
+            if abs(mean - want) <= max(1e-2, want * 2e-3):
+                return
     if abs(have - want) > max(1e-2, want * 2e-3):
         sharp = _sharp_corner(solid, maps, T)
         if sharp:
