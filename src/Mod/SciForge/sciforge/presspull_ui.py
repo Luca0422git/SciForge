@@ -22,7 +22,7 @@ before it would remove the body or cut it in two.
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, cut_preview, log, offset_type, preview, presspull
+from . import commands, cut_preview, live_shapes, log, offset_type, preview, presspull
 from . import presspull_core as core, taskui
 from . import ui_icon_path, value_limits, warn
 from .compat import QtCore, QtWidgets
@@ -145,13 +145,16 @@ WIP_NOTE = (
 )
 
 
-class PressPullPanel(Panel, value_limits.LimitedValues):
+class PressPullPanel(Panel, value_limits.LimitedValues, live_shapes.LivePanel):
     title = "Press Pull"
     icon = "press_pull"
     last = None  # the most recent panel (for tests and diagnostics)
     faces_only = False  # Offset Face: faces only (no fillets, no sketch areas)
     step_type = "PressPull"  # SciForgeType of the step made
     hint = "Click faces to push or pull, edges to fillet,\nor a fillet face to change its radius."
+    # While the arrow is dragged the moved faces follow it as a picture (live_shapes) and the
+    # exact solid is built once the mouse rests or is let go (taskui.Panel.schedule(settle))
+    LIVE_NAME = "Press Pull live picture"
 
     def __init__(self, doc, feature=None):
         super().__init__(doc, self.title if feature is None else "Edit %s" % self.title)
@@ -661,8 +664,18 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
             value = held
         self._apply_value(value)
 
-    def _apply_value(self, value):
+    def _apply_value(self, value, dragged=False):
         if self.target is None:
+            return
+        if dragged and self._modify is None and self.mode == "faces":
+            self.target.Distance = value
+            if self.dragger:
+                self.dragger.set_distance(value)
+            if self.live_show():
+                self._hide_cut_view()
+                self.schedule(settle=True)  # the exact solid once the mouse rests
+            else:
+                self.schedule()
             return
         if self._modify is not None:
             self._apply_modify(value)
@@ -709,7 +722,39 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
                     self.show_status()  # held at the limit: nothing to rebuild
                 return
         self.field.set_value(value)
-        self._apply_value(value)
+        self._apply_value(value, dragged=True)
+
+    # -- the live picture (live_shapes.OffsetPicture) ------------------------------------------
+    def live_key(self):
+        if self.mode != "faces" or self._modify is not None or self.base is None:
+            return None
+        if not self.names or self.formula_error:
+            return None
+        return value_limits.make_key("presspull-live", self.base.Shape, list(self.names))
+
+    def live_make(self):
+        body = self.base.getParentGeoFeatureGroup()
+        placement = body.getGlobalPlacement() if body is not None else None
+        return [live_shapes.OffsetPicture(self.base.Shape, list(self.names), placement)]
+
+    def live_values(self):
+        return {"distance": float(self.field.value())}
+
+    def live_hide_objects(self):
+        return [self.target]
+
+    def live_ghost_objects(self):
+        return [self.base]
+
+    def live_colors(self):
+        return live_shapes.colors(self.target if self.target is not None else self.base)
+
+    def _hide_cut_view(self):
+        if self.cut_view is not None:
+            try:
+                self.cut_view.clear()  # the red of the last exact value: back with the next
+            except Exception:
+                pass
 
     # -- values past what works (value_limits.LimitedValues) ------------------------------------
     def _limit_blend(self):
@@ -847,6 +892,13 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
     def _recompute(self):
         if self._closed:
             return  # a change that arrived as the dialog closed
+        try:
+            self._recompute_exact()
+        finally:
+            self.live_hide()  # the exact solid is there (or the value was refused)
+            self.live_soon()
+
+    def _recompute_exact(self):
         try:
             preview.recompute(self.doc)
             text = preview.failure(self.target) if self._modify is None else ""
@@ -1075,6 +1127,7 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
         self.schedule()
 
     def cleanup(self):
+        self.live_drop()
         self._unwatch()
         self._unshade()
         self.escape.remove()
