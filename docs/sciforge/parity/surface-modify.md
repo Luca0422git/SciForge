@@ -14,7 +14,7 @@ Code (all under `src/Mod/SciForge/sciforge/`):
 - `surfmod_ui.py`: the dialog (`SurfaceModifyPanel`, on `pickpanel.PickPanel` like Shell and
   Draft), the hand-over functions the SOLID commands call, the Merge command.
 - Small changes in the SOLID tool files (each marked "surface-4" in a comment): `split.py`,
-  `split_face.py`,
+  `split_face.py`, `replace_face.py`,
   `split_ui.py`, `delete.py`, `delete_ui.py`, `fillet_ui.py`, `presspull_ui.py`, `move.py`,
   `align.py`, `scale.py`, `scale_ui.py`, `pattern.py`, `pattern_ui.py`, `combine.py`,
   `silhouette.py`, `material_ui.py`; the ribbon's Merge entry; the golden ops block at the
@@ -54,6 +54,7 @@ keys in `docs/sciforge/dev/research/fusion-surface.md`), **F** = Autodesk Commun
 | **Scale** of surface bodies | Same dialog and step; uniform or per-axis. Faces that end up in one plane are merged (Refine, as for solids) | A |
 | **Merge**: adjacent faces of one surface body merged into one face; only in direct modelling (Capture Design History off) or inside a base feature; "it will change the shape of the surface" | SURFACE > MODIFY > Merge: picked adjacent faces that lie on **one** surface (one plane, cylinder, ... e.g. the pieces Split Face or Trim left) become one face, exactly (`UnifySameDomain`). Faces that only meet smoothly (tangent, within 1 degree) are refitted as one surface through their outer boundary and points sampled on them; the dialog says how far it moved them (refused above 0.01 mm or 0.1 % of their size). Faces meeting at a sharp edge are refused with the reason. Offered in parametric designs too, as a "Merge" step in the timeline (Fusion hides it there) | A, F; G (the tolerances; offered with history on) |
 | **Split Face** on the SURFACE tab: divides faces of a surface body (it stays one body); Merge is its counterpart | The SOLID Split Face step takes a surface body too: its faces are divided by the tool and sewn back into the same surfaces (`split_face._split_open`); everything else of the dialog as for solids. The pieces can be merged again with Merge | A |
+| **Replace Face** on the SURFACE tab: a face of a surface body replaced by a target surface; the faces round it are extended or trimmed to it | The SOLID Replace Face step takes a surface body too (`replace_face._replace_open` -> `surfmod.replace_open`): one source face closed round by other faces, a flat target (an origin or construction plane, a flat face: its whole plane); each neighbour is carried on along its own surface or cut back to that plane, and the piece of the plane they close round takes the face's place. A curved target, several faces, a face with an open edge, a target beyond the faces round it are refused with the reason | A (presence), G (flat targets only) |
 | **Combine** | A surface body is refused with the reason: "...Combine works on solids. Join surfaces with Stitch, or make it a solid with Thicken" (the forum's workaround) | G, F |
 | **Silhouette Split**: Target Body = one solid body | A surface body is refused with the reason (Split Face, or make it a solid first) | A |
 | **Physical Material**, **Appearance** | Work on surface bodies (they did); the Physical Material dialog now lists surface bodies under In This Design (no mass: no volume) | G |
@@ -109,7 +110,9 @@ saved with the design.
   `surface4_step_part` (SURFACE Delete of a face of a STEP part without history: it is taken
   into a body and becomes a surface body; Ctrl+Z / Ctrl+Y; Fillet on it),
   `surface4_split_face` (Split Face of a surface body's floor by the YZ square, then Merge
-  of the two halves, undo / redo).
+  of the two halves, undo / redo),
+  `surface4_replace_face` (a surface box's floor replaced by a block's top: the walls cut
+  back; undo / redo; a target beyond the walls refused in the edit, Cancel).
 - Golden models `surface4_*.json` (17): fillet + edit + reopen, variable fillet, chord
   length fillet, chamfer +
   SURFACE delete, press pull + edit + reopen, press pull of a tray with slanted walls (its

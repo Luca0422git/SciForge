@@ -1,0 +1,148 @@
+{
+  "id": "surface4_replace_face",
+  "title": "Replace Face of an open box of surfaces: its floor replaced by a block's top 4 up (the walls cut back to it), still a surface body",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "replace-face"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            40,
+            0,
+            60,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s0",
+      "distance": 4,
+      "comment": "a block beside the box: its top at z = 4 is the target"
+    },
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces, area 1600"
+    },
+    {
+      "op": "replace_face",
+      "id": "r1",
+      "of": "st",
+      "faces": {
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "target": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        },
+        "of": "e2"
+      }
+    }
+  ],
+  "expect": {
+    "area": 1200,
+    "faces": 5,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      4,
+      30,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "the floor at z = 4, the walls cut back to 6 high: 600 + 2 x 30 x 6 + 2 x 20 x 6"
+  }
+}
