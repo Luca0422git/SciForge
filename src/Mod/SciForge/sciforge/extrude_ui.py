@@ -2115,6 +2115,8 @@ class ExtrudePanel(Panel, value_limits.LimitedValues, live_shapes.LivePanel):
 
     def live_values(self):
         o = self._live_options()
+        if o is None:
+            return {}
         profiles = extrude.normalize(self.profiles)
         sign = extrude._sign1(profiles, o)
         start = extrude.start_offset_of(profiles, o) * sign
