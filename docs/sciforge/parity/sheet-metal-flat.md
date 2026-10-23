@@ -63,6 +63,8 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 |---|---|---|
 | Drawing > From Design, the flat pattern as the view source | File > New Drawing, Contents Select lists "Flat Pattern / <body>" (unticked); its Base View defaults to Top (the flat lies on XY); outline, holes and bend lines are drawn | F[F9], A[R37] |
 | Tables > Bend Table, pick a flat pattern view: a table of the bends, identifiers added to the view | DRAWING > TABLES > Bend Table: the picked (or only) flat pattern view gets balloons B1, B2 ... on its bend centre lines (left to right) and a table BEND ID / DIRECTION / ANGLE / RADIUS / K-FACTOR at the top left of the sheet; one undo step; one per drawing; it follows the flat (a new K-factor, moved bends) | A[R17], G (columns, balloons) |
+| Bend Note: click bend centre lines of a flat pattern view; each note shows the bend's information along its centre line (help page "Create and modify bend notes") | DRAWING > TEXT > Bend Note: each click on a bend centre line writes "UP 90° R 1.00" (direction, angle, inside radius) beside the line's middle, turned with the line (reading left to right or upwards); a click elsewhere or on a bend that has its note is refused with the reason; OK keeps them (one undo step), Esc drops them; the notes follow later edits (text and place). Editing a note's contents is not built | Autodesk help (DWG-CREATE-BEND-NOTE), G (format, place) |
+| Bend Identifier (leaderless labels above each bend centre line) | The Bend Table's balloons stand for them (with a leader); no separate command | Autodesk help (DWG-CREATE-BEND-IDENTIFIER) |
 
 ### Export DXF (FLAT PATTERN > EXPORT, or right-click the Flat Pattern)
 
@@ -131,9 +133,9 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 - Scenarios (real clicks): `flatpattern_l_bracket`, `flatpattern_u_channel_dxf`,
   `flatpattern_unfold_refold`, `flatpattern_rip_convert`, `flatpattern_component_rip`,
   `flatpattern_refusals`, `flatpattern_environment`, `flatpattern_flange`,
-  `flatpattern_drawing`, `flatpattern_tray`, `flatpattern_corners` (a Corner Closure's
-  corner gets no rule relief; the Flange's corner relief edited in its dialog to Square 3
-  mm, the flat pattern follows).
+  `flatpattern_drawing` (with Bend Table and Bend Note), `flatpattern_tray`,
+  `flatpattern_corners` (a Corner Closure's corner gets no rule relief; the Flange's
+  corner relief edited in its dialog to Square 3 mm, the flat pattern follows).
 - Unit tests: `SciForgeTests/unit/test_flatpattern_core.py` (DXF writer and read-back, the
   bend maths of the flat sizes, corner crossings and relief placements, the FLAT PATTERN
   tab, the browser node, the golden format).
@@ -148,9 +150,9 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 - **FLAT PATTERN tab contents**: only INSPECT, SELECT, EXPORT (Export DXF) and FINISH; no
   sketches or construction geometry on the flat (Fusion allows them, A[R35]). The flat
   pattern is a shape beside the body, not a component of its own.
-- **Flat pattern STEP export and drawing bend notes** (Fusion: A[R36] preview, "Create and
-  modify bend notes"): not built (the DXF carries the bend notes as text; the drawing has
-  the Bend Table, which follows later edits of the flat). The drawing's bend lines have no
+- **Flat pattern STEP export** (Fusion: A[R36] preview): not built. In drawings, a bend
+  note's contents cannot be edited (Fusion's "modify bend notes"), there is no separate
+  Bend Identifier command (the Bend Table's balloons do that), and the bend lines have no
   up / down styles.
 - **Side faces cut at an angle through the thickness** (sm-forming's mitres are bevelled
   along the corner's bisector plane): the flat takes the stationary side's outline, so its

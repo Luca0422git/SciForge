@@ -20,7 +20,8 @@ the Flange's own Corner Relief setting when it has one; a corner closed with Cor
 Closure keeps the closure's own relief. The
 Flat Pattern stays in the browser (double-click to open it again, hover for its size) and
 follows changes to the part. File > New Drawing with Contents Select can draw the flat
-pattern; DRAWING > TABLES > Bend Table lists its bends. To cut a slot across a bend: MODIFY >
+pattern; DRAWING > TABLES > Bend Table lists its bends, and DRAWING > TEXT > Bend Note
+writes a bend's direction, angle and radius along the bend line you click. To cut a slot across a bend: MODIFY >
 Unfold (click the face that stays put and the bends, or tick Unfold All Bends), sketch and
 cut while it is flat, then MODIFY > Refold. A closed tube must be opened first with MODIFY >
 Rip (a face, along an edge, or between two points).
@@ -43,12 +44,13 @@ Rip (a face, along an edge, or between two points).
   (Bend Table), `unfold_panel.py` (shared picking dialog), `unfold_ui.py`, `rip_ui.py`,
   `sm_convert_ui.py`, `flatpattern_ui.py` (environment, Export DXF), `flatpattern_drawing_ui.py`.
 - Ribbon: the five SHEET METAL entries wired, the FLAT PATTERN contextual tab (INSPECT,
-  SELECT, EXPORT, FINISH FLAT PATTERN), DRAWING > TABLES > Bend Table;
-  `ribbon_ui.set_flat_pattern_mode` and `CONTEXTUAL`.
+  SELECT, EXPORT, FINISH FLAT PATTERN), DRAWING > TABLES > Bend Table, DRAWING > TEXT >
+  Bend Note; `ribbon_ui.set_flat_pattern_mode` and `CONTEXTUAL`.
 - Browser: a Flat Pattern row under its component (double-click / Edit Flat Pattern opens it,
   Export DXF, Show/Hide Bend Lines / Bend Extents, Rename, Delete; tooltip with its size).
 - Drawings: the flat pattern in Create Drawing's Select list, its base view from the top
-  (`drawing.py` 2 lines + the Bend Table refresh hook, `drawing_ui.py`).
+  (`drawing.py` 2 lines + the Bend Table refresh hook, `drawing_ui.py`); DRAWING > TABLES >
+  Bend Table; DRAWING > TEXT > Bend Note (click bend centre lines; the notes follow edits).
 - Icons (`tools/sciforge/icons_flatpattern.py`): sm_flat_pattern, flat_pattern, sm_unfold,
   sm_refold, sm_rip, sm_convert, fp_export_dxf, fp_finish.
 - Corner reliefs on the flat: the edge Flange's own Corner Relief override (shape, size,
@@ -116,4 +118,4 @@ FLAT PATTERN tab has no sketch / construction tools; no STEP export of the flat;
 reliefs are on the flat only (Round / Square; no weld shapes); bevelled mitres are
 laid flat by the stationary side's outline; sm-more's Brake Form lofted flange has sharp
 folds (no bend radius) and is refused naming the sharp edge; flanges at an inside corner
-overlap when laid flat and are refused.
+overlap when laid flat and are refused; a bend note's text cannot be edited.
