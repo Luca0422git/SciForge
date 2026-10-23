@@ -18,6 +18,7 @@ Saved documents store "sciforge.plastic_advice.DesignAdvice": keep the name stab
 
 import json
 import math
+import time
 
 import FreeCAD as App
 
@@ -206,11 +207,16 @@ def measure(obj):
     pull = pull_of(obj)
     checks = checks_of(obj)
     out = {"bodies": []}
+    start = time.time()
     for body in owners:
         rule = plastic.rule_for_body(body)
         data = measure_shape(bodies.global_shape(body), rule, pull, checks)
         data.update({"name": body.Name, "label": body.Label, "rule": rule["name"]})
         out["bodies"].append(data)
+    log(
+        "design advice '%s': %d bod%s checked in %.1f s"
+        % (obj.Label, len(owners), "y" if len(owners) == 1 else "ies", time.time() - start)
+    )
     return out
 
 

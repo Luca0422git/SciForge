@@ -14,8 +14,9 @@ edited (this file is the session log entry).
   and catch profile, the groove / slot / loop boxes, the strain check (tapered factor
   1 / 1.09 per the research's critic pass C5), the lip and groove sections as offsets from
   the picked edges, the Design Advice checks, colours, list rows, a smooth thickness blend
-  and a numpy ray caster (triangles in a grid of cubes: a 130-face part checks in 3.5 s with 8 to 32 points a
-  face, 95 s when every ray tested every triangle; a plate with 400 small holes 25 s).
+  and a numpy ray caster (triangles in a grid of cubes: a 130-face part checks in 3.5 s with
+  8 to 32 points a face, 95 s when every ray tested every triangle; a plate with 400 small
+  holes 25 s).
 - `sciforge/plastic_snap.py`, `plastic_lip.py`: the steps. A lead step in one body
   (`SnapFitFeature`, `LipFeature`) and a hidden follower in the other body
   (`SnapGrooveFollower`, `LipGrooveFollower`, subclasses of `modify_bodies._Follower`, role
@@ -23,12 +24,14 @@ edited (this file is the session log entry).
   lead without any change to the timeline code; golden models prove suppress and the
   marker). `make / update / read / remove`, used by the dialogs, the golden ops and tests.
   Snap Fit: three types, Automatic / Manual points, Uniform / Independent / Aligned (to the
-  points' middle, a point, a line or a face), To Next / Distance, beam taper and draft, catch
-  angles, base fillet, Hook / Groove switches, picked or found bodies, Flip. Lip: Lip /
+  points' middle, a point, a line or a face), To Next / Distance (with its arrow), beam taper
+  and draft, catch angles, base fillet, Hook / Groove switches, picked or found bodies, Flip,
+  the strain check. Lip: Lip /
   Groove / Lip And Groove, Swap, tangent chains (closed or open, straight or round), Pull
   Direction (rim normal or picked) and Face Guide (leans with a drafted wall), drafts, tip
   and root radius (the groove's mouth rounded to keep the clearance); a click on the rim's
-  flat face takes its inside edge.
+  flat face takes its inside edge; the dialog shows the wall and the shoulder left beside
+  the lip.
 - `sciforge/plastic_advice.py`: the analysis object (`DesignAdvice`, SciForgeType
   "DesignAdviceAnalysis", so the browser's Analysis folder shows it), measuring in its
   `execute` (results as JSON in `Results`), never failing (a `Problem` text instead), waiting
@@ -45,7 +48,7 @@ edited (this file is the session log entry).
   (`tools/sciforge/icons_plastic2.py`); the three ribbon entries wired.
 - Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (94), `plastic2_lip` (96),
   `plastic2_advice` (81); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
-  `test_plastic2_core.py` (34).
+  `test_plastic2_core.py` (35).
 
 ## FreeCAD facts and traps found
 
@@ -106,8 +109,10 @@ the Parallel / Perpendicular geometry are SciForge's reading); Face Guide on a c
 walls have different drafts (refused); lip edges not in one plane (refused); Snap Fit
 visibility controls (read as Hide Other Body); Aligned to a face uses its centre; Root
 Radius defaults to 0; Design Advice is sampled (8 to 32 points a face) and checks in the
-recompute (3.5 s for a 130-face part, 25 s for 406 faces), no browser alert badge; injection-moulding simulation out
-of scope.
+recompute (3.5 s for a 130-face part, 25 s for 406 faces), no browser alert badge;
+injection-moulding simulation out of scope; Hook and Loop's loop sizes other than its
+thickness, a groove block where no wall is found, and skipping a point with no body behind
+it (research G rows) are not built.
 
 ## Notes for the integrator
 
@@ -115,6 +120,8 @@ of scope.
   merge with `sf/plastic-1` conflicts on the adjacent CREATE lines: keep plastic-1's Boss and
   Rest lines and this branch's Snap Fit and Lip lines (both as committed).
 - `plastic_lip.py` imports `assign_shape` / `follower_execute` from `plastic_snap.py`.
+- `plastic_advice.py` uses `MeshPart` (in FreeCAD's AppImage; without it the check still
+  runs, slower on parts with many small round edges) and `analysis_core.subdivide`.
 - Scenario setups clear the plastic library preferences plastic-1 adds
   (`Mod/SciForge/Plastic`: Library, Default), so a user default left by another scenario
   cannot change the checked sizes.

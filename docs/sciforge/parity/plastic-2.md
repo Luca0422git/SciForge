@@ -166,7 +166,7 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
   tapered rim; Fusion's usual flow (a hollow box split in two, Lip And Groove, Hook and
   Loop); a lip suppressed and back; a snap fit with the history marker rolled back before it
   and to the end (the other body's step follows both).
-- Unit tests: `SciForgeTests/unit/test_plastic2_core.py` (34; the ray grid is checked
+- Unit tests: `SciForgeTests/unit/test_plastic2_core.py` (35; the ray grid is checked
   against testing every triangle).
 
 ## Known gaps
@@ -194,4 +194,10 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
   enclosure with bosses, 3.5 s for a 130-face one and 25 s for a plate with 400 small holes
   (406 faces; measured in the sandbox under load); it runs in the recompute, so FreeCAD
   waits that long after a change to a checked body.
+- **Research G rows not built**: Hook and Loop's Loop Length / Width / Opening Length (the
+  loop is sized from the hook and the clearance; only Loop Thickness is typed); Groove
+  Extent and Groove Wall Thickness (a groove block built where the other body has no wall:
+  SciForge cuts the groove where the wall is and notes a snap fit that finds none); a point
+  with no body behind it skipped with a warning (SciForge refuses the Snap Fit and says
+  which point, "use Flip or a Distance extent").
 - **Injection-moulding simulation** is out of scope (outline 8).
