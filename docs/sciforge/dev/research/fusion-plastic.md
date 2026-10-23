@@ -1005,3 +1005,262 @@ Given profile S on plane Π (normal **n** pointing **out** of the part, flippabl
 12. Whether Assign Plastic Rule creates a timeline entry, and how the rule shows in the browser.
 13. Boss "Create Component" makes an *external* component and needs a saved design (the "save first" tip). SciForge
     should use an internal body or part instead.
+
+---
+
+## Critic pass
+
+Independent second review, 2026-10-23. The first researcher's text above is unchanged. This section only adds,
+corrects or re-grades facts.
+
+### CP.0 How this pass was done, and its limits
+
+- **No new web searches were possible.** When this pass started, the shared WebSearch budget (200 per turn) was already
+  used up. WebFetch and curl cannot resolve autodesk.com, help.autodesk.com, forums.autodesk.com, YouTube or tutorial
+  sites. Searching through archive or reader services is not allowed.
+- **What was reachable:** `raw.githubusercontent.com`, which hosts Autodesk's own mirror of the Fusion API reference
+  (May 2026 release). This pass re-read that mirror on its own, using:
+  - the full page index (17,898 pages);
+  - the per-enum description pages, which give one-line meanings that the Python stubs leave out;
+  - the official Boss sample;
+  - the C++ header layout (`include/Fusion/Plastic/`);
+  - the User Manual pages `UserInterface_UM.htm` and `Configurations_UM.htm`.
+- **Also used:** the sibling research file `surface.md` (A-sourced Fillet/Thicken facts) and the SciForge repo (what
+  already exists).
+- **Consequence:** the open questions that need help pages or videos (Snap Fit labels, Lip Advanced tab, Rest options,
+  menu order) could **not** be advanced. They stay open (CP.5).
+
+New source ids used below:
+
+| Id | Source |
+|---|---|
+| A-api-PG `<Page>` | `https://raw.githubusercontent.com/AutodeskFusion360/FusionAPIReference/main/Fusion_API_Documentation/files/<Page>.htm` (May 2026). Each page carries its own "Introduced in version" footer |
+| A-api-SAMPLE | same path, `BossFeatureSample_Sample.htm` (official sample code) |
+| A-api-H | C++ headers at `.../Fusion_API_CPP_Reference/include/Fusion/Plastic/<Name>.h` (HTTP 200 = exists, 404 = absent) |
+| A-api-UM | same path, `UserInterface_UM.htm` and `Configurations_UM.htm` |
+| A-SURF | sibling file `research/surface.md`: H-SFIL = help `SLD-REF-FILLET.htm`; B-SEP25 = September 2025 What's New |
+| F-BAYER | Bayer/Covestro "Snap-Fit Joints for Plastics: A Design Guide" (standard resin-supplier formulas). Quoted from memory, not fetched |
+| R | the SciForge repository (read-only check) |
+
+### CP.1 Corrections
+
+**C1. Boss "Constant Thickness" shape is not available in Fusion.**
+- Wrong line (2.3): *"Shape | `BossShapeTypes` | **Blank** (no hole) / **Constant Diameter** / **Constant Thickness** |
+  Constant Diameter | … Constant Thickness = OD follows hole + 2×rule Thickness"*. The same assumption appears in 1.3
+  ("Shank wall thickness (constant-thickness shape)") and in 4.1 step 5.
+- Right fact: the enum page describes the three values as follows (A-api-PG `BossShapeTypes`, Oct 2022):
+  - `BossBlank`: "Blank boss with no hole and constant diameter."
+  - `BossConstDiameter`: "Boss with constant outer shank diameter."
+  - `BossConstThickness`: "Boss with constant shank thickness. **Not supported yet.**"
+- The input object has only `setBlank`, `setSimple`, `setCounterbore` and `setCountersink`. Each one is documented as
+  making a "constant diameter shank".
+- So in Fusion the shank is always a constant-OD (drafted) cylinder, with or without a hole.
+- SciForge: offer **Blank** plus hole type (Simple / Counterbore / Countersink). Treat a constant-wall option only as an
+  optional SciForge extra, clearly labelled.
+
+**C2. Boss rib Profile "None" means no ribs, not square ribs.**
+- Wrong lines: 2.3 Ribs table *"Profile | `ribType` = `BossRibShapeTypes` | **None / Chamfer / Fillet** | Chamfer |
+  Shape of the rib's top-outer corner"*, and 4.1 step 9 *"None: square."*
+- Right fact: `BossRibShapeNone` = "Boss with **no ribs**". `BossRibShapeChamfer` = "Boss with chamfered ribs".
+  `BossRibShapeFillet` = "Boss with filleted ribs" (A-api-PG `BossRibShapeTypes`).
+- So a rib always has a chamfered or filleted top-outer corner. `ribType = None` is how one side turns its ribs off.
+- The UI checkboxes "Side 1 / Side 2" in the Ribs tab most likely map to ribType ≠ None (G).
+- SciForge: Rib shape = Chamfer / Fillet. The per-side "ribs on" checkbox stores None when off.
+
+**C3. Rule Fillet is neither a plastic command nor new, and it is not a separate menu item.**
+- Wrong lines:
+  - 1.2 MODIFY *"2. Fillet … 3. **Rule Fillet** (A-api exists…)"*;
+  - 0.4 *"Nov 2025 | Rule Fillet exposed in the API"* (read as the feature's arrival);
+  - 2.10 heading "Rule Fillet (MODIFY)" as a plastic command.
+- Right facts:
+  - A read-only `RuleFilletFeature` / `Features.ruleFilletFeatures` existed since **September 2015**. Both were retired in
+    November 2025 (A-api-PG `RuleFilletFeature`, `Features_ruleFilletFeatures`).
+  - Creation came in **November 2025**: `FilletFeatures.createRuleFilletInput` / `addRuleFillet` return a normal
+    `FilletFeature` (A-api-PG `FilletFeatures_addRuleFillet`).
+  - `FilletFeatureTypes` (Sept 2025) = `FilletFeatureType` 0, `RuleFilletFeatureType` 1, `FullRoundFilletFeatureType` 2
+    (A-api-PG `FilletFeatureTypes`).
+  - The Fillet dialog has **Type = Fillet / Rule Fillet / Full Round Fillet** (A-SURF H-SFIL).
+  - Autodesk files the Rule Fillet headers under `Fusion/Features/`, not `Fusion/Plastic/` (A-api-PG header lines).
+- So the PLASTIC tab's MODIFY menu has one **Fillet** command whose dialog offers the three types. The only plastic
+  link is the radius default (rule Nominal Radius: still G).
+- The rest of 2.10 (rules, topology, asymmetric, corner) is correct.
+
+**C4. Emboss has no taper/draft input.**
+- Wrong line (1.3): *"Emboss | Depth (and taper if present) | Thickness (fraction) / Draft Angle"*.
+- Right fact: `EmbossFeatureInput` (Sept 2025) has only these inputs:
+  - `profiles`: sketch profiles **and SketchText**, all coplanar;
+  - `inputFaces`: all on one body;
+  - `isTangentChain`: default **true**;
+  - `depth`: **positive = protrudes out of the body (emboss), negative = goes into the body (deboss)**;
+  - `horizontalDistance`, `verticalDistance` and `rotationAngle`: each **defaults to 0**.
+  (A-api-PG `EmbossFeatureInput`.) There is no draft or taper.
+- Only the **depth** can take a rule value (G).
+
+**C5. The tapered snap-fit strain formula is wrong (section 4.3).**
+- Wrong line: *"Thickness tapered to t₀/2 at the tip: ε ≈ 1.09·t₀·y / L² (strain about 0.73× the constant-section
+  value)."*
+- Right fact: in the resin-supplier tables the 1.09 is the coefficient of the **deflection** formula (F-BAYER):
+  - constant section: y = 0.67·ε·L²/t₀, so **ε = 1.5·t₀·y/L²** (the first researcher had this right);
+  - tapered to t₀/2: y = 1.09·ε·L²/t₀, so **ε = 0.92·t₀·y/L²**, about **0.61×** the constant-section strain
+    (0.67/1.09).
+- The force formulas in 4.3 are correct.
+
+**C6. The last Design tab is now TOOLS, not UTILITIES.**
+- Wrong line (1.1): *"next to SOLID / SURFACE / MESH / SHEET METAL / UTILITIES"*.
+- Right fact: Autodesk's current UI guide says "you have the SOLID, SURFACE, MESH, SHEET METAL, and **TOOLS** tabs in the
+  Design workspace" (A-api-UM `UserInterface_UM`).
+- PLASTIC is missing from that list, which fits it appearing only with the extension (A-SUPPORT).
+
+**C7. Rib/Web "Start From Top/Bottom" and the "Plastic Design Tools capability" quote are graded too high.**
+- Wrong source tags in 2.7 (*"A-RIB, A-api `isThicknessFromTop`"*) and 2.8 (*"A-WEB, A-api ('Setting this property
+  requires the Plastic Design Tools capability')"*).
+- Right fact: in the May 2026 API, `RibFeature` and `WebFeature` (both since **September 2015**) have **no
+  feature-specific properties at all**. There is no `RibFeatureInput` and no `isThicknessFromTop` (A-api-PG
+  `RibFeature`, `WebFeature`; fusion.py).
+- These names can only come from the October 2026 What's New excerpt. Re-grade them to **"A-APIWN excerpt,
+  unverified"**.
+- The Rib/Web dialog facts that come from help-page excerpts (A-RIB, A-WEB) are unaffected.
+
+**C8. The Boss alignment default is set by the mate's OD, not "OD + 2·clearance".**
+- Wrong line (2.3): *"Alignment Diameter | … | mating side OD + 2·clearance (G)"*.
+- Right fact: the official sample pairs the sides as follows (A-api-SAMPLE):
+  - Side 1 (head): OD 13 mm, **countersink** hole 5 mm, major 9 mm, under-head depth 3 mm, `alignmentType = StepIn`,
+    `alignmentDiameter` 9 mm, `alignmentDepth` 1 mm.
+  - Side 2 (thread): shank `diameter = top.alignmentDiameter` (9 mm, the **same value**), `tipRadius =
+    top.alignmentRootRadius`, alignment left at Flat.
+- So the Side 2 shank tip **is** the spigot that drops into Side 1's recess.
+- The API supports this: `alignmentType` "usually corresponds to the alignment shape of the boss counterpart".
+- The fit gap is then axial, through `offsetClearance` (G). SciForge default: D_a(side 1) = OD(side 2), with an
+  optional radial clearance as a SciForge extra.
+
+**C9. The Boss rule parameters are not tied to a shank wall.**
+- Wrong mapping (1.3): *"Boss | Shank wall thickness (constant-thickness shape)…"*.
+- Right fact:
+  - Every BossFeature exposes `thickness` and `taperAngle` as "plastic part rule reference" model parameters (A-api).
+  - Constant-thickness shanks do not exist (C1), so what `thickness` drives geometrically is **unknown**.
+  - G: `taperAngle` is the source of the default shank, hole-major, alignment and rib draft angles; `thickness` is the
+    source of the default rib thickness and tip/root radii.
+
+### CP.2 Missing commands and options
+
+1. **Shell Type: Sharp / Rounded** (`ShellFeatureInput.shellType`; `SharpOffsetShellType` 0 / `RoundedOffsetShellType`
+   1; default **Sharp**; API May 2024) (A-api-PG `ShellTypes`).
+   - Rounded rounds the offset at convex corners, so the wall keeps a constant thickness. That matters for Design
+     Advice's thickness checks (G).
+   - Shell also has: inside thickness, outside thickness, faces or bodies, Tangent Chain (default **true**) (A-api).
+2. **Thicken Type: Sharp / Rounded** (`ThickenFeatureInput.thickenType`, default **Sharp**, API Sept 2025)
+   (A-api-PG `ThickenTypes`; A-SURF B-SEP25 "New Rounded Thicken").
+3. **Full Round Fillet** is the third Fillet type (A-api `FullRoundFilletFeatureType`; A-SURF). It is useful for rib
+   and boss-rib tops.
+4. **Thin Extrude inputs**, where the rule Thickness lands:
+   - wall location **Side1 / Center / Side2** (`ThinExtrudeWallLocation` 0/1/2);
+   - one thickness per side for two-sided extrudes;
+   - `taperAngleOne/Two`.
+   (A-api `ExtrudeFeatureInput.setThinExtrude`.) Rule mapping G: Thickness → wall thickness one/two.
+5. **Draft inputs**, where the rule Draft Angle lands:
+   - `setSingleAngle(isSymmetric, angle)` or `setTwoAngles(a1, a2)`;
+   - `plane` (the fixed plane / pull direction);
+   - Tangent Chain, default **true**;
+   - Flip direction, default **false**.
+   (A-api `DraftFeatureInput`.) Rule mapping G: Draft Angle → angle one (and two).
+6. **Boss rib "To Next" makes a web.** `RibSizeToNext` = "Boss rib has **shape of web** and extents to next face". So
+   this rib runs out to the next wall, with no chamfer/fillet cut (A-api-PG `BossRibExtentTypes`).
+   - `setRibExtent` takes one value **per rib**, so the vector length equals the rib count (A-api).
+   - Each side has its own rib count and shape (sample: 4 chamfered ribs on Side 1, 3 filleted ribs on Side 2).
+7. **Exact meanings of the Boss hole extents** (A-api-PG `BossHoleExtentTypes`):
+   - `BossHoleThrough` = "Hole through all body";
+   - `BossBlindFull` = "Blind hole of **max depth with offset from bottom**";
+   - `BossBlindDepth` = "Blind hole set by hole depth".
+   This confirms the From Bottom / From Top reading.
+8. **Boss editing model** (A-api `BossFeature`):
+   - Editing calls `createInput()` (timeline rolled to just before the feature) and then `update(input)`, so the whole
+     connection, both sides, is re-specified through the creation dialog.
+   - `isDirectionFlipped` can be changed on the feature, and `direction` returns the sketch Z.
+   - "For **history free** model this interface has limited functionality."
+   - SciForge: edit reopens the same two-sided dialog (agrees with the first researcher's G).
+9. **Side 2 is meant for "the part or metal inserts"** (A-api). SciForge could add a heat-set-insert preset for the
+   Side 2 hole (G).
+10. **The Boss fastener section has no API.** Head, drive, thread form and Create Component appear nowhere in the
+    reference, so they are UI-only (A-api absence).
+11. **The plastic-only surface is small.** Autodesk's headers under `include/Fusion/Plastic/` exist only for
+    `PlasticRule(s)`, `PlasticRuleValue` and `Boss*`; probes for `SnapFitFeature.h`, `LipFeature.h`, `RestFeature.h`,
+    `DesignAdvice.h`, `RibFeature.h` and `EmbossFeature.h` there all return 404 (A-api-H). Rib, Web, Emboss, Shell,
+    Thicken, Draft and Rule Fillet live in `Fusion/Features/`. The analyses live in `Fusion/Fusion/`.
+    - So the **plastic-only** pieces are: rules, Boss, Snap Fit, Lip, Rest and Design Advice.
+    - Everything else on the tab is a base command with rule-driven defaults.
+12. **Design Advice is a command.** The rule docstrings say "used by the **Design Advice command** when analyzing the
+    part for manufacturability" (A-api `PlasticRule`). This partly answers open question 9.
+13. **The configuration plastic rule table is one of five "theme tables"**: custom, appearance, material, sheet-metal
+    rule, plastic rule (A-api-UM `Configurations_UM`).
+    - Creating it adds a ConfigurationThemeColumn to the top table.
+    - Each column controls one component's **"active plastic rule"** (A-api `ConfigurationPlasticRuleColumns.add`
+      docstring). This is the API's own name for the per-component assignment.
+    - `clear()` removes the table and hides it in the UI.
+14. **Rule Fillet corner type is set at creation only.** `RuleFilletSettings` (the edit object) has no rolling-ball /
+    setback property; `topologyType` is editable after rolling the timeline (A-api). SciForge: keep everything
+    editable (G).
+15. **"Geometric Pattern" is unconfirmed** (1.2 CREATE item 20, taken from AU 2022 "(Geometric) Pattern"). The API has
+    only Rectangular / Circular / Path patterns, with compute options Optimized / Identical / Adjust (A-api
+    `PatternComputeOptions`). Do not build a separate "Geometric Pattern" (G).
+
+### CP.3 Confirmed or re-checked
+
+- **Boss**:
+  - Enum numbers match the first pass: Flat 0 / StepOut 1 / StepIn 2; Through 0 / BlindFull 1 / BlindDepth 2; ByLength
+    0 / ToNext 1 / Suppressed 2. All are dated **October 2022** (A-api-PG).
+  - Side 1 = head (+sketch Z); Side 2 = thread (−Z); the screw runs opposite to the sketch normal.
+  - Participant bodies: if none are given, the closest visible body is found automatically; only the closest body is
+    used; solids only.
+  - All points must come from one sketch. Only Through is accepted for the top side. Countersink defaults to 90°. Rib
+    total angle defaults to 360°. Rib rotation is measured from the sketch X axis.
+  - `add()` returns a list. `isGeometryOpposite` marks the thread side. Every value is a ModelParameter. (A-api)
+- **Boss defaults the first researcher guessed (G) that now have support:**
+  - Side 1 StepIn + Side 2 Flat is the pairing the official sample uses (A-api-SAMPLE).
+  - More sample values: shank draft 2°, hole draft 1°, rib chamfer 60°, rib outer draft 10°, alignment depth 1 mm,
+    Side 2 counterbore 5 mm × 1 mm with BlindFull depth 3 mm, rib offset 7 mm, rib cut size 5 mm.
+  - Sample values are not UI defaults.
+- **PlasticRule** (all A-api, Jan 2024):
+  - fields, types and units as in 3.1;
+  - units are mm or in, "permanently associated … cannot be modified";
+  - thickness must lie within min..max;
+  - expressions may use `Thickness`, and bare numbers take the rule's units;
+  - you cannot delete the default library rule or a design rule that is in use;
+  - the `thicknessVariation` docstring really is a copy of "The maximum thickness of the part", so open question 3
+    stays open;
+  - there is no `Component.activePlasticRule` property (the C++ `Component.h` has only `activeSheetMetalRule`).
+- **Rule Fillet enums**: AllEdges 0 / BetweenFacesOrFeatures 1; RoundsAndFillets 0 / RoundsOnly 1 / FilletsOnly 2.
+  Constant or asymmetric. Inputs may be faces **or features** (A-api).
+- **Draft / Accessibility / Minimum Radius analyses**: API January 2023. They are base INSPECT analyses
+  (`Fusion/Fusion/` headers), and the API exposes no settings beyond name and visibility (A-api).
+
+### CP.4 Note for the planner: what SciForge already has (R)
+
+Already in the repo, so the PLASTIC tab should reuse these rather than rebuild them:
+
+- the Fillet dialog with the **Rule Fillet** and **Full Round** types (`SciForgeTests/gui/scenarios/fillet2_rule.py`,
+  `fillet2_full_round.py`; golden steps `rule_fillet`, `full_round`);
+- **Shell type** sharp/rounded (golden `shell_type`);
+- **Thicken type** Sharp/Rounded (`surface_thicken.py`);
+- **Rib** and **Web** (`sweep_loft_rib.py`, `sweep_loft_web.py`; **no draft or fillet step yet**);
+- **Emboss** (`emboss_flat.py`, `emboss_cylinder.py`);
+- **Draft / Accessibility** analysis (`inspect_analysis_draft.py`) and **Minimum Radius** (`sciforge/surface_analysis.py`).
+
+New plastic work is therefore:
+
+- plastic rules (Assign / Manage);
+- Boss, Snap Fit, Lip, Rest;
+- Design Advice;
+- rule-linked defaults in the existing dialogs;
+- the Rib/Web **draft + base fillet** extension step.
+
+### CP.5 Still open (needs web access this pass did not have)
+
+- Snap Fit dimension labels and defaults; the exact parallel vs. perpendicular geometry.
+- The Lip Advanced-tab fields.
+- Rest options beyond profile + body + thickness.
+- The PLASTIC tab's panel list and dropdown order. In particular: does SETUP exist, or are the rules under MODIFY as
+  "Plastic Rules"?
+- Fusion's library rule names and values.
+- Thickness Variation units.
+- The October 2026 Rib/Web API items (C7).
+- Whether the UI still lists "Constant Thickness" (greyed) or hides it (C1).
