@@ -1,0 +1,59 @@
+{
+  "id": "sheetmetal_edge_flange_angle_edit",
+  "title": "Edge flange edited from 90 to 45 degrees",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    },
+    {
+      "op": "sf_flange_edit",
+      "target": "f2",
+      "set": {
+        "angle": 45
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1798.063697,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Inside at 45: plate cut back (R + T) tan 22.5; an eighth ring 1..2; wall 10 - R tan 22.5"
+  }
+}

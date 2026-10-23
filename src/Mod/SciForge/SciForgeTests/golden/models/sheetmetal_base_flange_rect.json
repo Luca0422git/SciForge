@@ -1,0 +1,46 @@
+{
+  "id": "sheetmetal_base_flange_rect",
+  "title": "Base flange: a 50 x 30 rectangle becomes a 1 mm plate (Steel (mm))",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    }
+  ],
+  "expect": {
+    "volume": 1500.0,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      1
+    ],
+    "solids": 1,
+    "faces": 6,
+    "source": "analytic",
+    "note": "50 x 30 x the default rule's 1 mm thickness, Side 1 (up from the sketch)"
+  }
+}
