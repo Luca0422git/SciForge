@@ -317,6 +317,7 @@ class SnapFitPanel(Panel):
         if self._quiet:
             return
         old_type, old_groove = self.options["type"], self.options["groove"]
+        old_selection = self.options["selection"]
         self.options["type"] = self.type.currentData()
         self.options["selection"] = self.selection.currentData()
         self.options["rotation"] = self.rotation.currentData()
@@ -330,6 +331,9 @@ class SnapFitPanel(Panel):
         if self.options["selection"] == "automatic":
             self.indices = []
         self._update_visibility()
+        if self.options["selection"] != old_selection:
+            self._picks_changed()  # Manual starts with no point picked
+            return
         self._refresh_picks()
         self._changed()
 
@@ -569,6 +573,8 @@ class SnapFitPanel(Panel):
     def _count(self):
         if self.sketch is None:
             return 0
+        if self.options.get("selection") == "manual" and not self.indices:
+            return 0  # Manual: nothing until points are clicked
         return len(plastic_snap.chosen_points(self.sketch, self.indices))
 
     def _refresh_picks(self):

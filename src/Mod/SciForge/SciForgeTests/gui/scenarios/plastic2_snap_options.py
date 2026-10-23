@@ -107,6 +107,24 @@ def three_points():
     p = ps.snap_panel()
     text = p.field.button.text()
     h.check("Automatic: the sketch's 3 points", text.startswith("3 points"), text)
+    ps.choose(p.selection, "Manual")
+
+
+def manual_empty():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    text = p.field.button.text()
+    h.check("Manual: no point until one is clicked", text.startswith("0 points"), text)
+    h.check("Manual: nothing built yet", not ps.snap_steps())
+    h.check("Manual: the hook gone from the lid", ps.near(ps.volume(s["lid"]), 4800.0))
+    ps.choose(p.selection, "Automatic")
+
+
+def automatic_again():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    text = p.field.button.text()
+    h.check("Automatic again: 3 points", text.startswith("3 points"), text)
     ps.choose(p.rotation, "Aligned")
 
 
@@ -386,6 +404,8 @@ h.run(
         automatic,
         pick_sketch_row,
         three_points,
+        manual_empty,
+        automatic_again,
         aligned,
         independent,
         independent_angles,
