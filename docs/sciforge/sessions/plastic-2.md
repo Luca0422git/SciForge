@@ -26,7 +26,7 @@ edited (this file is the session log entry).
   Snap Fit: three types, Automatic / Manual points, Uniform / Independent / Aligned (to the
   points' middle, a point, a line or a face), To Next / Distance (with its arrow), beam taper
   and draft, catch angles, base fillet, Hook / Groove switches, picked or found bodies, Flip,
-  the strain check. Lip: Lip /
+  the strain check, a point with no part behind it left out with a note. Lip: Lip /
   Groove / Lip And Groove, Swap, tangent chains (closed or open, straight or round), Pull
   Direction (rim normal or picked) and Face Guide (leans with a drafted wall), drafts, tip
   and root radius (the groove's mouth rounded to keep the clearance); a click on the rim's
@@ -42,11 +42,11 @@ edited (this file is the session log entry).
   `["lip"]`), Change Parameters entries and the browser's Analysis icon registered at import
   (no edit of those shared files).
 - Golden ops `sf_snap_fit`, `sf_snap_fit_edit`, `sf_lip`, `sf_lip_edit`
-  (`ai/ops/plastic2_ops.py`, schema `golden/plastic2_schema.py`), 18 golden models with
+  (`ai/ops/plastic2_ops.py`, schema `golden/plastic2_schema.py`), 19 golden models with
   hand-worked volumes (they give every size, so they do not depend on the default rule).
 - Icons `pl_snap_fit`, `pl_lip`, `pl_design_advice`, `pl_snap_groove`
   (`tools/sciforge/icons_plastic2.py`); the three ribbon entries wired.
-- Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (94), `plastic2_lip` (96),
+- Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (99), `plastic2_lip` (96),
   `plastic2_advice` (81); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
   `test_plastic2_core.py` (35).
 
@@ -111,8 +111,7 @@ visibility controls (read as Hide Other Body); Aligned to a face uses its centre
 Radius defaults to 0; Design Advice is sampled (8 to 32 points a face) and checks in the
 recompute (3.5 s for a 130-face part, 25 s for 406 faces), no browser alert badge;
 injection-moulding simulation out of scope; Hook and Loop's loop sizes other than its
-thickness, a groove block where no wall is found, and skipping a point with no body behind
-it (research G rows) are not built.
+thickness and a groove block where no wall is found (research G rows) are not built.
 
 ## Notes for the integrator
 

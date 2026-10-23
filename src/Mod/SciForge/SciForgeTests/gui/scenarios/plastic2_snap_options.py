@@ -15,8 +15,9 @@ middle, two grooves in the side walls (2 x 21.824) and a note that one snap fit 
 wall. Independent with the angles 0, 180, 90: the same two grooves. Catch Length 1 (shorter
 than the lead-in ramp): refused with the reason, OK keeps the dialog. Esc: nothing left.
 Then the base and the lid as components, the lid's component moved up 20 (its lid drawn at
-0 .. 2 in it): a Snap Fit across the components cuts the same groove. An empty design: Snap
-Fit and Lip say what they need, no dialog.
+0 .. 2 in it): a Snap Fit across the components cuts the same groove; a point added off the
+part is left out with a note (the same one groove). An empty design: Snap Fit and Lip say
+what they need, no dialog.
 """
 
 import FreeCAD as App
@@ -420,6 +421,25 @@ def hooks_back_on_lid():
     ps.ok()
 
 
+def point_off_the_part():
+    """A point added to the sketch off the part (x = 80, the lid ends at 60): that snap fit
+    is left out with a note, the others stay, and the other body gets no groove for it."""
+    import Part
+
+    h.check("OK closed the dialog", ps.snap_panel() is None)
+    sk = ps.by_label("SnapPoints")
+    sk.addGeometry(Part.Point(V(80, 20, 0)), False)
+    ps.doc().recompute()
+    steps = ps.snap_steps()
+    if not h.check("still one Snap Fit", len(steps) == 1, steps):
+        return
+    state = steps[0].State
+    h.check("a point off the part: it still computes", "Invalid" not in state, state)
+    note = getattr(steps[0], "SciForgeWarning", "")
+    h.check("and says that snap fit is left out", "2 left out" in note, note)
+    h.check("the same one groove", ps.near(-base_change(), ps.GROOVE, 1e-6), base_change())
+
+
 def empty_design():
     h.check("OK closed it", ps.snap_panel() is None)
     h.check("one Snap Fit", len(ps.snap_steps()) == 1)
@@ -484,6 +504,7 @@ h.run(
         hooks_on_base_flipped,
         unflip,
         hooks_back_on_lid,
+        point_off_the_part,
         empty_design,
         no_snap_dialog,
         no_lip_dialog,

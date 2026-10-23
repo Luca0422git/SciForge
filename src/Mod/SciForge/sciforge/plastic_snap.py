@@ -515,10 +515,21 @@ def build_hooks(obj, options, base):
         return base.Shape.copy(), ""
     hooks = []
     tools = []
+    skipped = []
+    first_error = None
     for k, (origin, axes) in enumerate(placed):
-        base_len, margin = hook_base(shape, origin, axes, options, k)
+        try:
+            base_len, margin = hook_base(shape, origin, axes, options, k)
+        except SnapError as exc:
+            # no part behind this point: skipped (the other points still get their hooks)
+            skipped.append(k)
+            first_error = first_error or exc
+            continue
         tools.append(hook_solid(origin, axes, options, base_len, margin))
         hooks.append((origin, axes, base_len))
+    _set_skipped(obj, skipped)
+    if not tools:
+        raise first_error
     result = shape
     for tool in tools:
         result = result.fuse(tool)
@@ -531,6 +542,12 @@ def build_hooks(obj, options, base):
         raise SnapError("The hooks could not be joined to the part.")
     if len(result.Solids) > len(shape.Solids):
         note = (note + "; " if note else "") + "a hook does not touch the part"
+    if skipped:
+        which = ", ".join(str(k + 1) for k in skipped)
+        note = (note + "; " if note else "") + (
+            "snap fit %s left out: no part behind %s point"
+            % (which, "its" if len(skipped) == 1 else "their")
+        )
     out = bodies.to_local(result, body)
     if getattr(obj, "Refine", True):
         try:
@@ -538,6 +555,32 @@ def build_hooks(obj, options, base):
         except Exception:
             pass
     return out, note
+
+
+SKIPPED = "SciForgeSkipped"
+
+
+def _set_skipped(obj, skipped):
+    """Keep which snap fits (their order among the points) have no hook, so the other body
+    gets no groove or loop for them either."""
+    try:
+        if SKIPPED not in obj.PropertiesList:
+            if not skipped:
+                return
+            obj.addProperty(
+                "App::PropertyIntegerList", SKIPPED, "SciForge", "Snap fits left out", 4 | 16
+            )
+        if list(getattr(obj, SKIPPED)) != list(skipped):
+            setattr(obj, SKIPPED, list(skipped))
+    except Exception:
+        pass
+
+
+def skipped_of(lead):
+    try:
+        return set(getattr(lead, SKIPPED, []) or [])
+    except Exception:
+        return set()
 
 
 def hook_base(shape, origin, axes, options, k=0):
@@ -592,6 +635,9 @@ class SnapGrooveFollower(modify_bodies._Follower):
 def other_side(lead, options, shape):
     """(the other body's solid with the grooves cut / loops joined, design coordinates; note)."""
     placed = frames(lead.Sketch, options, list(lead.PointIndices))
+    if options["hook"]:
+        skipped = skipped_of(lead)
+        placed = [frame for k, frame in enumerate(placed) if k not in skipped]
     result = shape
     missed = 0
     for origin, axes in placed:

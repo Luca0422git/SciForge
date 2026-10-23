@@ -90,7 +90,7 @@ item 11).
 | Manipulators | Blue arrows with value boxes: Beam Length (along the insertion axis), Catch Depth and, with Extent Type Distance, the base's length (research: "an extent arrow handle", G); rotation handles (above). |
 | Timeline | One step "Snap Fit N" in the hook body; the groove / loop is a hidden step of the other body (ModifyFollower: rolls back, suppresses, moves and deletes with the snap fit). Double-click edits; Change Parameters lists Beam Length, Width, Thickness, Catch Depth, Clearance. |
 | Join / New Body | Not a choice in Fusion's Snap Fit (research 2.4: the hook is joined into the hook body, the groove or loop made in the other body, no new bodies, G); the same here. |
-| Refusals | In the dialog, OK waits: catch shorter than its lead-in ramp, catch longer than the beam, a draft that closes the beam, angles out of range, no point, no body behind the point ("use Flip or a Distance extent"). Notes (not refusals): a snap fit that finds no wall / floor on the other body, a base fillet that cannot be made. |
+| Refusals | In the dialog, OK waits: catch shorter than its lead-in ramp, catch longer than the beam, a draft that closes the beam, angles out of range, no point, no body behind any point ("use Flip or a Distance extent"). Notes (not refusals): a point with no body behind it is left out (the others are made; research: "skip the point with a warning", G), a snap fit that finds no wall / floor on the other body, a base fillet that cannot be made. |
 
 ### Lip (PLASTIC > CREATE > Lip)
 
@@ -137,12 +137,13 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
     typed; the catch depth arrow dragged; OK; undo / redo; edit from the timeline; Esc;
     save / reopen; the design's rule changed (linked values follow, typed ones stay); Change
     Parameters lists it; timeline Delete takes its groove step too.
-  - `plastic2_snap_options` (94): Manual (no point until one is clicked, then a point
+  - `plastic2_snap_options` (99): Manual (no point until one is clicked, then a point
     clicked), Hook and Loop, Perpendicular, Extent Type Distance (its arrow dragged: the
     base grows by its section times the drag) and back to To Next, Automatic, Aligned, Independent (angles typed, a
     rotation handle dragged), Align To a clicked face and a clicked edge, the other body
     picked, Hide Other Body, the catch-length refusal, Esc, components (a moved component),
-    Hook Body picked (refused, then Flip), an empty design.
+    Hook Body picked (refused, then Flip), a point added off the part (left out with a
+    note, the same one groove), an empty design.
   - `plastic2_lip` (96): lip on a base and groove in its lid (the shoulder shown); drafts;
     height typed and dragged; the edges' body refused as the other body; Swap; Groove; Lip;
     the wall refusal; Face Guide; a direction picked along the rim refused; OK; undo / redo;
@@ -159,13 +160,13 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
     alarm at the corners).
   - `ribbon_sweep` with `SWEEP_TABS=plastic` (112): every PLASTIC command opens with no
     pop-up or error.
-- Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 18):
+- Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 19):
   snap fit parallel, edit (taper + draft), Hook and Loop, two points Aligned, Distance
   extent, Perpendicular through a panel; Lip And Groove, drafted, Swap, Groove alone, open
   chain, round rim, tip radius, root radius (with the groove's mouth round), Face Guide on a
   tapered rim; Fusion's usual flow (a hollow box split in two, Lip And Groove, Hook and
   Loop); a lip suppressed and back; a snap fit with the history marker rolled back before it
-  and to the end (the other body's step follows both).
+  and to the end (the other body's step follows both); a third point off the part left out.
 - Unit tests: `SciForgeTests/unit/test_plastic2_core.py` (35; the ray grid is checked
   against testing every triangle).
 
@@ -197,7 +198,5 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
 - **Research G rows not built**: Hook and Loop's Loop Length / Width / Opening Length (the
   loop is sized from the hook and the clearance; only Loop Thickness is typed); Groove
   Extent and Groove Wall Thickness (a groove block built where the other body has no wall:
-  SciForge cuts the groove where the wall is and notes a snap fit that finds none); a point
-  with no body behind it skipped with a warning (SciForge refuses the Snap Fit and says
-  which point, "use Flip or a Distance extent").
+  SciForge cuts the groove where the wall is and notes a snap fit that finds none).
 - **Injection-moulding simulation** is out of scope (outline 8).
