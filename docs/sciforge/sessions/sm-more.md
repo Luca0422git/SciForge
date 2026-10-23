@@ -159,6 +159,10 @@ xfail) on `sf/sm-more` first: all passed. Then probed what Luca would do next, h
   a sharp fold (no flat pattern): refused with the reason (`_lays_flat_any`). A Round / Square
   relief there now says why it cannot be cut. Golden `sheetmetal_smm_corner_closure_60`.
 - A dialog that moves to another body takes that body's rule defaults for untouched values.
+- **Hem on a flanged plate's free edge was refused**: after an edge flange the plate's side
+  face runs on into the flange's side (refine merges them), and `edge_frame` measured the whole
+  face. It now also accepts a side as thick as the sheet where the edge is. Golden
+  `sheetmetal_smm_hem_beside_flange`.
 
 New scenarios: `smmore_qa_reopen` (save / reopen of Hem, two-set Fillet, Corner Closure, Join
 by Bend, Lofted Flange; each edited from the timeline, a value changed, Cancel / Esc leave
