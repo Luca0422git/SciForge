@@ -4,18 +4,23 @@ This file is the project's memory across work sessions. **Read it first, every s
 `docs/sciforge/feature-outline.md` (the spec). Update it at the end of every session: what was
 done, what was learned, what is next. Newest session goes at the top of the log.
 
-**Branch `experimental` (Luca, 2026-10-20): Fusion workflows that do not work yet get fixed
-there, one at a time ("New branch time. Call it experimental"). First item done: Draft of
-curved / free-form faces (session log "Draft of curved faces"). Luca tests it; nothing from
-`experimental` goes to `develop` or `Release` until he says so.** Since then on `experimental`
-(2026-10-21/22): speed of edits, Fusion rollback while editing, and Luca's 8 approved ideas
-from CADCraft (session log "Eight features from the CADCraft study"): values stop at the
-limit, sketch messages naming culprits + padlock, export/import reports, 117 AI tools with
-verification tools and a full AI documentation library, headless CLI, parity script, speed
-with big designs, PDF layers/searchable text.
+**2026-10-23: `experimental` is merged into `develop`, for the second beta, 0.1.0-beta.2**
+(Luca: "Experimental looks stable ... time to merge all 3 into our second beta release";
+newest session log "Merge for 0.1.0-beta.2"). Everything `experimental` had is on `develop` now
+(Draft of curved faces, speed of edits, Fusion rollback while editing, and the 8 CADCraft
+features: values stop at the limit, sketches that explain themselves, export/import reports,
+117 AI tools with checking tools and the AI documentation library, headless CLI, parity script,
+speed with big designs, PDF layers). `experimental`'s tip is an ancestor of `develop`: if Luca
+wants that branch again, fast-forward it to `develop` first (no force push needed) so the two
+lines do not drift apart again.
 
-**Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
-R0-R4 are built and merged on `develop` (2026-10-20, three parallel agents). What is left is R5: Luca's tests (quick update, dry-run build, Update now), then his green light for the release. Also: Luca must switch on GitHub Discussions and create the labels `idea` and `beta`.
+**Next: the AI tools for wave 6's 26 steps** (SHEET METAL, PLASTIC, SURFACE part 4 modify on
+surface bodies; `sciforge/ai/catalog/__init__.py` `AI_TOOLS_TO_COME`; Luca chose to release
+0.1.0-beta.2 without them). Model them on the `surface` tool (`kind` + `options`), add the edit
+steps to `edit_step` (`actions/timeline_actions.py` `step_kind`, `_EDIT_OPS`, `_read`), give
+each tool calls in `SciForgeTests/headless/runner.py`, drop the ops from `AI_TOOLS_TO_COME`,
+regenerate `docs/ai`, and update known-issues.md and the CHANGELOG. Still open from the first
+beta: GitHub Discussions on and the labels `idea` and `beta` (Luca's clicks).
 
 **2026-10-23 (overnight, wave 6): Fusion's SHEET METAL and PLASTIC tabs and the SURFACE tab's
 missing tools are built and merged on `develop`** (seven builders + QA; plan
@@ -108,6 +113,8 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | 2026-10-21 | A value past what fits (fillet radius, chamfer, draft angle, shell wall, press pull ...) stops at the largest value that works, with a note, instead of an error; formulas are not rewritten (they keep the error). Deliberately differs from Fusion | Luca: "limit edits to stop at that limit ... add the functionality to any tool that can give that sort of error" |
 | 2026-10-21 | AI: expose everything SciForge can do as tools, with all documentation an AI model could use | Luca: "go crazy with 3. give all the tools possible, with absolutely all the documentation available" |
 | 2026-10-20 | Branch `Release` (from develop `a6a5f7bd`): only tested `develop` commits, fast-forwarded and tagged `sciforge-v<version>` on Luca's green light; all work stays on `develop` | Luca: "everything goes on develop until i give the green light" |
+| 2026-10-23 | `experimental` merged into `develop`; the result is **0.1.0-beta.2** (released through `Release` + tag as above) | Luca: "Experimental looks stable. And develop has some good new additions. So I think it's time to merge all 3 into our second beta release" |
+| 2026-10-23 | 0.1.0-beta.2 ships without AI tools for wave 6's 26 steps (SHEET METAL, PLASTIC, SURFACE part 4); they are listed in `catalog.AI_TOOLS_TO_COME` and in known-issues.md, and building them is the next job | Luca chose "Release now, AI later" over "Build AI tools first" (a few hours later) |
 - **2026-10-13: full (compiled) builds only for releases or a real C++ change.** Luca asked why
   compile at all when SciForge is an add-on: all 7 core patches are housekeeping or FreeCAD bug
   fixes (#4, #6, #7) that already have Python workarounds, so the quick update on the official
@@ -1539,6 +1546,70 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   default; Ruled's default type. Each guess is marked G in the parity docs.
 
 ## Session log
+
+### Session log: Merge for 0.1.0-beta.2 (`develop`, 2026-10-23)
+
+Luca: "I have 2 branches that I'm working on simultaneously. The develop branch and experimental
+branch. Experimental looks stable. And develop has some good new additions. So I think it's
+time to merge all 3 into our second beta release" (the three: `develop`, `experimental`,
+`Release`). `Release` (a6a5f7bd) was an ancestor of both, so it only needs fast-forwarding;
+`develop` (84067663) and `experimental` (d2ff8351) had split at ae1d3768 (387 / 222 commits).
+The session was started on `Release`.
+
+#### Merge
+- `experimental` merged into `develop` (300fe671). Four conflicts, each "keep both": the golden
+  schema's imports (wave 6 schemas + export_schema / live_blend_expect), `shell_ui` imports
+  (plastic defaults + live_shapes / value_limits), `browser_ui` (doc_epoch import; sheet metal
+  rows next to the sketch padlock row), MEMORY's session logs.
+- **Clashes git did not see** (experimental's unit tests on develop's wave 6), fixed in 62077a7c:
+  (1) every builder op must have an AI tool: wave 6 brought 26 without one. Luca chose to
+  release now (`catalog.AI_TOOLS_TO_COME`, a test fails when a tool lists one of them; known
+  issues and CHANGELOG say so); (2) docs/ai and (3) the parity checklist regenerated;
+  `fusion-menus.txt` looked for tab `sheetmetal` (the id is `sheet_metal`) and still marked
+  SHEET METAL / PLASTIC "out"; FLAT PATTERN's two commands are on the contextual
+  `flat_pattern` tab; aliases Contour Flange = Flange (open profile mode, parity/sheet-metal.md),
+  Refold Faces = Refold, PLASTIC > MODIFY > Plastic Rules = Manage Plastic Rules. Both tabs
+  100%, overall 477 / 631.
+- The browser was the risky spot (experimental reads the design only after a change,
+  doc_epoch; develop added opacity, hover lighting and sheet metal / plastic rows):
+  `browser_opacity_hover` passes.
+
+#### Version 0.1.0-beta.2 (295348f2)
+- `src/Mod/SciForge/VERSION` and `_FALLBACK_VERSION`; CHANGELOG section (release notes come
+  from it: `make_release_files.changelog_section` finds it); README badge, tabs, what works;
+  known-issues (sheet metal / plastic no longer "not built"; the AI gap).
+- Scenarios with the old number written in: `version_label` reads the VERSION file;
+  `update_check` keeps pretending to be a 0.1.0-beta install (its fake releases beta.2 ...
+  beta.10 are "newer"), but P13 ("Updated to X") is about the running version, so it uses
+  `sciforge.__version__`.
+- No compiled-part change since 0.1.0-beta (`core_id.sh` paths untouched): Update now from
+  0.1.0-beta is a module-only update.
+
+#### Tests (local, real FreeCAD 1.1.4)
+- On the raw merge, `--only base`: unit 4 failures (the clashes above, fixed), golden 614 +
+  2 known xfail, headless 284 calls / 117 tools, docs 141 items, agent 81 checks, smoke,
+  restart, journey: all PASS. After the fixes: unit 2437 OK.
+- Scenarios of the merged areas, all PASS: browser_opacity_hover, data_panel_fusion,
+  journey_plastic, limits_shell_draft, modify2_shell, plastic_rules, shell_draft_qa_shell,
+  sketch_explain, timeline_browser, _2, _qa, _qa2, _qa3, _qa4.
+
+#### CI: 6 scenario parts, and the crash marker a scenario leaves (3e56b3f1)
+- **The 90-minute limit**: develop alone (481 scenarios in 4 parts) took 83-91 minutes a
+  part; part 1 was cancelled at the limit in both run #258 and run #259 (the rest of #259
+  green). The merge makes 519. `sciforge-tests.yml` and the build's scenario jobs now use 6
+  parts (`--shard K/6`; artifacts `sciforge-test-output-scenarios-1..6`), the debug workflow's
+  default is 1/6.
+- **welcome_line's "no crash line" (run #258)**: some earlier scenario of that part left
+  SciForge's crash marker (`<profile>/SciForge/crash/running-<id>.json`; the harness quits
+  Qt normally, so a marker left means FreeCAD crashed while closing). `run_tests.sh` now
+  checks after each scenario: a marker left fails THAT scenario ("FreeCAD did not end
+  cleanly"), moves marker + `session-<id>.log` (faulthandler's stack) to
+  `<out>/crash-left-by-<name>/` (in the uploaded artifact) and clears it. Not reproduced
+  locally: the 19 wave-6 scenarios that ran before welcome_line in #258's part 3, then
+  welcome_line, all PASS with no marker; #259's part 3 passed too. So it is intermittent:
+  when CI names a scenario, read its crash log (the stack says where FreeCAD died).
+
+#### Results
 
 ### Session log: wave 6, SHEET METAL + PLASTIC tabs, SURFACE complete (`develop`, 2026-10-23 night)
 
