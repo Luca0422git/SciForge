@@ -4,7 +4,9 @@ Join by Bend, the First Edge on the upright plate's bottom, a Second Edge on a p
 (refused in the dialog: no bend joins parallel sheets; OK waits), Esc; again with the flat plate's
 end edge as the Second Edge: both are extended and joined by one bend of the rule's radius
 (volume worked out by hand), OK; the flat plate's body is used up (hidden); Ctrl+Z / Ctrl+Y;
-edit from the timeline with a 3 mm Bend Radius."""
+edit from the timeline with a 3 mm Bend Radius; the used-up flat body deleted (MODIFY >
+Delete): the step keeps joining it as it was; edited back to the rule's radius with the kept
+copy (no new Second Edge); Ctrl+Z twice: the flat body is back, used up."""
 
 import math
 
@@ -177,17 +179,20 @@ def edit_radius():
         st.type_into(p, "radius", "3")
 
 
+# mid radius 3.5: the plates reach to 3.5 from where their middles meet
+RADIUS3 = (
+    50 * 40
+    + (60.5 - 3.5 - 50) * 40
+    + 40 * 40
+    + (5 - 0.5 - 3.5) * 40
+    + (math.pi / 2 * (4**2 - 3**2) / 2 * 40)
+)
+
+
 def radius_previewed():
     p = panel()
     st.settle(p)
-    # mid radius 3.5: the plates reach to 3.5 from where their middles meet
-    want = (
-        50 * 40
-        + (60.5 - 3.5 - 50) * 40
-        + 40 * 40
-        + (5 - 0.5 - 3.5) * 40
-        + (math.pi / 2 * (4**2 - 3**2) / 2 * 40)
-    )
+    want = RADIUS3
     h.check(
         "Bend Radius 3 previewed",
         st.close(st.volume(s["upright"]), want),
@@ -204,6 +209,103 @@ def after_edit():
         "dialog closed, still one step",
         panel() is None and len(st.steps("SheetMetalJoinBend")) == 1,
     )
+
+
+def join_step():
+    found = st.steps("SheetMetalJoinBend")
+    return found[0] if found else None
+
+
+def step_good(what):
+    step = join_step()
+    state = list(step.State) if step is not None else ["missing"]
+    h.check(
+        "%s: the step builds" % what,
+        not ("Invalid" in state or "Error" in state or "Touched" in state),
+        state,
+    )
+
+
+def pick_flat_body():
+    # a used-up body is not in the browser: select it as a script would (bodies_qa does too)
+    s["flat_name"] = s["flat"].Name
+    Gui.Selection.clearSelection()
+    Gui.Selection.addSelection(App.ActiveDocument.Name, s["flat_name"])
+
+
+def delete_flat():
+    names = [x.ObjectName for x in Gui.Selection.getSelectionEx()]
+    h.check("the flat body selected", names == [s["flat_name"]], names)
+    st.menu("MODIFY", "Delete")
+
+
+delete_flat.wait_ms = 1200
+
+
+def flat_deleted():
+    h.check("the flat body is deleted", App.ActiveDocument.getObject(s["flat_name"]) is None)
+    h.check(
+        "the step keeps joining the deleted body as it was",
+        st.close(st.volume(s["upright"]), RADIUS3),
+        (st.volume(s["upright"]), RADIUS3),
+    )
+    step_good("other body deleted")
+
+
+def edit_kept():
+    st.double_click_timeline("Join by Bend 1")
+
+
+def kept_shown():
+    p = panel()
+    h.check("edit open on the kept body", p is not None and p.editing and p.ready(), p)
+    if p:
+        text = p.boxes["second"].button.text()
+        h.check("the Second Edge box names the deleted body", "deleted" in text.lower(), text)
+        st.toggle(p, "use_rule_radius")
+
+
+def kept_previewed():
+    p = panel()
+    st.settle(p)
+    h.check(
+        "the rule's radius again, joined to the kept body",
+        st.close(st.volume(s["upright"]), JOINED),
+        (st.volume(s["upright"]), JOINED),
+    )
+    h.check("no message", p is not None and st.message(p) == "", p and st.message(p))
+
+
+def kept_ok():
+    st.ok()
+
+
+def kept_done():
+    h.check("dialog closed", panel() is None)
+    h.check("joined with the rule's radius", st.close(st.volume(s["upright"]), JOINED))
+    step_good("edited on the kept body")
+
+
+def undo_kept_edit():
+    st.undo()
+
+
+def after_undo_kept_edit():
+    h.check("Ctrl+Z: the 3 mm radius back", st.close(st.volume(s["upright"]), RADIUS3))
+
+
+def undo_delete():
+    st.undo()
+
+
+def after_undo_delete():
+    from sciforge import bodies
+
+    flat = App.ActiveDocument.getObject(s["flat_name"])
+    h.check("Ctrl+Z: the flat body is back", flat is not None)
+    h.check("and used up (hidden)", flat is not None and not bodies.is_shown(flat))
+    h.check("still joined", st.close(st.volume(s["upright"]), RADIUS3), st.volume(s["upright"]))
+    step_good("delete undone")
 
 
 h.run(
@@ -235,5 +337,17 @@ h.run(
         radius_previewed,
         edit_ok,
         after_edit,
+        pick_flat_body,
+        delete_flat,
+        flat_deleted,
+        edit_kept,
+        kept_shown,
+        kept_previewed,
+        kept_ok,
+        kept_done,
+        undo_kept_edit,
+        after_undo_kept_edit,
+        undo_delete,
+        after_undo_delete,
     ],
 )

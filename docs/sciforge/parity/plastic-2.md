@@ -113,7 +113,7 @@ between the bottom and top offsets. Lip and groove volumes are exact (golden mod
 
 | Fusion | SciForge |
 |---|---|
-| Bodies of components with a rule | The dialog starts on the shown solid bodies of components with a plastic rule (all shown bodies, with the default rule, when none has one); click a body to take it out or in. The rule of each body is named. |
+| Bodies of components with a rule | The dialog starts on the shown solid bodies of components with a plastic rule (all shown bodies, with the default rule, when none has one); click a body to take it out or in. The rule of each body is named. A body in a component is named "Component/Body1" in the rule line and the issues list (two components can each hold a "Body1"); a body at the design's root by its own name. |
 | Pull direction | The Z of each body's component by default (research: "Z of the component"; the design's Z at the root); click the Pull Direction box, then a plane, flat face, straight edge or axis (one direction for every body); Flip. |
 | Checks | **Thickness** (outside the rule's range), **Thickness Variation** (more than the rule's percentage from its Thickness), **Draft** (less than the rule's Minimum Draft Angle against the pull either way; faces square to the pull are fine), **Knife Edges** (convex edges sharper than 2 atan(1/2) = 53.13 degrees: thinner than the knife-edge threshold one threshold in), **Undercuts** (faces a two-part mould cannot reach along the pull). Each can be switched off. |
 | Overlay | Display **Issues**: green fine, blue too thin, orange too thick, yellow draft / variation, purple undercut, knife edges drawn red; **Thickness**: a map from the rule's minimum (blue) to its maximum (red). |
@@ -151,13 +151,14 @@ then moved onto the exact face it lies on (the triangles cut corners off round f
     Guide leaning with the cone, exact); walls of different draft refused; a click on the
     rim's flat face (its 4 inside edges, the same lip and groove), Cancel; a lip exactly as
     wide as the wall refused (a hair less fits).
-  - `plastic2_advice` (81): checks, colours, click-to-zoom, Draft unticked, Thickness
+  - `plastic2_advice` (85): checks, colours, click-to-zoom, Draft unticked, Thickness
     display, a body left out and back, the pull direction picked and flipped, OK, Undo /
     Redo (gone, back and drawn), browser eye, reopen from the browser, it follows the design
     (and waits while hidden), save / reopen, the empty bodies refusal, an empty design, a
     round boss (its 1.5 mm wall read exactly from both round faces, its hole no undercut), a
     box rounded 4 mm outside with 2 mm walls (the thin top of its walls and its 1.17 mm
-    bottom corners found, the walls 2 mm elsewhere, no false alarm at the corners).
+    bottom corners found, the walls 2 mm elsewhere, no false alarm at the corners), a
+    "Body1" in each of two components named "Housing/Body1" and "Cover/Body1".
   - `ribbon_sweep` with `SWEEP_TABS=plastic` (112): every PLASTIC command opens with no
     pop-up or error.
   - `plastic2_qa` (167, added by QA): Hide Other Body ticked before the sketch is picked (the
@@ -222,6 +223,9 @@ Fixed:
   2 mm part until the next recompute). It now keeps a short record of the bodies it
   checked (volume, area, faces) and checks again after an Undo / Redo, or when shown,
   if they differ. A Redo stays available.
+- **Design Advice named bodies by their label only**: with a "Body1" in two components
+  the rule line and the issue rows could not say which one. A body in a component is now
+  named "Component/Body1" (sf/fix-sm-polish).
 - **Design Advice's default pull was the design's Z** for every body; the research's spec
   is the Z of the component. A body in a turned component (a part moulded along its own
   Z, turned into place) had the wrong faces flagged for draft and undercut. Each body now

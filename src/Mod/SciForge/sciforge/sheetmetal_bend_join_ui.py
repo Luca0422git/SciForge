@@ -45,9 +45,32 @@ class JoinBendPanel(smp.SmPanel):
     def fields_changed(self, key):
         self.show_row("radius", not self.value("use_rule_radius"))
 
+    def _kept(self):
+        """Editing a step whose other body was deleted, no new Second Edge picked: the step
+        goes on joining the copy it kept of that body."""
+        return (
+            self.editing
+            and not self.picks["second"]
+            and self.target is not None
+            and sj.kept_other(self.target)
+        )
+
+    def ready(self):
+        return bool(self.picks["first"]) and (bool(self.picks["second"]) or self._kept())
+
+    def _refresh_boxes(self):
+        super()._refresh_boxes()
+        if self._kept() and "second" in self.boxes:
+            self.boxes["second"].set_text("Deleted body (kept)")
+
     def hint(self):
         if not self.picks["first"]:
             return "Click an edge of this sheet metal body where the bend should start."
+        if self._kept():
+            return (
+                "The other body was deleted: the step joins it as it was. Click an edge of "
+                "another sheet metal body to join that one instead."
+            )
         if not self.picks["second"]:
             return "Click an edge of the other sheet metal body to join."
         return "The two plates are joined by one bend. OK to keep it."
@@ -79,6 +102,8 @@ class JoinBendPanel(smp.SmPanel):
         return True
 
     def check(self, options):
+        if not self.picks["second"]:
+            return  # the kept copy of a deleted body: its edge was checked when picked
         other = bodies.body_of(self.picks["second"][0][0])
         mine = sb.rule_values(self.body)[0]
         theirs = sb.rule_values(other)[0]
@@ -90,6 +115,8 @@ class JoinBendPanel(smp.SmPanel):
 
     def _refs(self):
         first = self.picks["first"][0][1]
+        if not self.picks["second"]:
+            return first, None, ""  # the kept copy of a deleted body (an edit)
         other, second = self.picks["second"][0][0], self.picks["second"][0][1]
         return first, other, second
 

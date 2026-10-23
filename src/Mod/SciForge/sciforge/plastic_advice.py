@@ -226,6 +226,20 @@ def targets(obj):
     return out
 
 
+def body_title(owner):
+    """How the advice names a body: "Component/Body1" for a body in a component (two
+    components can each hold a "Body1"), its label alone at the design's root."""
+    try:
+        from . import components
+
+        component = components.container_of(owner)
+    except Exception:
+        component = None
+    if component is None:
+        return owner.Label
+    return "%s/%s" % (component.Label, owner.Label)
+
+
 def set_targets(obj, owners):
     owners = [o for o in owners if bodies.alive(o)]
     current = [o for o, _s in (obj.Targets or [])]
@@ -272,7 +286,7 @@ def measure(obj):
     for body in owners:
         rule = plastic.rule_for_body(body)
         data = measure_shape(bodies.global_shape(body), rule, pull_for(obj, body, pull), checks)
-        data.update({"name": body.Name, "label": body.Label, "rule": rule["name"]})
+        data.update({"name": body.Name, "label": body_title(body), "rule": rule["name"]})
         out["bodies"].append(data)
     log(
         "design advice '%s': %d bod%s checked in %.1f s"

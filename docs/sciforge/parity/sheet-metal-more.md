@@ -69,6 +69,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Use rule bend radius (default on) / Bend Radius | Same | A[R40] |
 | The plates are extended or trimmed so one bend joins them | Same: the bend (inner radius R) is tangent to both plates' middle planes; each plate is extended or cut back to its tangent line; the bend runs where the two edges overlap | A[R42], G (geometry) |
 | Refusals | Different thicknesses; parallel sheets ("no bend can join them"); edges not along the line where the sheets meet; edges that do not overlap; sheets in line; a plate's far edge (the bend would cut the whole plate away) | G |
+| The second body is consumed by the join | The step keeps a copy of the other body as it last joined it (and its edge): deleting that body later leaves the join as it was, like a Combine's deleted tool body. The edit dialog then shows "Deleted body (kept)" in the Second Edge box and still takes a new Bend Radius; clicking an edge of another body joins that one instead | A[R40], G |
 
 ### Corner Closure (SHEET METAL > MODIFY > Corner Closure)
 
@@ -116,7 +117,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Scenario `smmore_bend_two` | Bend in an empty design (no dialog, no error); a plate in a moved component; the face, then two lines: a U; Values For Line 2 at 45 (Line 1 keeps 90; All lines shows the common value); Bend Radius override 2; OK | PASS, 18 checks |
 | Scenario `smmore_bend_tab` | a plate with a 20 mm tab, a line across its root; ribbon Bend; face, line: only the tab bends, round reliefs beside it (hand-worked volume, points in the plate and in a slot); Bend Relief off refused with the reason, back on; Line 1's own Bend Relief (Values For) off refused, All lines still on, back on; OK; Bend 1; Ctrl+Z / Ctrl+Y; the unfolder lays it flat to the plate and tab less the two reliefs | PASS, 20 checks |
 | Scenario `smmore_hem` | every type from the Type list (volumes from the cross-section), the rows each type shows, the Length arrow dragged (value box), a Length too short refused, a second edge mitred, OK, Hem 1, Ctrl+Z / Ctrl+Y, edit (Flip), Cancel | PASS, 40 checks |
-| Scenario `smmore_join` | CREATE menu Join by Bend; parallel plate refused, Esc; joined (hand-worked volume); the other body hidden; Ctrl+Z / Ctrl+Y; edit to a 3 mm Bend Radius | PASS, 25 checks |
+| Scenario `smmore_join` | CREATE menu Join by Bend; parallel plate refused, Esc; joined (hand-worked volume); the other body hidden; Ctrl+Z / Ctrl+Y; edit to a 3 mm Bend Radius; the used-up flat body deleted (MODIFY > Delete): the join stays as it was; edited back to the rule's radius on the kept copy; Ctrl+Z twice (the flat body back, used up) | PASS, 42 checks |
 | Scenario `smmore_corner` | two edge flanges (Flange code) on a notched plate; MODIFY menu Corner Closure; Symmetric Gap (points inside / in the gap); Round relief (rule size), Square; Trim To Bend by default, Tear (more material), Tangent with a Square refused, Round at Tangent (cuts more), Vertex (on this notched corner refused with what to try), back to Intersection; Overlap with a relief refused, Trim To Bend, a 0 gap; OK; Ctrl+Z / Ctrl+Y; edit back; Cancel | PASS, 37 checks |
 | Scenario `smmore_round` | MODIFY Fillet; a top edge not taken; 5 mm; the radius arrow dragged (value box); + New Set, 10 mm (hand-worked volumes); OK; Fillet 1; Ctrl+Z / Ctrl+Y; Chamfer 4 mm; edit (sets back) | PASS, 26 checks |
 | Scenario `smmore_qa_reopen` (QA) | a design with a Hem, a two-set Fillet, a Corner Closure, a Join by Bend and a Lofted Flange saved, closed, reopened: all rebuild the same, the joined body stays hidden, Change Parameters lists only the values in use; each step edited from the timeline (its picks and the Fillet's sets come back), a value changed, Cancel or Esc: values and part as they were; the Lofted Flange's Operation greyed in the edit; Join by Bend deleted from the timeline (the other body back), Ctrl+Z (hidden again) | PASS, 92 checks |
@@ -176,9 +177,15 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
     defaults" (on) takes the rule's 2-bend shape, size and placement (Round, 4 T, Intersection
     in the shipped rules); SciForge's "Rule Relief Size" takes only the size (gap 7).
 14. **Hem: Override Rules overrides the bend radius only** (used by the Rope's reverse bend);
-    Fusion's also overrides the bend relief.
-15. **Join by Bend keeps the other body's shape live**: deleting the other body later breaks
-    the step (Fusion consumes it).
+    Fusion's also overrides the bend relief. SciForge's Hem never cuts a bend relief: each
+    hem runs the whole length of its edge (the sheet is cut back across that length, two
+    hems meet in a mitre), and where a hem's bend ends beside sheet that stays (an edge at
+    an inside corner) nothing is cut there. With no relief to change, relief override rows
+    would do nothing, so none are shown; they need the relief cut first (checked
+    2026-10-23, sf/fix-sm-polish).
+15. (fixed, sf/fix-sm-polish) Join by Bend kept the other body's shape live, so deleting that
+    body later broke the step. Each build now keeps a copy of the other body (FrozenOther,
+    FrozenEdge) and the step joins that copy once the body is deleted.
 
 ### Fixed by QA (2026-10-23, branch `sf/sm-more-qa`)
 

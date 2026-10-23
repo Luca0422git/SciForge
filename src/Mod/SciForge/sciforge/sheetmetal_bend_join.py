@@ -7,7 +7,9 @@ The First Edge is on the body that is changed (the step goes into its timeline);
 Edge is on another sheet metal body, which is used up (hidden while the step is part of the
 design, like Combine's tool bodies). Both plates are extended or trimmed so that a bend of the
 rule's inner radius (or the Bend Radius override) meets each tangentially; the bend runs
-where the two edges overlap along the bend's axis.
+where the two edges overlap along the bend's axis. Each build keeps a copy of the other body
+as it joined it (FrozenOther, FrozenEdge): once that body is deleted the step goes on joining
+the copy (Fusion consumes the other body; a Combine keeps a deleted tool body the same way).
 
 Refused, with the reason: different thicknesses, parallel sheets (no bend joins them), edges
 that do not run along the line where the sheets would meet, edges that do not overlap.
@@ -171,7 +173,11 @@ class JoinBendFeature:
         if add("App::PropertyLength", "BendRadius", "Inner bend radius when not the rule's"):
             obj.BendRadius = 1.0
         if "FrozenOther" not in obj.PropertiesList:
+            # The other body as the last build joined it (design coordinates), and its edge:
+            # joined instead once that body is deleted.
             obj.addProperty("Part::PropertyPartShape", "FrozenOther", "Join by Bend", "", 4)
+        if "FrozenEdge" not in obj.PropertiesList:
+            obj.addProperty("App::PropertyString", "FrozenEdge", "Join by Bend", "", 4)
         if add("App::PropertyBool", "Refine", "Merge faces that end up in one plane"):
             obj.Refine = True
         bodies.mark(obj, KIND)
@@ -217,25 +223,56 @@ def build(obj):
     radius = None if obj.UseRuleRadius else float(obj.BendRadius)
     thickness, radius, _k, _rule = sb.rule_values(body, radius)
     first = obj.FirstEdge
-    second = obj.SecondEdge
-    if not first or not first[1] or not second or not second[1]:
+    live = live_other(obj)
+    if not first or not first[1] or (live is None and not kept_other(obj)):
         raise sb.SheetMetalError("Pick the First Edge and the Second Edge.")
-    other = second[0]
-    other_body = bodies.body_of(other)
-    if other_body is None or not sheetmetal.is_sheet_metal_body(other_body):
-        raise sb.SheetMetalError("The Second Edge must be on another sheet metal body.")
-    thickness_b = sb.rule_values(other_body)[0]
+    if live is not None:
+        other, edge_b = live
+        other_body = bodies.body_of(other)
+        if other_body is None or not sheetmetal.is_sheet_metal_body(other_body):
+            raise sb.SheetMetalError("The Second Edge must be on another sheet metal body.")
+        thickness_b = sb.rule_values(other_body)[0]
+        shape_b = bodies.global_shape(other)
+    else:
+        # the other body was deleted: its copy as the last build joined it (the edge check
+        # still refuses a sheet of another thickness)
+        shape_b, edge_b, thickness_b = obj.FrozenOther.copy(), obj.FrozenEdge, None
     shape_a = bodies.global_shape(base)
-    shape_b = bodies.global_shape(other)
-    joined = join_shapes(
-        shape_a, first[1][0], shape_b, second[1][0], thickness, radius, thickness_b
-    )
+    joined = join_shapes(shape_a, first[1][0], shape_b, edge_b, thickness, radius, thickness_b)
+    if live is not None:
+        _keep(obj, shape_b, edge_b)
     if obj.Refine:
         try:
             joined = joined.removeSplitter()
         except Exception:
             pass
     return bodies.to_local(joined, body)
+
+
+def live_other(obj):
+    """(the other body's step, its edge name) while that step is in the design, else None."""
+    second = getattr(obj, "SecondEdge", None)
+    if not second or not second[1] or not bodies.alive(second[0]):
+        return None
+    return second[0], second[1][0]
+
+
+def kept_other(obj):
+    """True when the other body is gone and the step joins the copy kept of it."""
+    if live_other(obj) is not None:
+        return False
+    frozen = getattr(obj, "FrozenOther", None)
+    edge = getattr(obj, "FrozenEdge", "")
+    return bool(edge) and frozen is not None and not frozen.isNull()
+
+
+def _keep(obj, shape, edge):
+    """Keep the other body as this build joined it (for when it is deleted)."""
+    if "FrozenOther" not in obj.PropertiesList or "FrozenEdge" not in obj.PropertiesList:
+        return
+    obj.FrozenOther = shape
+    if obj.FrozenEdge != edge:
+        obj.FrozenEdge = edge
 
 
 def used_up(obj):
@@ -265,8 +302,10 @@ def make(body, base, first_edge, other, second_edge, options=None, name="JoinByB
 
 
 def apply(obj, base, first_edge, other, second_edge, options):
+    """other None: an edit that keeps joining the copy of a deleted other body."""
     obj.FirstEdge = (base, [first_edge])
-    obj.SecondEdge = (other, [second_edge])
+    if other is not None:
+        obj.SecondEdge = (other, [second_edge])
     obj.UseRuleRadius = bool(options.get("use_rule_radius", True))
     if options.get("radius") is not None:
         obj.BendRadius = float(options["radius"])

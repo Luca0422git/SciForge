@@ -389,9 +389,9 @@ class DesignAdvicePanel(Panel):
         for owner in owners:
             try:
                 rule = plastic.rule_for_body(owner)
-                lines.append("%s: %s" % (owner.Label, rule["name"]))
+                lines.append("%s: %s" % (plastic_advice.body_title(owner), rule["name"]))
             except Exception as exc:
-                lines.append("%s: %s" % (owner.Label, exc))
+                lines.append("%s: %s" % (plastic_advice.body_title(owner), exc))
         self.rules.setText("Plastic rules: " + ("; ".join(lines) if lines else "-"))
 
     # -- the selection boxes ---------------------------------------------------------------------

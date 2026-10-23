@@ -16,7 +16,8 @@ Design Advice with its bodies box cleared: OK refused with the reason; Cancel le
 An empty design: Design Advice says what is needed, no dialog. A round boss reads its
 1.5 mm wall from both of its round faces, and its hole is no undercut. A box rounded 4 mm
 outside and hollowed to 2 mm walls: the thin top of its walls and its thin bottom corners
-are found, its walls read 2 mm, no false alarm at its corners.
+are found, its walls read 2 mm, no false alarm at its corners. A "Body1" in each of two
+components: the rule line and the issue rows name them "Component/Body1".
 """
 
 import os
@@ -429,6 +430,36 @@ def thin_rim():
     h.check("the corners raise no false alarm (nothing too thick)", not thick, thick)
 
 
+def same_name_in_components():
+    """Two components each holding a "Body1" (Fusion numbers bodies per component): the
+    rule line and the issue rows say which one ("Housing/Body1", "Cover/Body1")."""
+    from sciforge import components, plastic, plastic_advice
+    from sciforge import plastic_advice_core as core
+
+    d = App.newDocument("TwoBody1")
+    found = []
+    for name in ("Housing", "Cover"):
+        part = components.new_component(d, name)
+        body = d.addObject("PartDesign::Body", "Body")
+        part.addObject(body)
+        body.Label = "Body1"
+        ps._box(body, "Additive", "Block", (20, 20, 20), (0, 0, 0))
+        found.append((part, body))
+    plastic.assign_rule(d, "ABS 2 mm", None)
+    d.recompute()
+    want = ["%s/%s" % (part.Label, body.Label) for part, body in found]
+    h.check("each body named with its component", want == ["Housing/Body1", "Cover/Body1"], want)
+    titles = [plastic_advice.body_title(body) for _part, body in found]
+    h.check("the rule line's names", titles == want, titles)
+    obj = plastic_advice.make(d, [body for _part, body in found])
+    d.recompute()
+    labels = [b["label"] for b in plastic_advice.results(obj).get("bodies", [])]
+    h.check("the results name both", sorted(labels) == sorted(want), labels)
+    rows = core.rows(plastic_advice.results(obj))
+    where = sorted({label for _t, label, _e, _x, _n in rows})
+    h.check("the issue rows say which Body1", where == sorted(want), where)
+
+
 h.run(
     "plastic2_advice",
     [
@@ -465,5 +496,6 @@ h.run(
         empty_design,
         round_walls,
         thin_rim,
+        same_name_in_components,
     ],
 )
