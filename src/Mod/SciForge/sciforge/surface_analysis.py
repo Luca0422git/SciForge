@@ -135,7 +135,18 @@ ENUMS = {
 }
 
 
+_IMAGES = {}
+
+
 def environment_image(name, size=128):
+    """The picture for `name` (made once, then kept)."""
+    key = (name, int(size))
+    if key not in _IMAGES:
+        _IMAGES[key] = _environment_image(name, int(size))
+    return _IMAGES[key]
+
+
+def _environment_image(name, size):
     """The reflected surroundings as a sphere map (size x size grey levels, bytes, rows from
     the bottom): what a mirror ball standing in them shows. Studio: three soft horizontal
     light strips above, a dark floor below; Horizon: a sky brightening to the horizon over a
