@@ -110,10 +110,13 @@ FACE_KINDS = {
 }
 
 
-def delete_refusal(face_kinds, count_total):
+def delete_refusal(face_kinds, count_total, neighbours_turn=False):
     """What Delete says when the faces around the picked ones cannot close the gap
     (OpenCASCADE's defeaturing gives the solid back unchanged or fails). ``face_kinds``:
-    the surface type names of the picked faces; ``count_total``: faces of the body."""
+    the surface type names of the picked faces; ``count_total``: faces of the body;
+    ``neighbours_turn``: a face next to the lone flat face picked leans over it (a
+    chamfer's walls do, a box top's walls do not), so it could grow into its place and
+    something else stops the healing."""
     n = len(face_kinds)
     if n >= count_total:
         return "Deleting every face would leave nothing. Delete the body instead."
@@ -123,7 +126,17 @@ def delete_refusal(face_kinds, count_total):
         "Pick all the faces of the feature together (a boss's sides and top, a pocket's "
         "walls and floor), or use Replace Face to move it onto another face or plane."
     )
-    if kinds == {"flat"} and n == 1:
+    if kinds == {"flat"} and n == 1 and neighbours_turn:
+        # journey_surface (wave 6): a bevel whose foot meets a sliver of another face was
+        # told its neighbours "run parallel", which they do not: the sliver would have to
+        # vanish, and OpenCASCADE's defeaturing never removes a face it was not given
+        hint = (
+            "The faces next to it could grow into its place, but a face beside it would "
+            "have to disappear too (a sliver at its foot or end, say). Pick that face with "
+            "it (Ctrl+click) or the whole feature's faces together, or use Replace Face or "
+            "Press Pull to move it instead."
+        )
+    elif kinds == {"flat"} and n == 1:
         hint = (
             "Its neighbours run parallel or away from each other, so nothing can grow into "
             "its place. Pick the whole feature's faces together, or use Replace Face or "

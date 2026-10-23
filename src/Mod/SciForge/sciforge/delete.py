@@ -585,6 +585,30 @@ class DeleteFaceFeature:
     __setstate__ = loads
 
 
+def _neighbours_turn(shape, faces):
+    """Whether a lone flat face has a flat neighbour that leans over it (its plane not
+    along the face's normal: a chamfer's walls do, a box top's walls do not), so the
+    refusal can say what really stops the healing."""
+    if len(faces) != 1:
+        return False
+    try:
+        import Part
+
+        face = faces[0]
+        if not isinstance(face.Surface, Part.Plane):
+            return False
+        normal = face.Surface.Axis
+        for edge in face.Edges:
+            for other in shape.ancestorsOfType(edge, Part.Face):
+                if other.isSame(face) or not isinstance(other.Surface, Part.Plane):
+                    continue
+                if abs(other.Surface.Axis.dot(normal)) > 1e-3:
+                    return True
+    except Exception:
+        return False
+    return False
+
+
 def heal(shape, faces, refine=True):
     """The solid without `faces`, the faces around them grown to close it (Fusion's Delete
     on faces heals the solid). Refused with the reason and what to try when OpenCASCADE's
@@ -592,7 +616,9 @@ def heal(shape, faces, refine=True):
     from . import direct_core
 
     kinds = [type(f.Surface).__name__ for f in faces]
-    refusal = direct_core.delete_refusal(kinds, len(shape.Faces))
+    refusal = direct_core.delete_refusal(
+        kinds, len(shape.Faces), neighbours_turn=_neighbours_turn(shape, faces)
+    )
     if len(faces) >= len(shape.Faces):
         raise DeleteError(refusal)
     try:

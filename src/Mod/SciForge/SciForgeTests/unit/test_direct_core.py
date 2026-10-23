@@ -100,6 +100,14 @@ class DeleteRefusalTests(unittest.TestCase):
         self.assertTrue(text.startswith("This face cannot be deleted"))
         self.assertIn("Replace Face", text)
 
+    def test_a_lone_flat_face_whose_neighbours_lean_over_it(self):
+        # a bevel: its walls could grow into its place, so they do not "run parallel"
+        text = core.delete_refusal(["Plane"], 9, neighbours_turn=True)
+        self.assertTrue(text.startswith("This face cannot be deleted"))
+        self.assertNotIn("parallel", text)
+        self.assertIn("Ctrl+click", text)
+        self.assertIn("parallel", core.delete_refusal(["Plane"], 9, neighbours_turn=False))
+
     def test_several_faces(self):
         text = core.delete_refusal(["Plane", "Cylinder"], 10)
         self.assertTrue(text.startswith("These 2 faces cannot be deleted"))

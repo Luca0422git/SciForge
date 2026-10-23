@@ -543,7 +543,12 @@ def bevel_alone_refused():
     want = 24000 - fillet_volume(20) - chamfer_volume(20)
     # the bevel's foot meets a sliver of the lower piece's slanted top (the triangle the
     # bevel left uncovered): healing the bevel alone would have to make that face vanish
-    h.check("the bevel alone: refused with the reason", "cannot be deleted" in told(), told())
+    h.check("the bevel alone: refused", "cannot be deleted" in told(), told())
+    h.check(
+        "the reason: the sliver must go too (not 'neighbours run parallel': the walls lean)",
+        "parallel" not in told() and "Ctrl+click" in told(),
+        told(),
+    )
     h.check("the solid unchanged", st.near(v, want, 1e-9), v)
     Gui.Selection.clearSelection()
     h.click(V(39, 1, 15))

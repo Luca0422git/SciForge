@@ -21,6 +21,9 @@ z = 3 + 0.2 y over x -5 .. 45 (50 x W, W = 20.396); a sketch line on XY along x 
 9. Double-click Extrude 1: Distance 55: every later step follows (x -60 .. 60, a solid of
    240 W), none fails. Undo / Redo.
 10. Save, close, reopen: the same timeline, the solid, the analysis.
+11. Double-click Extrude 1: One Side: the surface now starts on the trim line, so the Trim
+    cannot cut: it turns red with the reason (the later steps red too, nothing built wrong);
+    Ctrl+Z: all back.
 """
 
 import math
@@ -411,6 +414,9 @@ def edit_redone():
     path = os.path.join(tempfile.mkdtemp(prefix="sciforge-journey-sf2-"), "journey_surface2.FCStd")
     s["path"] = path
     s["labels"] = (s["plate"].Label, s["copy"].Label)
+    s["surf_label"] = s["surf"].Label
+    trims = [o for o in doc().Objects if o.Label.startswith("Trim") and hasattr(o, "Shape")]
+    s["trim_label"] = trims[0].Label if trims else ""
     s["titles"] = titles()
     doc().saveAs(path)
     h.check("saved", os.path.isfile(path), path)
@@ -448,6 +454,59 @@ def reopened():
     h.check("the same timeline", titles() == s["titles"], (titles(), s["titles"]))
     h.check("no step in error", not bad_steps(), bad_steps())
     h.check("the analysis is back", len(a.analyses("EnvironmentMapAnalysis")) == 1)
+    s["plate"], s["copy"] = plate[0], copy[0]
+    s["surf"] = next(o for o in doc().Objects if o.Label == s["surf_label"])
+    h.check("double-clicked Extrude 1", st.double_click_timeline("Extrude 1"))
+
+
+# -- 11. an edit the later steps cannot follow --------------------------------------------------
+def one_side():
+    st.settle()
+    p = st.panel()
+    h.check("Edit Extrude after the reopen", p is not None and p.kind == "extrude" and p.editing)
+    st.choose("direction", "One Side")
+
+
+def one_side_ok():
+    """The surface now starts on the trim line (x 0): the Trim cannot cut the copy in two
+    any more. It must say so (a red step with the reason), never crash or cut wrong."""
+    st.settle()
+    st.ok()
+    st.settle()
+    h.idle_step()()
+    errors = h.new_errors()  # the red steps are reported (expected)
+    trim = next((o for o in doc().Objects if o.Label == s["trim_label"]), None)
+    status = trim.getStatusString() if trim is not None else ""
+    h.check(
+        "the Trim is red",
+        trim is not None and ("Invalid" in trim.State or "Error" in trim.State),
+        trim and trim.State,
+    )
+    h.check("with the reason", "does not cut" in status, (status, errors))
+    s["status"] = status
+
+
+def red_with_reason():
+    from sciforge import timeline_core  # noqa: F401  (the timeline shows the red steps)
+
+    later = [o for o in doc().Objects if "Invalid" in o.State or "Error" in o.State]
+    h.check("the later steps are red too, not built wrong", len(later) >= 1, later)
+    v = st.volume(s["plate"])
+    h.check("no plate built from a wrong surface", not (v and not st.near(v, s["v"], 1e-9)), v)
+    h.new_errors()
+    h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
+
+
+red_with_reason.wait_ms = 2000
+
+
+def fixed_by_undo():
+    st.settle()
+    h.idle_step()()
+    h.new_errors()  # the recompute of the red steps before the undo
+    h.check("Ctrl+Z: no step in error", not bad_steps(), bad_steps())
+    v = st.volume(s["plate"])
+    h.check("the plate back: 240 W", st.near(v, 240 * W, 1e-6), v)
 
 
 h.run(
@@ -498,5 +557,9 @@ h.run(
         close,
         reopen,
         reopened,
+        one_side,
+        one_side_ok,
+        red_with_reason,
+        fixed_by_undo,
     ],
 )
