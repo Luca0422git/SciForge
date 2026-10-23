@@ -63,11 +63,13 @@ of Flange 2's height rebuilds the hem and the Corner Closure exactly as a fresh 
 
 **Seen, not fixed**
 
-- When the flat pattern is created, FreeCAD logs "CornerClosure.DominantEdge missing element
-  reference ... Hem ... Edge45": the Corner Closure keeps its edges as plain names on the
-  step before it (a Python feature's shape, whose element map FreeCAD rebuilds with other
-  hashed names). The closure still rebuilds right (the edge keeps its number while the
-  topology stays the same, as in every edit of the journey); an edit that renumbers the
-  hem's edges could make it pick another edge (sm-more's area).
+- When the flat pattern is created in the GUI, FreeCAD logs once (a yellow line in the
+  Report view, not caught by the harness): "CornerClosure.DominantEdge missing element
+  reference ... Hem ... Edge45". The Corner Closure links its edges on the Hem by FreeCAD's
+  topological names; the Hem (a Python feature) was rebuilt with other hashed names at that
+  moment. Harmless in every case tried: the closure keeps the right edge after a thickness
+  change and a Flange height edit, and headless an edit of the hem from Open to Rolled
+  remaps the link (Edge45 -> Edge43) and gives exactly the volume of a fresh build. Not
+  traced further (sm-more / sm-flat interplay; what rebuilds the Hem at that click).
 - The journey's first hem check used the smmore_hem scenario's volume formula
   (FLAT + x0 L + strip L), which holds only for a 1 mm sheet: the sheet cut back is x0 T.
