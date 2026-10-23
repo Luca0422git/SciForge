@@ -66,8 +66,11 @@ class BendPanel(smp.SmPanel):
         self.add_check(
             "corner_relief",
             "Corner Relief",
-            "Corner relief where bend lines meet (bend lines may not cross yet)",
+            "Not available yet in SciForge: bend lines whose bend zones meet are refused "
+            "(use Bend Line Start or End). docs/sciforge/parity/sheet-metal-more.md",
         )
+        # shown greyed (as Fusion's row is there) rather than a box that changes nothing
+        self.fields["corner_relief"].setEnabled(False)
         self.add_check(
             "override_radius",
             "Override Bend Radius",

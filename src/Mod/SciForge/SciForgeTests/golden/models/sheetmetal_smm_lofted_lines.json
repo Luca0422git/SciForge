@@ -1,0 +1,58 @@
+{
+  "id": "sheetmetal_smm_lofted_lines",
+  "title": "Lofted Flange between two parallel lines on separate planes: a flat, slanted plate (once refused as 'in one plane')",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "line": [
+            -20,
+            0,
+            20,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "line": [
+            -10,
+            10,
+            10,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_lofted_flange",
+      "id": "l1",
+      "profile1": "s1",
+      "profile2": "s2",
+      "rule": "Steel (mm)",
+      "options": {
+        "forming": "brake"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 948.683298,
+    "solids": 1,
+    "faces": 6,
+    "source": "analytic",
+    "note": "a trapezoid plate: parallel sides 40 and 20, sqrt(10^2 + 30^2) apart, T = 1: (40 + 20) / 2 x sqrt(1000) x 1"
+  }
+}

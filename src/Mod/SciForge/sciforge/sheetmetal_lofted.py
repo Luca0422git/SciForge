@@ -394,7 +394,9 @@ def lofted_shape(edges1, edges2, options, thickness):
         flat = both.findPlane()
     except Exception:
         flat = None
-    if flat is not None:
+    # two straight lines on separate sketch planes always share a plane (parallel lines): that
+    # is a flat, slanted flange, not two profiles drawn in one plane
+    if flat is not None and (_profile_plane(w1) is not None or _profile_plane(w2) is not None):
         raise sb.SheetMetalError("The two profiles lie in one plane; put them on separate planes.")
     orientation = options.get("orientation", "side1")
     if options.get("forming", "brake") == "brake":
