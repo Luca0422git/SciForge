@@ -14,7 +14,10 @@ big flat face: SciForge measures the thickness and makes it sheet metal. SHEET M
 Flat Pattern, click a big flat face: the part is shown laid flat (the length every bend adds
 is worked out from the rule's K-factor) and the ribbon shows only FLAT PATTERN. Export DXF
 writes the outline, the holes, the corner reliefs, the bend lines (up and down on separate
-layers) and a note per bend for a laser cutter; the green Finish Flat Pattern goes back. The
+layers) and a note per bend for a laser cutter; the green Finish Flat Pattern goes back.
+The corner reliefs (the round or square holes where two bends meet) follow the rule, or
+the Flange's own Corner Relief setting when it has one; a corner closed with Corner
+Closure keeps the closure's own relief. The
 Flat Pattern stays in the browser (double-click to open it again, hover for its size) and
 follows changes to the part. File > New Drawing with Contents Select can draw the flat
 pattern; DRAWING > TABLES > Bend Table lists its bends. To cut a slot across a bend: MODIFY >
