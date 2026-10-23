@@ -127,7 +127,9 @@ class BossPanel(Panel):
         if feature is not None:
             try:
                 self.refs, options, self.participants, self.steps = pb.read(feature)
-                self.options = options or self.options
+                # the values still linked to the rule show what the boss is built with now
+                # (the rule may have changed since the boss was made)
+                self.options = pb.apply_rule(options, self.rule) if options else self.options
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self._build_form()

@@ -51,6 +51,9 @@ class RestPanel(Panel):
             try:
                 self.refs, read = pr.read(feature)
                 self.options.update(read)
+                # the values still linked to the rule show what the rest is built with now
+                # (the rule may have changed since the rest was made)
+                self.options = pr.apply_rule(self.options, rule)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self._build_form()

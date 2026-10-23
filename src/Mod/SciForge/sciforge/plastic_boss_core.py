@@ -92,7 +92,8 @@ def side_defaults(side, rule, screw=3.0):
         "countersink_angle": 90.0,
         "step_draft": float(rule["draft_angle"]),
         "clearance": _r(c / 2.0, 3),
-        "root_radius": _r(min(float(rule["nominal_radius"]), 0.5 * t)),
+        # the rule's Nominal Radius, as the rule link (RULE_LINKS) sets it at every recompute
+        "root_radius": _r(float(rule["nominal_radius"]), 3),
         "tip_radius": 0.0,
         "hole_start_radius": 0.0,
         "hole_end_radius": 0.0,

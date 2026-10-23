@@ -147,6 +147,59 @@ def rest_esc_dropped():
     rests = [o for o in doc.Objects if getattr(o, "SciForgeType", "") == "Rest"]
     h.check("Esc: no rest step", rests == [], rests)
     h.check("Esc: the cover as it was", ps.near(ps.volume(cover), s["v_cover"], 1e-6))
+    Gui.Selection.clearSelection()
+    h.ribbon("Rest")
+
+
+def rest_again():
+    h.fit()
+    h.click(V(30, 0, 22))
+
+
+def rest_ok():
+    ps.settle(ps.rest_panel())
+    ps.ok()
+
+
+def rest_made():
+    doc = App.ActiveDocument
+    rests = [o for o in doc.Objects if getattr(o, "SciForgeType", "") == "Rest"]
+    h.check("Rest made", ps.rest_panel() is None and len(rests) == 1, rests)
+    s["v_rest"] = ps.volume(doc.getObject(s["cover"]))
+    assign_rule("PMMA 2.5 mm")
+
+
+def assign_rule(name):
+    Gui.Selection.clearSelection()
+    h.ribbon("Assign Plastic Rule")
+    ps.settle(ps.assign_panel())
+    ps.click_tree_row(ps.assign_panel().rules.tree, name, "Library")
+    ps.ok()
+
+
+def rest_follows():
+    doc = App.ActiveDocument
+    v = ps.volume(doc.getObject(s["cover"]))
+    h.check("the Rest follows the rule's 2.5 mm wall", v > s["v_rest"] + 1.0, (v, s["v_rest"]))
+    ps.double_click_timeline("Rest 1")
+
+
+def rest_edit_shows_rule():
+    p = ps.rest_panel()
+    ps.settle(p)
+    h.check("edit opens the Rest", p is not None)
+    h.check(
+        "the edit shows the thickness it is built with (the rule's 2.5 mm)",
+        p and abs(p.thickness.value() - 2.5) < 1e-9,
+        p and p.thickness.value(),
+    )
+    ps.esc()
+
+
+def rest_closed():
+    doc = App.ActiveDocument
+    v = ps.volume(doc.getObject(s["cover"]))
+    h.check("Esc: the Rest unchanged", ps.rest_panel() is None and v > s["v_rest"] + 1.0, v)
     App.closeDocument(doc.Name)
 
 
@@ -259,6 +312,34 @@ def boss_follows_rule():
         (ps.volume(b), s["vb"]),
     )
     h.check("both steps valid", all("Invalid" not in o.State for o in boss_steps()), boss_steps())
+    ps.double_click_timeline(boss_titles()[0])
+
+
+def boss_edit_shows_rule():
+    p = ps.boss_panel()
+    ps.settle(p)
+    h.check("edit opens the Boss", p is not None)
+    if p is None:
+        return
+    for side in (1, 2):
+        w = p.side_widgets[side]
+        h.check(
+            "Side %d shows the root radius it is built with (the rule's 1.25)" % side,
+            abs(w["root_radius"].value() - 1.25) < 1e-9,
+            w["root_radius"].value(),
+        )
+        h.check(
+            "Side %d shows the rule's clearance (0.1 / 2)" % side,
+            abs(w["clearance"].value() - 0.05) < 1e-9,
+            w["clearance"].value(),
+        )
+    ps.esc()
+
+
+def boss_edit_closed():
+    b, _l = parts()
+    h.check("Esc closed the Boss", ps.boss_panel() is None)
+    h.check("Esc: the boss unchanged", not ps.near(ps.volume(b), s["vb"], 1e-3))
     ps.clear_library_prefs()
 
 
@@ -275,6 +356,12 @@ h.run(
         rest_drafted,
         esc,
         rest_esc_dropped,
+        rest_again,
+        rest_ok,
+        rest_made,
+        rest_follows,
+        rest_edit_shows_rule,
+        rest_closed,
         reopen_setup,
         click_points_row,
         boss_ok,
@@ -288,5 +375,7 @@ h.run(
         edit_undone,
         pick_pmma,
         boss_follows_rule,
+        boss_edit_shows_rule,
+        boss_edit_closed,
     ],
 )

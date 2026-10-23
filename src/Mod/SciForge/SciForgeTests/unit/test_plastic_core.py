@@ -144,6 +144,17 @@ class BossSettingsTest(unittest.TestCase):
         self.assertAlmostEqual(out["side1"]["root_radius"], 1.5)  # nominal radius
         self.assertAlmostEqual(o["side1"]["draft"], 1.0)  # a copy: the input is kept
 
+    def test_new_boss_shows_what_the_rule_link_builds(self):
+        # QA: a rule whose nominal radius is more than half its wall: the new dialog's root
+        # radius was clamped to T / 2 while the step was built with the rule's radius
+        pc = core.evaluated(core.make_rule("R", thickness="2", nominal_radius="1.6"))
+        o = boss.default_options(pc, 3.0)
+        built = boss.apply_rule(o, pc)
+        for side in ("side1", "side2"):
+            for key in boss.RULE_LINKS:
+                self.assertAlmostEqual(o[side][key], built[side][key], msg=key)
+        self.assertAlmostEqual(o["side1"]["root_radius"], 1.6)
+
     def test_constant_thickness_diameter(self):
         s = dict(boss.side_defaults(2, rule()), shape="constant_thickness")
         self.assertAlmostEqual(boss.outer_diameter(s), 2.4 + 2 * 1.2)
