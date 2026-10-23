@@ -417,9 +417,54 @@ def draft_own_default():
     ps.esc()
 
 
+def the_body():
+    return [o for o in App.ActiveDocument.Objects if o.TypeId == "PartDesign::Body"][0]
+
+
 def abs_moves_draft():
+    from sciforge import material
+
     v = h.solid_volume()
     h.check("ABS 2 mm: the linked Draft follows to 1 deg", sd.close(v, front_drafted(1.0)), v)
+    body = the_body()
+    h.check("the part is ABS", material.key_of(body) == "abs", material.key_of(body))
+    ps.undo()
+
+
+def abs_undone():
+    from sciforge import material, plastic
+
+    doc = App.ActiveDocument
+    h.check("Ctrl+Z: FDM PLA 2 mm again", plastic.assigned_rule_name(doc) == "FDM PLA 2 mm")
+    v = h.solid_volume()
+    h.check("Ctrl+Z: the Draft back at 1.5 deg", sd.close(v, front_drafted(1.5)), v)
+    body = the_body()
+    h.check("Ctrl+Z: the part is PLA again", material.key_of(body) == "pla", material.key_of(body))
+    ps.redo()
+
+
+def abs_redone():
+    from sciforge import plastic
+
+    doc = App.ActiveDocument
+    h.check("Ctrl+Y: ABS 2 mm", plastic.assigned_rule_name(doc) == "ABS 2 mm")
+    v = h.solid_volume()
+    h.check("Ctrl+Y: the Draft at 1 deg", sd.close(v, front_drafted(1.0)), v)
+    from SciForgeTests.gui import timeline_input as tl
+
+    entries = dict(tl.row_menu_entries("Plastic Rule: ABS 2 mm"))  # text -> enabled
+    h.check(
+        "the browser row's menu: Assign / Manage Plastic Rules",
+        entries.get("Assign Plastic Rule") and entries.get("Manage Plastic Rules"),
+        entries,
+    )
+    tl.row_menu("Plastic Rule: ABS 2 mm", "Manage Plastic Rules")
+
+
+def row_menu_manage():
+    p = ps.manage_panel()
+    h.check("the row's menu opens Manage Plastic Rules", p is not None)
+    ps.esc()
     ps.clear_library_prefs()
 
 
@@ -484,5 +529,8 @@ h.run(
         draft_own_default,
         assign_rule("ABS 2 mm"),
         abs_moves_draft,
+        abs_undone,
+        abs_redone,
+        row_menu_manage,
     ],
 )
