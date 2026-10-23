@@ -120,6 +120,9 @@ did not. What it found and fixed, in plain words for Luca:
   10 mm from the case's edge refused the whole boss (FreeCAD's geometry kernel cannot round
   the foot of a rib that stops 0.25 mm short of a wall). The boss is now built, those few rib
   ends are left square, and the dialog says so and how to round them.
+- **Hex screw heads fit their counterbore.** A Hex or Hex Washer head was sized across its
+  flats, so its corners stuck 0.2 mm into the counterbore wall (the screw collided with the
+  lid). It is sized across its corners now.
 - **A lid in its own component with its own rule**: each side of the boss already used the
   rule of the body it joins, but the dialog showed one rule's numbers for both sides. It now
   shows each side's own values and names both rules.

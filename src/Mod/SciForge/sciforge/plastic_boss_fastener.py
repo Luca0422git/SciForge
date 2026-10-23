@@ -7,10 +7,10 @@ The screw's head sits on the head side's seat: the counterbore's floor, the coun
 diameter) runs from there towards the thread side and stops 0.5 mm short of the pilot hole's
 bottom (Length 0 = that, Auto), or is the Length typed. Head types: Pan (a flat-topped head 0.6 d
 high), Round (a dome as wide and as high), Flat (countersunk, its cone the countersink's
-angle), Hex (across flats = the counterbore's diameter - 0.5), Hex Washer (a hex on a washer
-0.15 d thick). The thread is not modelled (Fusion's fastener carries it as a
-cosmetic thread). The step (``SciForge::BossFastener``) lives in the fastener component's
-body and follows the boss: edit the boss, the screws move with it.
+angle), Hex (across corners = the counterbore's diameter - 0.5, so it fits), Hex Washer (a
+hex on a washer as wide as its corners, 0.15 d thick). The thread is not modelled (Fusion's
+fastener carries it as a cosmetic thread). The step (``SciForge::BossFastener``) lives in the
+fastener component's body and follows the boss: edit the boss, the screws move with it.
 
 Options (``options["fastener"]``): create (bool), head ("pan" | "flat" | "hex"), length (mm,
 0 = auto).
@@ -100,7 +100,12 @@ def screw_shapes(pb, options, head_frames, head_base, thread_frames, thread_base
             screw = head.fuse(shank)
         else:
             if hole == "counterbore":
+                # the head fits the counterbore with 0.25 mm all round: a pan / round head's
+                # diameter, a hex's corners (QA: a hex 6 across flats in a 6.5 counterbore
+                # cut 0.2 mm into its wall with each corner)
                 width = float(s1["major_diameter"]) - 0.5
+                if f["head"] in ("hex", "hex_washer"):
+                    width *= math.cos(math.radians(30.0))  # across flats
             else:
                 width = 2.0 * d
             height = 0.6 * d

@@ -3,8 +3,8 @@
 sketch's two points, tick Create Component: a "Fastener" component with a "Screw" body holds a
 pan-head M3 screw at each boss (volume by hand: the head r 3 x 1.8 on the counterbore's
 floor, the shank r 1.5 down to 0.5 mm above the pilot hole's bottom, 20.55 long), Head Type
-Hex (across flats 6), OK; edit the boss from the timeline and untick it: the component goes;
-Ctrl+Z brings it back."""
+Hex (across corners 6: it fits the 6.5 counterbore), OK; edit the boss from the timeline
+and untick it: the component goes; Ctrl+Z brings it back."""
 
 import math
 import re
@@ -19,7 +19,7 @@ V = App.Vector
 s = {}
 
 PAN = 2 * (math.pi * 3.0**2 * 1.8 + math.pi * 1.5**2 * 20.55)
-HEX_AREA = 1.5 * math.sqrt(3) * (3.0 / math.cos(math.radians(30))) ** 2
+HEX_AREA = 1.5 * math.sqrt(3) * 3.0**2  # a hexagon 6 across corners (circumradius 3)
 HEX = 2 * (HEX_AREA * 1.8 + math.pi * 1.5**2 * 20.55)
 
 
@@ -91,6 +91,13 @@ def hexed():
     found = fasteners()
     v = found[0].Shape.Volume if found else 0
     h.check("hex heads by hand (%.3f)" % HEX, ps.near(v, HEX, 1e-6), v)
+    lid = App.ActiveDocument.getObject(s["lid"]) if "lid" in s else None
+    if found and lid is not None:
+        h.check(
+            "the hex heads clear the counterbore (QA)",
+            found[0].Shape.common(lid.Shape).Volume < 1e-6,
+            found[0].Shape.common(lid.Shape).Volume,
+        )
 
 
 def round_head():

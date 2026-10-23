@@ -88,7 +88,7 @@ rule when the component has none, and say so in the dialog.
 | Root Radius, Tip Radius, Hole Start / End Radius, Major Tip / Root Radius, Alignment Tip / Root Radius | Same (root: the rule's Nominal Radius; the others 0); the hole's start radius rounds its mouth (a simple hole; the head side's hole at the tip), the end radius its blind bottom; the counterbore's mouth and floor corner; the recess's mouth and floor corner, or the spigot's top edge and foot (a spigot narrower than the tip). Made as exact revolved rounds or fillets of the cutting tools, so they cannot fail on the part | A, G (defaults) |
 | Ribs per side: Quantity, Total Angle (360), Rotation from the sketch X, Thickness, Draft, Outer Draft, Length from the axis or To Next, Step Offset, a Chamfer (angle, size) or Fillet top corner; a To Next rib is web-shaped | Same; the Side 1 / Side 2 check boxes switch ribs on (Fusion's rib shape None = no ribs) | A (critic C2, CP.2 #6) |
 | Each rib's extent: By Length / To Next / Suppressed (`setRibExtent`) | Each Rib: one list per rib (up to 12), for all the side's points; a changed side-wide Extent resets them | A, G (all points) |
-| Fastener: Create Component (a screw at every boss, in a component of its own), Head Type, Drive, Thread Form, Length, material / finish text | Create Component with Head Type Pan / Round / Flat (countersunk) / Hex / Hex Washer and Length (0 = Auto: 0.5 mm short of the pilot hole's bottom); the head sits on the counterbore's floor, in the countersink, or on the outside face; the screws follow the boss (editing them opens the boss) | A (section), G (sizes) |
+| Fastener: Create Component (a screw at every boss, in a component of its own), Head Type, Drive, Thread Form, Length, material / finish text | Create Component with Head Type Pan / Round / Flat (countersunk) / Hex / Hex Washer and Length (0 = Auto: 0.5 mm short of the pilot hole's bottom); the head sits on the counterbore's floor (fitting it with 0.25 mm all round: a hex head's corners too, QA), in the countersink, or on the outside face; the screws follow the boss (editing them opens the boss) | A (section), G (sizes) |
 | Defaults from the screw size (Thread Diameter) | M3 by default: head side clearance hole d + 0.4, outer 2.5 d + 2.5, counterbore 2 d + 0.5, material under the head = Thickness; thread side pilot 0.8 d, outer 2.5 d, floor Thickness / 2; changing the Thread Diameter re-sizes both sides | G |
 
 ### Rest (PLASTIC > CREATE)
@@ -189,7 +189,10 @@ whose two bodies are in components with different rules was built with each body
 showed the active body's rule's values for both sides (each side shows its own rule's values
 now, and the dialog names both rules); turning on the default ribs of a boss 10 mm from the
 case's edge refused the whole boss (the rib ends 0.25 mm from the wall cannot be rounded by
-OpenCASCADE): those rib ends are left square now, said in the dialog. New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
+OpenCASCADE): those rib ends are left square now, said in the dialog; a Hex / Hex Washer
+fastener head in a counterbore was 6 mm across flats in a 6.5 mm counterbore, so its corners
+cut 0.2 mm into the counterbore wall (the screw collided with the part): it is sized across
+its corners now. New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
 golden `plastic_boss_major_draft`, unit tests. Every builder scenario, the plastic golden
 models, the unit tests and the shared dialogs' scenarios pass after the fixes.
 
