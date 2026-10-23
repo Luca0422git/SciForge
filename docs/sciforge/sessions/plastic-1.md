@@ -85,7 +85,7 @@ FreeCAD core change.
 dialogs pass (shell_draft 103, shell_draft_draft 85, sweep_loft_rib 68, sweep_loft_web 57,
 gaps_thin_extrude 215, extrude_feel_box 108, fillet2_rule 30, sheetmetal_rules 60,
 timeline_browser 92);
-`test_plastic_core.py` (17) passes; `--only base`: unit 1858 OK, golden 444 pass + 2 xfail
+`test_plastic_core.py` (21) passes; `--only base`: unit 1858 OK, golden 444 pass + 2 xfail
 (existing).
 
 **Open** (see the parity doc's Known gaps): more fastener heads / drives / thread, more

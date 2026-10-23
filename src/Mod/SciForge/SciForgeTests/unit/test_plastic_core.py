@@ -189,6 +189,55 @@ class BossSettingsTest(unittest.TestCase):
         self.assertIn("side 2: dia 7.50, simple", text)
 
 
+class BossMoreTest(unittest.TestCase):
+    def options(self):
+        return boss.default_options(rule(), 3.0)
+
+    def test_each_rib(self):
+        o = self.options()
+        s2 = o["side2"]
+        s2.update(ribs=True, rib_count=4, rib_extents=["length", "suppressed"])
+        boss.check_options(o)
+        self.assertEqual(boss.rib_extents(s2), ["length", "suppressed", "length", "length"])
+        s2["rib_extents"] = ["suppressed"] * 4
+        with self.assertRaises(boss.BossError) as ctx:
+            boss.check_options(o)
+        self.assertIn("every rib is suppressed", str(ctx.exception))
+        s2["rib_extents"] = ["sideways"]
+        with self.assertRaises(boss.BossError):
+            boss.check_options(o)
+
+    def test_to_next_ribs_need_no_length(self):
+        o = self.options()
+        o["side2"].update(ribs=True, rib_extent="to_next", rib_length=1.0)
+        boss.check_options(o)  # the length only counts for By Length ribs
+
+    def test_fastener_options(self):
+        o = self.options()
+        self.assertEqual(o["fastener"], {"create": False, "head": "pan", "length": 0.0})
+        o["fastener"] = {"create": True, "head": "hex_washer", "length": "12"}
+        self.assertEqual(boss.check_options(o)["fastener"]["length"], 12.0)
+        o["fastener"]["head"] = "torx"
+        with self.assertRaises(boss.BossError):
+            boss.check_options(o)
+        o = self.options()
+        o["fastener"] = {"create": True}
+        o["side1"]["shape"] = "blank"
+        with self.assertRaises(boss.BossError) as ctx:
+            boss.check_options(o)
+        self.assertIn("no screw to place", str(ctx.exception))
+
+    def test_hole_radii_default_to_zero_for_old_options(self):
+        o = self.options()
+        del o["side1"]["hole_start_radius"]
+        del o["side2"]["hole_end_radius"]
+        boss.check_options(o)
+        self.assertEqual(o["side1"]["hole_start_radius"], 0.0)
+        o["side2"]["hole_end_radius"] = -1
+        with self.assertRaises(boss.BossError):
+            boss.check_options(o)
+
+
 class RibbonTest(unittest.TestCase):
     def test_plastic_part_1_items_wired(self):
         want = {

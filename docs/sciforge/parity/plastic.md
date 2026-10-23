@@ -122,7 +122,7 @@ rule when the component has none, and say so in the dialog.
 | Golden | `plastic_boss_fastener` | the enclosure's bosses with their pan-head screws (exact) |
 | Golden | `plastic_boss_hole_radii` | the pilot holes' mouth and bottom rounded (Pappus, exact) |
 | Golden | `plastic_boss_ribs_each` | four square ribs per boss, the second suppressed (exact) |
-| Unit | `test_plastic_core.py` (17) | the library against the research table, inch rules, expressions, refusals, describe, materials; Boss defaults, rule links, refusals, rib angles; the PLASTIC tab's wiring |
+| Unit | `test_plastic_core.py` (21) | the library against the research table, inch rules, expressions, refusals, describe, materials; Boss defaults, rule links, refusals, rib angles; the PLASTIC tab's wiring |
 
 ## Known gaps (not built, with the reason)
 
