@@ -1726,6 +1726,15 @@ The session was started on `Release`.
   build + its tests, Windows build + its golden models, release job: all green; **published
   21:25 UTC** (see the top of this file). The build's 6 scenario parts on the AppImage were
   still running then (they do not hold the release back).
+- Build run #12's scenario parts on the built AppImage (read 22:43 UTC): 5 of 6 green; part 5
+  had one failed check, `sketch_qa_keys` R4 "L in the circle's field starts the line tool",
+  the same single check that failed on build run #3's AppImage and passes on stock FreeCAD
+  (CI #261, same commit). The new report says why: the keyboard stayed in the circle's value
+  field and the L was "kept in the field" (`after a value typed here`), so the field still
+  counted as typed-into when L came. Only on the built program, intermittent; effect for a
+  user: now and then L right after typing a circle's size goes into the field instead of
+  switching to Line. Minor, Luca not told; next step if it shows again: look at how the
+  field's "typed" state is reset when the circle tool starts its next circle.
 
 ### Session log: wave 6, SHEET METAL + PLASTIC tabs, SURFACE complete (`develop`, 2026-10-23 night)
 
