@@ -185,3 +185,15 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 - The ribbon sweep (`SWEEP_TABS=sheet_metal,flat_pattern`) flags sm-forming's Sheet Metal
   Rules window as a pop-up; that window is the command (it needs an INTENDED entry in
   `ribbon_sweep.py`, sm-forming's to add).
+
+## Journey pass (2026-10-23, `sf/journey-sm`)
+
+A whole sheet metal part was built across sm-forming, sm-more and sm-flat with real input
+(`journey_sheetmetal`, `journey_sheetmetal_convert`). Fixed:
+
+- **A flat pattern broke when the rule's Thickness changed.** The stationary face was looked
+  up only in the plane it was in, so a thicker rule (the plate's top face moves up by the
+  difference) made the Flat Pattern red: "the stationary face is gone after an edit: pick it
+  again". Fusion's flat pattern follows the part. `flatpattern.refind` now also takes, when
+  no face is in the old plane, the face facing the same way that lies over (or under) the
+  remembered point, the nearest one (golden `sm_flat_thickness_follow`).

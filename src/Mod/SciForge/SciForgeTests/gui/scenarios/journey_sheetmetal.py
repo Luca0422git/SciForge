@@ -82,15 +82,15 @@ def hem_flat(t, length, gap):
     return -(ri + t) + math.pi * (ri + K * t) + (length - (ri + t))
 
 
-def flat_size(t):
-    """The flat's X and Y lengths for thickness t (R = t): the right flange laid out along
-    x, the front flange and the hem along y."""
+def flat_size(t, height=H):
+    """The flat's X and Y lengths for thickness t (R = t) and the flanges' height: the right
+    flange laid out along x, the front flange and the hem along y."""
     r = t
     hem = hem_step()
     length = float(hem.Length) if hem is not None else 4 * 1.5
     gap = float(hem.Gap) if hem is not None else 0.5 * 1.5
-    x = (LX - (r + t)) + ba90(t, r) + (H - r)
-    y = (H - r) + ba90(t, r) + (LY - (r + t)) + hem_flat(t, length, gap)
+    x = (LX - (r + t)) + ba90(t, r) + (height - r)
+    y = (height - r) + ba90(t, r) + (LY - (r + t)) + hem_flat(t, length, gap)
     return x, y
 
 
@@ -163,10 +163,10 @@ def out(name):
     return path
 
 
-def check_flat(where, t):
+def check_flat(where, t, height=H):
     fp = fs.flat()
     bb = fs.flat_box(fp)
-    x, y = flat_size(t)
+    x, y = flat_size(t, height)
     h.check(
         "%s: flat %.4f x %.4f (bend allowance maths)" % (where, x, y),
         bb is not None and fs.close(bb.XLength, x) and fs.close(bb.YLength, y),
@@ -717,6 +717,62 @@ def done():
     h.check("the folded body shown", body().ViewObject.Visibility)
 
 
+# -- 10. an earlier step edited: everything after it follows ----------
+def edit_flanges():
+    h.fit()
+    Gui.Selection.clearSelection()
+    sm.double_click_timeline("Flange 2")
+
+
+def edit_open():
+    sm.settle()
+    p = sm.panel()
+    h.check(
+        "the Flange dialog opens on Flange 2 with its two edges",
+        p is not None and p.editing and p.kind == "edge" and len(p.refs) == 2,
+        p and (p.kind, p.refs),
+    )
+    sm.type_field("height", "20")
+
+
+def edit_ok():
+    sm.settle()
+    h.check("no message", not sm.message(), sm.message())
+    sm.ok()
+
+
+def edited():
+    fs.settle()
+    b = body()
+    h.check("dialog closed", sm.panel() is None)
+    h.check("walls 20 high: top at T + H = 22", _box_is(b.Shape.BoundBox, 60, 40, 22))
+    # each wall 5 mm taller, 2 mm thick, as long as it runs (to 0.1 short of the corner's
+    # bisector after the Corner Closure: 60 - T / 2 - 0.1 sqrt 2 and 40 - T / 2 - 0.1 sqrt 2)
+    grow = 5 * 2 * ((60 - 1 - 0.1 * math.sqrt(2)) + (40 - 1 - 0.1 * math.sqrt(2)))
+    added = vol() - s["thick"]
+    h.check("the walls 5 mm taller (about 977)", abs(added - grow) < 0.01 * grow, (added, grow))
+    h.check("the corner still closed", inside(V(58.6, 0.75, 10)) and inside(V(59.25, 1.4, 10)))
+    h.check("the 0.2 gap kept", not inside(V(59.6, 0.4, 10)))
+    h.check("the hole still through the wall", not inside(V(LX - 1.0, 20, 10)))
+    solid_ok("edited")
+    check_flat("edited", 2.0, 20.0)
+    titles = sm.timeline_titles()
+    h.check("the timeline unchanged", titles == s["titles_saved"], titles)
+    h.shot("9-edited")
+
+
+def undo_edit():
+    smm.undo()
+
+
+def edit_undone():
+    fs.settle()
+    b = body()
+    h.check("undo: 15 high again", _box_is(b.Shape.BoundBox, 60, 40, 17), b.Shape.BoundBox)
+    h.check("undo: the part as before", sm.near(vol(), s["thick"], 1e-6), (vol(), s["thick"]))
+    check_flat("edit undone", 2.0)
+
+
 h.run(
     "journey_sheetmetal",
     [
@@ -788,5 +844,11 @@ h.run(
         flat_opened,
         finish_again,
         done,
+        edit_flanges,
+        edit_open,
+        edit_ok,
+        edited,
+        undo_edit,
+        edit_undone,
     ],
 )
