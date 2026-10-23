@@ -4,7 +4,7 @@ Branch `sf/journey-pl` from `wave6-integration`. Nobody had built a whole plasti
 the new tools together; this session did it with real clicks and keys only, the way a Fusion
 user would, and fixed what broke on the way.
 
-## The journey (scenarios `journey_plastic`, `journey_plastic_rule`)
+## The journey (scenarios `journey_plastic`, `journey_plastic_rule`, `journey_plastic_timeline`)
 
 Steps and hand-worked numbers: `SciForgeTests/gui/journey_plastic_steps.py`.
 
@@ -23,16 +23,23 @@ Steps and hand-worked numbers: `SciForgeTests/gui/journey_plastic_steps.py`.
    on the Lid, turned with Rotation Angle to face the wall, its groove in the Base's back
    wall (21.824 exact, all inside the wall).
 6. Lip (the Lid hidden): the rim's four inside edges clicked, Lip And Groove: the lip on the
-   Base (248 - drafts = 243.67 exact), the groove in the Lid.
+   Base (248 - drafts = 243.67 exact), the groove in the Lid; Ctrl+Z (both gone), Ctrl+Y.
 7. Offset Plane 3 mm in front of the front wall, a 20 x 10 rectangle on it, Rest: a pad
    standing 3 mm out of the wall, one flat 20 x 10 face at y -3.
-8. Design Advice on both bodies: issues listed (the walls have no draft), no error.
+8. Design Advice on both bodies: issues listed (the walls have no draft), no error. Then
+   "PC 2 mm" assigned to the Base alone: the Base becomes polycarbonate, the Lid stays ABS,
+   the analysis names both rules; Ctrl+Z.
 9. (`journey_plastic_rule`) Manage Plastic Rules: the design's rule edited to 2.5 mm: both
    Shell steps (by hand), the Boss's ribs (0.6 x T), the Snap Fit's beam, the Lip's width
    (T / 2) and the Rest's thickness follow; Ctrl+Z all back to 2 mm, Ctrl+Y to 2.5.
 10. Save, close, reopen: same volumes and steps. Double-click Boss (Offset Position 1 moves
     both halves, OK, Ctrl+Z), Snap Fit (rule thickness and the turn read back, Beam Length
     14, OK), Lip (4 edges, rule width 1.25, height 1.5 grows it, Esc leaves it).
+11. (`journey_plastic_timeline`) The root active: the history marker before the Boss (both
+    halves back to their shells, by hand) and to the end; the Lip suppressed from its
+    right-click menu (the lip and its groove in the Lid gone; the Rest goes too, see below)
+    and unsuppressed; the Snap Fit deleted (its groove step goes with it, the back wall whole
+    again: + 21.824, the Lip still fine), Ctrl+Z.
 
 ## Bugs found and fixed
 
@@ -78,7 +85,16 @@ Steps and hand-worked numbers: `SciForgeTests/gui/journey_plastic_steps.py`.
 - The Snap Fit's catch faces the sketch's X (parity `plastic-2.md`): a sketch on a rim face
   gets its axes from the face, so the catch is turned with Rotation Angle to face the wall.
 
-## Tests
+## Tests (real FreeCAD 1.1.4 under xvfb)
 
-`journey_plastic` and `journey_plastic_rule` (real FreeCAD 1.1.4 under xvfb); the area
-scenarios of the changed files and `--only unit` after each fix (see the report).
+- `journey_plastic` 215 checks, `journey_plastic_rule` 282, `journey_plastic_timeline` 218:
+  PASS.
+- After the fixes: golden models with "plastic" in their name (31, with the new
+  `plastic_rest_closed_box`), `plastic_rest`, `plastic_qa_tools`, `plastic_boss_face`,
+  `plastic2_lip`, `extrude_multibody`, `components_extrude`, `gaps_join_new_body`,
+  `fixdecal_components`, `components_basic`, `timeline_browser_qa3`, `smmore_hem`,
+  `smmore_corner`, `smmore_round`, `fixpattern_marker`: PASS; `--only unit` (1994): OK.
+- `extrude_multibody_edit` fails one timing check ("the drag answered quickly": 11-12.8 s
+  for 16 moves, limit 8 s) with and without this branch's changes (checked by running it on
+  the base code): a speed problem of the integration branch or this machine, not a
+  regression of this session.
