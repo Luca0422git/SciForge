@@ -193,6 +193,10 @@ class FacetTests(unittest.TestCase):
         self.assertEqual(core.facets_for_arc(15, 90, "facet_angle", 10), 5)
         # chord 2 r sin(a / 2n) <= 5 mm on r 20, 90 degrees: 7 facets
         self.assertEqual(core.facets_for_arc(20, 90, "facet_distance", 5), 7)
+        # a full circle never collapses to a point or a line (QA: Face Number 1 made a pyramid)
+        for control, value in (("facet_number", 1), ("facet_number", 2), ("chord_tolerance", 99)):
+            self.assertEqual(core.facets_for_arc(15, 360, control, value), 3)
+        self.assertEqual(core.facets_for_arc(15, 180, "facet_number", 1), 1)
         n = core.facets_for_arc(15, 360, "chord_tolerance", 0.1)
         sag = 15 * (1 - math.cos(math.radians(360.0 / n) / 2))
         self.assertLessEqual(sag, 0.1 + 1e-9)
