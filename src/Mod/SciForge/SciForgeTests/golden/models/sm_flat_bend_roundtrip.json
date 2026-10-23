@@ -1,0 +1,94 @@
+{
+  "id": "sm_flat_bend_roundtrip",
+  "title": "A plate bent 90 degrees on a line (Bend) lays flat to the plate it was",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "bend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            50,
+            -5,
+            50,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        20,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "center"
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4000,
+    "bbox": [
+      0,
+      0,
+      -1,
+      100,
+      40,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "the Bend keeps the neutral length (both use K 0.44): the flat is the 100 x 40 x 1 plate again"
+  }
+}

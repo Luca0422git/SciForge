@@ -1,0 +1,78 @@
+{
+  "id": "sm_flat_hem_open",
+  "title": "Flat pattern of a plate with an open hem (Hem)",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "hem"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_sm_hem",
+      "id": "h1",
+      "edges": [
+        [
+          100,
+          20,
+          1
+        ]
+      ],
+      "options": {
+        "type": "open"
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4146.708,
+    "bbox": [
+      0,
+      0,
+      -1,
+      103.6677,
+      40,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "plate cut back R + T = 1.25 (inner radius = gap / 2 = 0.25), a 180 degree bend BA = pi (0.25 + 0.44) = 2.16770 (critic pass CP1 item 2), the hem's straight run 4T - (R + T) = 2.75: 98.75 + 2.16770 + 2.75"
+  }
+}
