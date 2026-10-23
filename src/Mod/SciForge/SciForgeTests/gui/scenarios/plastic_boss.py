@@ -138,6 +138,34 @@ def ribs_made():
     h.shot("3-ribs")
 
 
+def suppress_rib_2():
+    p = ps.boss_panel()
+    h.check("one list per rib", p and len(p.each_combos) == 4, p and len(p.each_combos))
+    ps.choose(p.each_combos[1], "Suppressed")
+
+
+def rib_2_gone():
+    p = ps.boss_panel()
+    ps.settle(p)
+    h.check(
+        "rib 2 suppressed",
+        p and p.options["side2"]["rib_extents"] == ["length", "suppressed", "length", "length"],
+        p and p.options["side2"].get("rib_extents"),
+    )
+    b, _l = bodies()
+    v = ps.volume(b)
+    h.check("one rib less at each point", v < s["v_b2"] - 10, (v, s["v_b2"]))
+    h.check("still one valid solid", b.Shape.isValid() and len(b.Shape.Solids) == 1)
+    ps.choose(p.each_combos[1], "By Length")
+
+
+def rib_2_back():
+    p = ps.boss_panel()
+    ps.settle(p)
+    b, _l = bodies()
+    h.check("rib 2 back", ps.near(ps.volume(b), s["v_b2"], 1e-6), ps.volume(b))
+
+
 def side1_tab():
     p = ps.boss_panel()
     ps.tab_of(p, "Side 1")
@@ -323,6 +351,9 @@ h.run(
         rib_side_2,
         rib_rotation,
         ribs_made,
+        suppress_rib_2,
+        rib_2_gone,
+        rib_2_back,
         side1_tab,
         huge_hole,
         refused,

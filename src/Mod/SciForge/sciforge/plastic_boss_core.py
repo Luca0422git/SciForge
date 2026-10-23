@@ -13,6 +13,7 @@ EXTENTS = ("through", "from_top", "from_bottom")
 STEPS = ("none", "in", "out")
 RIB_PROFILES = ("none", "chamfer", "fillet")
 RIB_EXTENTS = ("length", "to_next")
+RIB_EACH = ("length", "to_next", "suppressed")
 
 SIDE_NUMBERS = (
     "diameter",
@@ -202,6 +203,12 @@ def check_options(options):
             except (TypeError, ValueError, KeyError):
                 raise BossError("Side %d: %s must be a number" % (side, key.replace("_", " ")))
         s["rib_count"] = int(s.get("rib_count", 4))
+        each = s.get("rib_extents") or []
+        if not isinstance(each, list) or any(e not in RIB_EACH for e in each):
+            raise BossError(
+                "Side %d: each rib is By Length, To Next or Suppressed (%r)" % (side, each)
+            )
+        s["rib_extents"] = list(each)
         if not s.get("enabled", True):
             continue
         name = "Side %d" % side
@@ -252,7 +259,10 @@ def check_options(options):
                 raise BossError("%s: the ribs' total angle must be 0-360 degrees." % name)
             if s["rib_thickness"] <= TOL:
                 raise BossError("%s: the rib thickness must be more than 0." % name)
-            if s["rib_extent"] == "length" and s["rib_length"] <= od / 2.0 + TOL:
+            extents = rib_extents(s)
+            if all(e == "suppressed" for e in extents):
+                raise BossError("%s: every rib is suppressed: switch the ribs off." % name)
+            if "length" in extents and s["rib_length"] <= od / 2.0 + TOL:
                 raise BossError(
                     "%s: the rib length (from the boss axis) must reach past the boss "
                     "(more than %.2f mm)." % (name, od / 2.0)
@@ -260,6 +270,14 @@ def check_options(options):
             if s["rib_offset"] < 0 or s["rib_cut"] < 0:
                 raise BossError("%s: rib sizes cannot be negative." % name)
     return options
+
+
+def rib_extents(s):
+    """Each rib's extent (Fusion sets them one by one): "length", "to_next" or
+    "suppressed"; ribs not listed take the side's extent."""
+    each = list(s.get("rib_extents") or [])
+    count = int(s.get("rib_count", 0))
+    return [each[i] if i < len(each) else s["rib_extent"] for i in range(count)]
 
 
 def outer_diameter(s):

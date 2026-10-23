@@ -87,6 +87,11 @@ def _side(here, values):
         elif key in SIDE_FLAGS:
             if not isinstance(value, bool):
                 schema._fail(here, "'%s' is true or false" % key)
+        elif key == "rib_extents":
+            if not isinstance(value, list) or any(
+                v not in ("length", "to_next", "suppressed") for v in value
+            ):
+                schema._fail(here, "'rib_extents' lists length / to_next / suppressed")
         elif key in SIDE_NUMBERS:
             schema._check_number(here + "." + key, value)
         else:

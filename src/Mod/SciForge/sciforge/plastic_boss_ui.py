@@ -39,6 +39,7 @@ HEAD_LABELS = [
     ("Hex", "hex"),
     ("Hex Washer", "hex_washer"),
 ]
+EACH_LABELS = [("By Length", "length"), ("To Next", "to_next"), ("Suppressed", "suppressed")]
 RIB_EXTENT_LABELS = [("Length", "length"), ("To Next", "to_next")]
 
 SIDE_FIELDS = [
@@ -272,6 +273,12 @@ class BossPanel(Panel):
         self.rib_extent.setObjectName("SciForgeBoss_rib_extent")
         self.rib_extent.currentIndexChanged.connect(lambda *_a: self._rib_typed("rib_extent"))
         grid.addRow("Extent", self.rib_extent)
+        # Fusion sets each rib's extent: By Length, To Next or Suppressed
+        self.each_box = QtWidgets.QWidget()
+        self.each_layout = QtWidgets.QGridLayout(self.each_box)
+        self.each_layout.setContentsMargins(0, 0, 0, 0)
+        self.each_combos = []
+        grid.addRow("Each Rib", self.each_box)
         self.rib_fields = {}
         self.rib_labels = {}
         for key, text, unit in RIB_FIELDS:
@@ -324,9 +331,36 @@ class BossPanel(Panel):
             curve_pick.set_combo(self.rib_extent, s["rib_extent"])
             for key, _text, _unit in RIB_FIELDS:
                 self.rib_fields[key].set_value(float(s[key]))
+            self._show_each(s)
         finally:
             self._quiet = quiet
         self._update_visibility()
+
+    def _show_each(self, s):
+        """One small list per rib (its extent), up to 12 ribs."""
+        for combo in self.each_combos:
+            self.each_layout.removeWidget(combo)
+            combo.hide()
+            combo.deleteLater()
+        self.each_combos = []
+        extents = pb.rib_extents(s)
+        for i, extent in enumerate(extents[:12]):
+            combo = curve_pick.combo(EACH_LABELS, extent)
+            combo.setObjectName("SciForgeBoss_rib_each_%d" % (i + 1))
+            combo.setToolTip("Rib %d" % (i + 1))
+            combo.currentIndexChanged.connect(lambda *_a, k=i: self._rib_each_typed(k))
+            self.each_layout.addWidget(combo, i // 3, i % 3)
+            self.each_combos.append(combo)
+
+    @safe
+    def _rib_each_typed(self, index):
+        if self._quiet:
+            return
+        s = self.options["side%d" % self._rib_side()]
+        each = pb.rib_extents(s)
+        each[index] = self.each_combos[index].currentData()
+        s["rib_extents"] = each
+        self._changed()
 
     def _rib_side(self):
         return int(self.rib_side.currentData() or 1)
@@ -418,10 +452,22 @@ class BossPanel(Panel):
         s = self.options["side%d" % side]
         if key == "rib_count":
             s[key] = int(self.rib_count.value())
+            s["rib_extents"] = list(s.get("rib_extents") or [])[: s[key]]
+            quiet, self._quiet = self._quiet, True
+            try:
+                self._show_each(s)
+            finally:
+                self._quiet = quiet
         elif key == "rib_profile":
             s[key] = self.rib_profile.currentData()
         elif key == "rib_extent":
             s[key] = self.rib_extent.currentData()
+            s["rib_extents"] = []  # every rib takes the new extent
+            quiet, self._quiet = self._quiet, True
+            try:
+                self._show_each(s)
+            finally:
+                self._quiet = quiet
         else:
             s[key] = float(self.rib_fields[key].value())
             self.options.setdefault("links", {})["side%d.%s" % (side, key)] = False

@@ -45,6 +45,8 @@ hook), 98a1d05 (Plastic Rule row).
 - A rib that stops a fraction of a millimetre short of a wall leaves no room for the root
   fillet (OpenCASCADE `StdFail_NotDone`); turning the ribs or using To Next works. The dialog
   says so.
+- A rib slab made a hair wider for the draft trapezoid to trim was left 0.02 mm too thick
+  when the draft is 0 (found by the exact golden `plastic_boss_ribs_each`; fixed).
 - `fillet_ui._select()` blocks the combo's signal: to switch the Fillet dialog's Type the way
   a click does, set the index directly (`panel.type.setCurrentIndex(...)`).
 - In the iso view the lid covers the parting plane's points: the scenario picks them by
@@ -75,9 +77,10 @@ function beside sm-forming's `_settings_rows`, one call, one click branch, two m
 one MENUS row). `sf/sm-forming` is merged into this branch (7f7e786) for that hook. No
 FreeCAD core change.
 
-**Tests**: scenarios `plastic_rules` (67), `plastic_boss` (53), `plastic_boss_face` (30),
+**Tests**: scenarios `plastic_rules` (67), `plastic_boss` (58), `plastic_boss_face` (30),
 `plastic_boss_fastener` (20), `plastic_rest` (39), `ribbon_sweep` with SWEEP_TABS=plastic (114) pass; golden `plastic_boss_enclosure`,
-`plastic_boss_fastener`, `plastic_boss_hole_radii`, `plastic_rest_cylinder`, `plastic_rule_boss_wall`,
+`plastic_boss_fastener`, `plastic_boss_hole_radii`, `plastic_boss_ribs_each`,
+`plastic_rest_cylinder`, `plastic_rule_boss_wall`,
 `plastic_rule_edit_moves_boss` pass (exact, analytic); existing scenarios of the touched
 dialogs pass (shell_draft 103, shell_draft_draft 85, sweep_loft_rib 68, sweep_loft_web 57,
 gaps_thin_extrude 215, extrude_feel_box 108, fillet2_rule 30, sheetmetal_rules 60,
@@ -86,5 +89,5 @@ timeline_browser 92);
 (existing).
 
 **Open** (see the parity doc's Known gaps): more fastener heads / drives / thread, more
-boss blends, per-rib extents, Boss / Rest in Change Parameters, Thicken / Emboss defaults,
+boss blends, per-rib extents per point, Boss / Rest in Change Parameters, Thicken / Emboss defaults,
 Rib draft, the Shell Sharp half-pipe finding.

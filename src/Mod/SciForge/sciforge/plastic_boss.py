@@ -48,7 +48,9 @@ from .plastic_boss_core import (  # noqa: F401  (the Boss's settings, re-exporte
     SIDE_CHOICES,
     FASTENER_DEFAULTS,
     FASTENER_HEADS,
+    RIB_EACH,
     RULE_LINKS,
+    rib_extents,
     BossError,
     side_defaults,
     default_options,
@@ -200,10 +202,13 @@ def side_shapes(base, frame, s, label="Side"):
             raise BossError(
                 "%s: the ribs' step offset is taller than the boss. Lower the step offset." % label
             )
-        for angle in rib_angles(s["rib_count"], s["rib_total_angle"], s["rib_rotation"]):
+        angles = rib_angles(s["rib_count"], s["rib_total_angle"], s["rib_rotation"])
+        for angle, extent in zip(angles, rib_extents(s)):
+            if extent == "suppressed":
+                continue
             e = frame.radial(angle)
             length = float(s["rib_length"])
-            if s["rib_extent"] == "to_next":
+            if extent == "to_next":
                 mid = frame.at((s_top + s_in) / 2.0)
                 start = mid + e * (od / 2.0 + 1e-3)
                 found = segments(base, start, e, reach)
@@ -214,7 +219,7 @@ def side_shapes(base, frame, s, label="Side"):
                     )
                 a0, a1 = found[0]
                 length = od / 2.0 + 1e-3 + a0 + (a1 - a0) / 2.0
-            rib_settings = s if s["rib_extent"] == "length" else dict(s, rib_profile="none")
+            rib_settings = s if extent == "length" else dict(s, rib_profile="none")
             adds.append(_rib(frame, e, rib_settings, s_top, root, length, od, label))
             rib_info.append((angle, length))
     # the hole
@@ -400,7 +405,11 @@ def _rib(frame, e, s, s_top, s_bottom, length, od, label):
     t = float(s["rib_thickness"])
     spread = height * _tan(s["rib_draft"])
     full = t + 2.0 * spread
-    slab = face.translated(w * (-full / 2.0 - 0.01)).extrude(w * (full + 0.02))
+    if spread > 1e-6:
+        # a little wider: the drafted sides are cut by the trapezoid below
+        slab = face.translated(w * (-full / 2.0 - 0.01)).extrude(w * (full + 0.02))
+    else:
+        slab = face.translated(w * (-t / 2.0)).extrude(w * t)
     if spread > 1e-6:
         q = [
             frame.at(s_top - 0.01) + w * (-t / 2.0),
