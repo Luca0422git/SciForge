@@ -24,6 +24,7 @@ SIDE_NUMBERS = (
     "hole_depth",
     "major_diameter",
     "major_depth",
+    "major_draft",
     "countersink_angle",
     "step_diameter",
     "step_depth",
@@ -89,6 +90,9 @@ def side_defaults(side, rule, screw=3.0):
         "wall": _r(0.6 * t),
         "draft": float(rule["draft_angle"]),
         "hole_draft": 0.0,
+        # the counterbore wall's draft (Fusion's Major Draft Angle); 0: a plain counterbore
+        # the screw head fits (G: SciForge does not link it to the rule's draft)
+        "major_draft": 0.0,
         "countersink_angle": 90.0,
         "step_draft": float(rule["draft_angle"]),
         "clearance": _r(c / 2.0, 3),
@@ -211,6 +215,7 @@ def check_options(options):
             "step_root_radius",
             "major_tip_radius",
             "major_root_radius",
+            "major_draft",  # (added by the QA pass: bosses saved before have none)
         ):
             s.setdefault(key, 0.0)
         for key in SIDE_NUMBERS:
@@ -254,7 +259,14 @@ def check_options(options):
             raise BossError("%s: the alignment recess must be wider than the hole." % name)
         if s["step"] == "out" and hole and s["step_diameter"] <= s["hole_diameter"] + TOL:
             raise BossError("%s: the alignment spigot must be wider than the hole." % name)
-        for key in ("draft", "hole_draft", "rib_draft", "rib_outer_draft", "step_draft"):
+        for key in (
+            "draft",
+            "hole_draft",
+            "major_draft",
+            "rib_draft",
+            "rib_outer_draft",
+            "step_draft",
+        ):
             if not 0.0 <= s[key] < 30.0:
                 raise BossError("%s: draft angles must be 0-30 degrees." % name)
         for key in (

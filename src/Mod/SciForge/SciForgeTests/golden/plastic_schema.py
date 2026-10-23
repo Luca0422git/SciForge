@@ -37,6 +37,7 @@ SIDE_NUMBERS = {
     "hole_depth",
     "major_diameter",
     "major_depth",
+    "major_draft",
     "countersink_angle",
     "step_diameter",
     "step_depth",

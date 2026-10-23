@@ -324,6 +324,12 @@ def side_shapes(base, frame, s, label="Side"):
                 "%s: a countersink has no floor to round: set the counterbore root radius "
                 "to 0." % label
             )
+        md = _tan(s.get("major_draft", 0.0))  # the counterbore wall widens to its mouth
+        if s["hole"] == "counterbore" and md > 0.0 and r_mtip > TOL:
+            raise BossError(
+                "%s: the counterbore tip radius rounds a counterbore without draft: set the "
+                "Major Draft Angle or the Major Tip Radius to 0." % label
+            )
         if r_mtip > TOL and r_mtip >= max(0.0, od / 2.0 - r_m) - 1e-3:
             raise BossError(
                 "%s: the counterbore tip radius (%.2f mm) is wider than the wall around it."
@@ -342,7 +348,8 @@ def side_shapes(base, frame, s, label="Side"):
                         "%s: the counterbore leaves no material under the screw head: make "
                         "its Major Depth smaller than %.2f mm." % (label, s_out - tip)
                     )
-                bore = _cone(r_m, r_m, s_out + 0.05 - floor, frame.at(floor), frame.d)
+                deep = s_out + 0.05 - floor
+                bore = _cone(r_m, r_m + deep * md, deep, frame.at(floor), frame.d)
                 if r_mroot > TOL:
                     bore = _fillet_circle_at(
                         bore, frame.at(floor), r_m, r_mroot, label, "counterbore root"
@@ -354,7 +361,8 @@ def side_shapes(base, frame, s, label="Side"):
                 depth = float(s["major_depth"])
                 if tip + depth >= end - 1e-4:
                     raise BossError("%s: the counterbore is deeper than the hole." % label)
-                bore = _cone(r_m, r_m, depth + spigot + 0.05, frame.at(start), frame.d)
+                deep = depth + spigot + 0.05
+                bore = _cone(r_m + deep * md, r_m, deep, frame.at(start), frame.d)
                 if r_mroot > TOL:
                     bore = _fillet_circle_at(
                         bore, frame.at(tip + depth), r_m, r_mroot, label, "counterbore root"

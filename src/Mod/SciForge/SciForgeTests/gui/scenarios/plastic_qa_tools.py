@@ -283,6 +283,45 @@ def offset_moved():
     )
     h.check("and the lid's shorter", ps.volume(l) < s["vl"] - 1.0, (ps.volume(l), s["vl"]))
     s.update(vb1=ps.volume(b), vl1=ps.volume(l))
+    ps.tab_of(p, "Side 1")
+    ps.type_into(p.side_widgets[1]["major_draft"].widget, "5")
+
+
+def counterbore_drafted():
+    """The counterbore (floor at z 21.05 + 2 = 23.05, r 3.25) widens by tan 5 deg up to the
+    outside (z 30): a frustum instead of a cylinder."""
+    p = ps.boss_panel()
+    ps.settle(p)
+    _b, l = parts()
+    h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
+    k = math.tan(math.radians(5.0))
+    length, r1 = 6.95, 3.25
+    r2 = r1 + length * k
+    extra = math.pi * length / 3.0 * (r1 * r1 + r1 * r2 + r2 * r2) - math.pi * r1 * r1 * length
+    want = s["vl1"] - extra
+    h.check(
+        "Major Draft Angle 5: the counterbore widens to the outside (-%.3f)" % extra,
+        ps.near(ps.volume(l), want, 1e-4),
+        (ps.volume(l), want),
+    )
+    s["vl1"] = ps.volume(l)
+    ps.type_into(p.side_widgets[1]["major_tip_radius"].widget, "0.5")
+
+
+def drafted_mouth_refused():
+    p = ps.boss_panel()
+    ps.settle(p)
+    text = p.message.text() if p else ""
+    h.check(
+        "a rounded mouth on a drafted counterbore is refused, said why", "Major Draft" in text, text
+    )
+    ps.type_into(p.side_widgets[1]["major_tip_radius"].widget, "0")
+
+
+def edit_ok():
+    p = ps.boss_panel()
+    ps.settle(p)
+    h.check("no error again", p is not None and p.message.text() == "", p and p.message.text())
     ps.ok()
 
 
@@ -290,6 +329,7 @@ def edit_kept():
     b, l = parts()
     h.check("OK: closed", ps.boss_panel() is None)
     h.check("OK keeps the move", ps.near(ps.volume(b), s["vb1"], 1e-6), ps.volume(b))
+    h.check("OK keeps the drafted counterbore", ps.near(ps.volume(l), s["vl1"], 1e-6), ps.volume(l))
     h.check("both steps valid", all("Invalid" not in o.State for o in boss_steps()), boss_steps())
 
 
@@ -380,6 +420,9 @@ h.run(
         reopened,
         reopened_editing,
         offset_moved,
+        counterbore_drafted,
+        drafted_mouth_refused,
+        edit_ok,
         edit_kept,
         undo,
         edit_undone,

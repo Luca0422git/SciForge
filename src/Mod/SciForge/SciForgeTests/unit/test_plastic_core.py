@@ -175,6 +175,16 @@ class BossSettingsTest(unittest.TestCase):
             boss.check_options(o)
         return str(ctx.exception)
 
+    def test_major_draft(self):
+        # Fusion's Major Draft Angle (the counterbore wall), added by the QA pass: 0 by
+        # default, 0-30 degrees, and a boss saved before it existed reads as 0
+        o = boss.default_options(rule(), 3.0)
+        self.assertEqual(o["side1"]["major_draft"], 0.0)
+        self.assertIn("0-30 degrees", self.refused(1, major_draft=35))
+        old = boss.default_options(rule(), 3.0)
+        del old["side1"]["major_draft"]
+        self.assertEqual(boss.check_options(old)["side1"]["major_draft"], 0.0)
+
     def test_refusals(self):
         self.assertIn("smaller than the outer diameter", self.refused(1, hole_diameter=20))
         self.assertIn("larger than the hole", self.refused(1, major_diameter=3.0))
