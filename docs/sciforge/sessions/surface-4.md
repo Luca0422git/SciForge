@@ -73,7 +73,23 @@ header). No FreeCAD core change.
 
 ## Tests (all with FreeCAD 1.1.4 in the sandbox)
 
-SCENARIO_RESULTS
+- Scenarios, the final run (16, all PASS, 517 checks): surface4_component 24,
+  surface4_delete_merge 48, surface4_direct 35, surface4_fillet 55, surface4_misc 28,
+  surface4_move_faces 27, surface4_move_mirror 41, surface4_pattern 27, surface4_presspull
+  50, surface4_presspull_faces 22, surface4_presspull_shade 19, surface4_replace_face 28,
+  surface4_split 25, surface4_split_face 25, surface4_split_loft 44, surface4_step_part 19.
+- Regression (scenarios of the tools touched, all PASS): bodies_combine 93, bodies_delete
+  64, bodies_move 85, bodies_split 85, split_preview 67, extrude_presspull_presspull 53,
+  modify2_presspull_type 48, fillet 67, fillet_chamfer 48, fillet2_chamfer 37, patterns_rect
+  88, patterns_circ 68, patterns_mirror 64, fixpattern_mirror 159, shell_draft_scale 80,
+  modify2_scale 58, modify_align 232, modify_silhouette 199, misc_materials 51,
+  surface_stitch 63, surface_misc 70, modify_split_face 238, modify_replace_face 245,
+  modify2_move_face 56.
+- `--only base` (final): unit 1866 OK (9 skipped; 18 in test_surfmod_core.py), golden 462
+  pass + 2 xfail (old upstream bugs; the 22 `surface4_*` models pass), smoke 79 PASS, journey
+  25 PASS, restart both phases PASS. (One earlier base run had the smoke's "Press Pull +5"
+  check read the volume before the recompute while a probe loaded the machine; it passed on
+  the two runs without other load.)
 
 ## Gaps (details and evidence in the parity doc)
 
