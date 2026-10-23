@@ -149,6 +149,9 @@ def apply_material(doc, component=None):
     from . import material
 
     for body in components.bodies_in(doc, component, recursive=component is not None):
+        inner = components.container_of(body)
+        if inner is not component and assigned_rule_name(doc, inner) not in ("", name):
+            continue  # a sub-component with a rule of its own keeps its material
         try:
             material.assign(body, key)
         except Exception as exc:

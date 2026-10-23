@@ -42,6 +42,8 @@ class RestPanel(Panel):
         self.observer = None
         self._quiet = False
         self.value_boxes = ValueBoxes(self, default="thickness")
+        self.active_box = "profile"  # the selection box that takes the clicks
+        self.picked_body = None  # the body picked in the Body box (else found)
         self.body = commands.find_body() if feature is None else curves.owner_body(feature)
         rule = plastic.rule_for_body(self.body)
         self.options = pr.default_options(rule)
@@ -67,9 +69,15 @@ class RestPanel(Panel):
         self.field.clear.setObjectName("SciForgeRest_clear_profile")
         self.field.set_active(True)
         form.addRow("Profile", self.field.widget)
+        # Fusion's Rest takes a body too: found by itself (the body the profile lies over),
+        # or picked (click the box, then the body)
+        self.body_field = SelectionField(self, "body", "Auto")
+        self.body_field.button.setObjectName("SciForgeRest_pick_body")
+        self.body_field.clear.setObjectName("SciForgeRest_clear_body")
+        form.addRow("Body", self.body_field.widget)
         self.body_label = QtWidgets.QLabel("")
         self.body_label.setObjectName("SciForgeRest_body")
-        form.addRow("Body", self.body_label)
+        form.addRow("Builds in", self.body_label)
         self.thickness = DistanceField(
             self.options["thickness"], on_change=lambda v: self._typed("thickness")
         )
@@ -120,9 +128,21 @@ class RestPanel(Panel):
 
     # -- picking -----------------------------------------------------------------------------------
     def activate(self, name):
-        self.field.set_active(True)
+        self.active_box = name
+        self.field.set_active(name == "profile")
+        self.body_field.set_active(name == "body")
+        if self.picker is not None:
+            self.picker.paused = name != "profile"
+        if name == "body":
+            self.message.setText("Click the body the rest goes on.")
 
     def clear_field(self, name):
+        if name == "body":
+            self.picked_body = None
+            self.body_field.set_text("")
+            self.activate("profile")
+            self._changed(arrow=True)
+            return
         self.refs = []
         self._picks_changed()
 
@@ -188,6 +208,18 @@ class RestPanel(Panel):
         try:
             picks = [(o, s) for o, s in profile_pick.picks() if o.Document is self.doc]
             Gui.Selection.clearSelection()
+            if self.active_box == "body" and picks:
+                obj = picks[0][0]
+                body = obj if pr.bodies.is_body(obj) else pr.bodies.body_of(obj)
+                if body is None or not pr.bodies.has_solid(body):
+                    self.message.setText("⚠ Click a solid body for the rest.")
+                    return
+                self.picked_body = body
+                self.body_field.set_text(body.Label)
+                self.activate("profile")
+                self.message.setText("")
+                self._changed(arrow=True)
+                return
             for obj, short in picks:
                 if extrude.is_sketch(obj) and short.startswith("Internal"):
                     self._region(obj, short)
@@ -260,8 +292,20 @@ class RestPanel(Panel):
             return
         try:
             body = curves.owner_body(self.target) if self.target is not None else None
+            if self.picked_body is not None and body is not self.picked_body:
+                if self.target is not None and not self.editing:
+                    pr.bodies.remove_step(self.target)  # the preview moves to that body
+                    self.target = None
+                    body = None
+                elif self.target is None:
+                    body = None
+                else:
+                    raise pr.RestError(
+                        "An existing rest stays in its body: clear the Body box, or make a "
+                        "new rest."
+                    )
             if body is None:
-                body = pr.body_under(self.doc, self.refs) or self.body
+                body = self.picked_body or pr.body_under(self.doc, self.refs) or self.body
             if body is None:
                 raise pr.RestError("The profile does not lie over a body.")
             self.body_label.setText(body.Label)

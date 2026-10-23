@@ -1017,14 +1017,13 @@ def edit(feature):
 
 def _register():
     try:
-        from . import parameters, timeline_core
+        from . import timeline_core
 
+        # (Boss and Rest stay out of Change Parameters: their rule-linked values would
+        # override a number typed there)
         timeline_core.KINDS.setdefault("boss", ("Boss", "pl_boss"))
         timeline_core.KINDS.setdefault("rest", ("Rest", "pl_rest"))
         timeline_core.KINDS.setdefault("boss_fastener", ("Fastener", "hardware"))
-        parameters.SCIFORGE_PROPS.setdefault(
-            "Rest", [("Thickness", "Thickness"), ("Draft", "Draft")]
-        )
     except Exception as exc:
         warn("boss registration: %s" % exc)
 

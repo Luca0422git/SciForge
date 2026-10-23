@@ -115,6 +115,33 @@ def previewed():
     h.shot("2-preview")
 
 
+def body_box():
+    p = ps.rest_panel()
+    ps.click(p.body_field.button)
+
+
+def pick_cover():
+    p = ps.rest_panel()
+    h.check("the Body box takes the clicks", p and p.active_box == "body")
+    ps.click_row("Cover")
+
+
+def cover_picked():
+    p = ps.rest_panel()
+    ps.settle(p)
+    h.check("the Body box names the body", p and p.body_field.button.text() == "Cover")
+    h.check("the profile box takes the clicks again", p and p.active_box == "profile")
+    h.check("same rest on the picked body", ps.near(ps.volume(body()), s["v1"], 1e-6))
+    ps.click(p.body_field.clear)
+
+
+def body_auto():
+    p = ps.rest_panel()
+    ps.settle(p)
+    h.check("cleared: Auto", p and p.body_field.button.text() == "Auto" and p.picked_body is None)
+    h.check("still the same rest", ps.near(ps.volume(body()), s["v1"], 1e-6))
+
+
 def thicker():
     p = ps.rest_panel()
     ps.type_into(p.thickness.widget, "3")
@@ -242,6 +269,10 @@ h.run(
         zero_draft,
         click_profile,
         previewed,
+        body_box,
+        pick_cover,
+        cover_picked,
+        body_auto,
         thicker,
         thick,
         flip,

@@ -193,6 +193,12 @@ def compute(obj):
             thread = (step, toward)
     if head is None:
         raise FastenerError("A fastener needs the head side (Side 1) of the boss.")
+    # each side's values as its own body's rule gives them
+    head_options = pb.check_options(pb.resolved_options(head[0]))
+    if thread is not None:
+        thread_options = pb.check_options(pb.resolved_options(thread[0]))
+        head_options["side2"] = thread_options["side2"]
+    options = head_options
 
     def base_of(step):
         base = step.BaseFeature
