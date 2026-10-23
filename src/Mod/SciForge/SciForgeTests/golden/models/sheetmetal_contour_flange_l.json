@@ -1,0 +1,56 @@
+{
+  "id": "sheetmetal_contour_flange_l",
+  "title": "Contour flange from an L line: the corner becomes a bend of the rule's radius",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              50,
+              0
+            ],
+            [
+              50,
+              50
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "contour",
+      "profile": "s1",
+      "options": {
+        "distance": 20
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1967.12389,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      50,
+      20
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Side 1 puts the sheet inside the L, so the line is the outer face with radius R + T = 2: mid layer 48 + 48 + pi/2 x 1.5, x T 1 x distance 20"
+  }
+}

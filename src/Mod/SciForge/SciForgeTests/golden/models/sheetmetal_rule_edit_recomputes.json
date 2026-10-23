@@ -1,0 +1,75 @@
+{
+  "id": "sheetmetal_rule_edit_recomputes",
+  "title": "Editing the rule (thickness 1 -> 2) recomputes the plate and its flange",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1780.685835,
+        "source": "analytic",
+        "note": "the L bracket with T = 1"
+      }
+    },
+    {
+      "op": "sf_sheet_rule",
+      "name": "Steel (mm)",
+      "set": {
+        "thickness": "2"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 3522.743339,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      12
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "T = 2 and R = Thickness = 2: plate 3000 - strip 4 x 30 x 2 + quarter ring 2..4 (3pi) x 30 + wall 2 x (10 - 2) x 30; top at T + H = 12"
+  }
+}

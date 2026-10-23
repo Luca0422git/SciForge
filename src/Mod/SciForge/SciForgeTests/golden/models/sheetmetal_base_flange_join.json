@@ -1,0 +1,68 @@
+{
+  "id": "sheetmetal_base_flange_join",
+  "title": "A second base flange joined to the first plate (Operation Join)",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            0,
+            70,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "base",
+      "profile": "s2",
+      "operation": "join"
+    }
+  ],
+  "expect": {
+    "volume": 2100.0,
+    "bbox": [
+      0,
+      0,
+      0,
+      70,
+      30,
+      1
+    ],
+    "solids": 1,
+    "faces": 6,
+    "source": "analytic",
+    "note": "50 x 30 + 20 x 30 plates of the same rule, one 70 x 30 x 1 plate (coplanar faces merged)"
+  }
+}

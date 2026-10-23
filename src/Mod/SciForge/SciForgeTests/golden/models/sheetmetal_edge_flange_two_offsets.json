@@ -1,0 +1,78 @@
+{
+  "id": "sheetmetal_edge_flange_two_offsets",
+  "title": "Edge flange Width Two Offsets between two planes across the edge (y 5 and y 25), offsets 2",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10,
+        "width_type": "two_offsets",
+        "distance1": 2,
+        "width2": 2,
+        "override_bend_relief": true,
+        "relief_shape": "straight",
+        "relief_width": 1,
+        "relief_depth": 0.5,
+        "relief_remnant": 2
+      },
+      "offset_refs": [
+        {
+          "plane": "XZ",
+          "offset": 5
+        },
+        {
+          "plane": "XZ",
+          "offset": 25
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 1644.699112,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      11
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "the flange from y 5 + 2 to y 25 - 2 (16 wide): the bend strip under it (2 x 16), two straight reliefs 1 wide and 2.5 deep, a 16 mm flange of 11.356 per mm"
+  }
+}

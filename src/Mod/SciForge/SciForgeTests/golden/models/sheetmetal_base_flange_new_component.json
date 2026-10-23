@@ -1,0 +1,46 @@
+{
+  "id": "sheetmetal_base_flange_new_component",
+  "title": "Base flange as New Component: a Sheet Metal component with its own body",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1",
+      "operation": "new_component"
+    }
+  ],
+  "expect": {
+    "volume": 1500.0,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      1
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "the same 50 x 30 x 1 plate, in a new component"
+  }
+}
