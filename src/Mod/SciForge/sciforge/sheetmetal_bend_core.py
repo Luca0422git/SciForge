@@ -408,6 +408,46 @@ CLOSURE_ALIGNMENTS = ("symmetric", "overlap")
 CLOSURE_LABELS = {"symmetric": "Symmetric Gap", "overlap": "Overlap"}
 CLOSURE_RELIEFS = ("round", "square", "trim_to_bend")
 CLOSURE_RELIEF_LABELS = {"round": "Round", "square": "Square", "trim_to_bend": "Trim To Bend"}
+CLOSURE_PLACEMENTS = ("intersection", "tangent", "vertex")
+CLOSURE_PLACEMENT_LABELS = {
+    "intersection": "Intersection",
+    "tangent": "Tangent",
+    "vertex": "Vertex",
+}
+
+
+def relief_centre(placement, bend_a, bend_b, size, shape="round"):
+    """Where a 2-bend corner relief is centred in the flat state (2D).
+
+    Each bend is (point, direction, outward, half_width): a point on its centre line, the
+    line's direction, the unit vector across the bend from the stationary side toward the
+    flange, and half the bend zone's width (half the bend allowance).
+
+    * intersection: where the two centre lines cross;
+    * vertex: where the bends start on the stationary side (the inner corner);
+    * tangent (Round only): the circle (diameter `size`) touches the far side of both bend
+      zones, so it clears their whole crossing.
+    Raises ValueError with the reason."""
+    if placement not in CLOSURE_PLACEMENTS:
+        raise ValueError("Relief Placement must be Intersection, Tangent or Vertex.")
+    if placement == "tangent" and shape != "round":
+        raise ValueError(
+            "Tangent placement is for a Round relief only; use Intersection or Vertex."
+        )
+    lines = []
+    for point, direction, outward, half in (bend_a, bend_b):
+        if placement == "intersection":
+            offset = 0.0
+        elif placement == "vertex":
+            offset = -half
+        else:
+            offset = half - size / 2.0
+        lines.append(((point[0] + outward[0] * offset, point[1] + outward[1] * offset), direction))
+    (p, u), (q, v) = lines
+    meet = line_intersection(p, u, q, v)
+    if meet is None:
+        raise ValueError("The two bends are parallel: they do not meet at a corner.")
+    return (p[0] + u[0] * meet[0], p[1] + u[1] * meet[0])
 
 
 def closure_reach(alignment, gap, thickness, overlap=1.0, dominant=True):

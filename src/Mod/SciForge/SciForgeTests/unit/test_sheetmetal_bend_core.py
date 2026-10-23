@@ -160,6 +160,32 @@ class ClosureTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             core.closure_reach("overlap", 0.0, T, 1.5)
 
+    # two 90 degree bends meeting at a square corner, flat: bend A runs along y (centre line
+    # x = 10), bend B along x (centre line y = 20), both zones BA wide, flanges outward
+    BEND_A = ((10.0, 0.0), (0.0, 1.0), (1.0, 0.0), BA90 / 2)
+    BEND_B = ((0.0, 20.0), (1.0, 0.0), (0.0, 1.0), BA90 / 2)
+
+    def test_relief_placements(self):
+        x, y = core.relief_centre("intersection", self.BEND_A, self.BEND_B, 4.0)
+        self.assertAlmostEqual(x, 10.0)
+        self.assertAlmostEqual(y, 20.0)
+        # Vertex: where both bends start (the inner corner of the stationary side)
+        x, y = core.relief_centre("vertex", self.BEND_A, self.BEND_B, 4.0, "square")
+        self.assertAlmostEqual(x, 10.0 - BA90 / 2)
+        self.assertAlmostEqual(y, 20.0 - BA90 / 2)
+        # Tangent: the circle (radius 2) touches the far side of both zones
+        x, y = core.relief_centre("tangent", self.BEND_A, self.BEND_B, 4.0)
+        self.assertAlmostEqual(x + 2.0, 10.0 + BA90 / 2)
+        self.assertAlmostEqual(y + 2.0, 20.0 + BA90 / 2)
+
+    def test_relief_placement_refusals(self):
+        with self.assertRaises(ValueError):
+            core.relief_centre("tangent", self.BEND_A, self.BEND_B, 4.0, "square")
+        with self.assertRaises(ValueError):
+            core.relief_centre("middle", self.BEND_A, self.BEND_B, 4.0)
+        with self.assertRaises(ValueError):
+            core.relief_centre("intersection", self.BEND_A, self.BEND_A, 4.0)
+
 
 class FacetTests(unittest.TestCase):
     def test_controls(self):

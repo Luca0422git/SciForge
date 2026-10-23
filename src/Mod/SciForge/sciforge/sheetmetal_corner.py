@@ -14,9 +14,9 @@ bend ends in the same plane) is taken further in line with the flange (Extend Al
   stops the Gap short of the dominant's inside face.
 
 Relief: Trim To Bend (the bends end where they are and the corner stays open under the
-closed walls). Round and Square corner reliefs need the bends cut in the flat state, which
-SciForge cannot map onto the folded corner yet: refused in the dialog with the reason
-(docs/sciforge/parity/sheet-metal-more.md, Known gaps).
+closed walls), or Round / Square (Symmetric Gap only): the closed part is laid flat with
+sm-flat's unfolder, the relief cut at its Relief Placement (Intersection, Vertex, or Tangent
+for a Round) and the cut folded back (corner_relief).
 Sources: docs/sciforge/dev/research/fusion-sheet-metal.md 2.9 (geometry G).
 """
 
@@ -29,6 +29,7 @@ TYPE = "PartDesign::FeaturePython"
 KIND = "SheetMetalCornerClosure"
 ALIGNMENTS = [core.CLOSURE_LABELS[k] for k in core.CLOSURE_ALIGNMENTS]
 RELIEFS = [core.CLOSURE_RELIEF_LABELS[k] for k in core.CLOSURE_RELIEFS]
+PLACEMENTS = [core.CLOSURE_PLACEMENT_LABELS[k] for k in core.CLOSURE_PLACEMENTS]
 BUILT_RELIEFS = ("trim_to_bend", "round", "square")
 
 
@@ -41,6 +42,7 @@ def default_options():
         "extend_aligned": True,
         "relief": "trim_to_bend",
         "relief_size": None,  # None: the rule's 2-bend corner relief size
+        "placement": "intersection",  # Round / Square: intersection, tangent or vertex
     }
 
 
@@ -123,6 +125,47 @@ def _corner_point(fd, fs, thickness):
     return md + e1 * s, dl
 
 
+def _end_prism(face, way, big, along_flange=True):
+    """The flange's end face swept `big` along `way`. A slanted (mitred) end is swept from its
+    outline seen along `way`, starting behind it inside the flange: its bend's end is then an
+    arc swept along the bend's axis, a true cylinder (an elliptic arc swept would not lay
+    flat). Other ends, and ends taken square to the other flange, are swept as they are."""
+    import Part
+
+    if not along_flange or abs(abs(sb.plane_normal(face).dot(way)) - 1.0) < 1e-6:
+        return face.extrude(way * big)
+    lo = None
+    for edge in face.Edges:
+        for k in range(9):
+            t = edge.FirstParameter + (edge.LastParameter - edge.FirstParameter) * k / 8.0
+            d = edge.valueAt(t).dot(way)
+            lo = d if lo is None else min(lo, d)
+
+    def flat(p):
+        return p - way * (p.dot(way) - lo)
+
+    edges = []
+    try:
+        for edge in face.OuterWire.OrderedEdges:
+            a, b = flat(edge.Vertexes[0].Point), flat(edge.Vertexes[-1].Point)
+            if (b - a).Length < 1e-7:
+                continue
+            if isinstance(edge.Curve, (Part.Line, Part.LineSegment)):
+                edges.append(Part.LineSegment(a, b).toShape())
+                continue
+            m = flat(edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter)))
+            if ((m - a).cross(b - a)).Length < 1e-9:
+                edges.append(Part.LineSegment(a, b).toShape())
+            else:
+                edges.append(Part.Arc(a, m, b).toShape())
+        section = Part.Face(Part.Wire(Part.__sortEdges__(edges)))
+        if not section.isValid() or section.Area < 1e-9:
+            raise ValueError("no section")
+    except Exception:
+        return face.extrude(way * big)
+    return section.extrude(way * big)
+
+
 def closure_shape(
     shape, dominant, submissive, options, thickness, miter_gap, k_factor=0.44, relief_size=None
 ):
@@ -162,7 +205,7 @@ def closure_shape(
         reach = core.closure_reach("symmetric", gap, thickness)
         m = sb.unit(fs["out"] - fd["out"])
         for fr, sign in ((fd, 1.0), (fs, -1.0)):
-            prism = fr["side"].extrude(way[id(fr)] * big)
+            prism = _end_prism(fr["side"], way[id(fr)], big, aligned)
             normal = m * sign
             ydir = fr["normal"].cross(normal)
             if ydir.Length < 1e-9:
@@ -196,7 +239,7 @@ def closure_shape(
             - gap
         )
         for fr, limit in ((fd, far), (fs, near)):
-            prism = fr["side"].extrude(way[id(fr)] * big)
+            prism = _end_prism(fr["side"], way[id(fr)], big, aligned)
             ydir = sb.unit(fr["normal"]) if abs(fr["normal"].dot(fr["out"])) < 0.99 else None
             if ydir is None:
                 continue
@@ -221,29 +264,97 @@ def closure_shape(
     merged = sb.fuse_all(shape, pieces)
     closed = sb.one_solid(merged, "This corner closure")
     if relief in ("round", "square") and alignment != "overlap":
-        closed = corner_relief(closed, corner, _dl, relief, size, thickness, k_factor)
+        try:
+            closed = corner_relief(
+                closed,
+                corner,
+                _dl,
+                relief,
+                size,
+                thickness,
+                k_factor,
+                options.get("placement") or "intersection",
+            )
+        except sb.SheetMetalError:
+            raise
+        except Exception as exc:  # an OpenCASCADE failure: say so, with what to try
+            raise sb.SheetMetalError(
+                "The corner relief could not be cut here (%s): try another Relief Placement "
+                "or a different Relief Size." % exc
+            )
     return closed
 
 
-def corner_relief(solid, corner, line_dir, shape_kind, size, thickness, k_factor):
+def _bend_2d(bend, origin, e1, e2):
+    """A bend laid flat by the unfolder as relief_centre wants it, in the 2D frame (origin,
+    e1, e2) of the stationary face: a point on its centre line, the line's direction, the unit
+    vector from its start (stationary side) toward its end, half its width."""
+    a, b = bend.centre
+    s0 = bend.start[0]
+    s1 = bend.end[0]
+    direction = sb.unit(b - a)
+    across = (s1 - s0) - direction * (s1 - s0).dot(direction)
+    half = across.Length / 2.0
+    outward = sb.unit(across) if across.Length > 1e-9 else e2
+
+    def flat(v, point=True):
+        if point:
+            v = v - origin
+        return (v.dot(e1), v.dot(e2))
+
+    return (flat(a), flat(direction, False), flat(outward, False), half)
+
+
+def _flat_bases(solid, line_dir, thickness):
+    """The flat faces of the sheet square to the corner line (the sheet both flanges are
+    bent from), largest first: [(name, face)]."""
+    found = []
+    for i, face in enumerate(solid.Faces, start=1):
+        if not sb.is_plane(face) or abs(abs(sb.plane_normal(face).dot(line_dir)) - 1) > 1e-6:
+            continue
+        if not sb.face_thickness(solid, face, thickness):
+            continue
+        found.append(("Face%d" % i, face))
+    found.sort(key=lambda item: -item[1].Area)
+    return found
+
+
+def _lays_flat(solid, line_dir, thickness, k_factor):
+    """None when the unfolder lays the solid flat from one of its two largest sheet faces
+    (top or bottom), else the reason."""
+    from . import sheetmetal_unfold as uf
+
+    reason = "no flat sheet left"
+    for name, _face in _flat_bases(solid, line_dir, thickness)[:2]:
+        try:
+            uf.unfold(solid, name, k_factor)
+            return None
+        except Exception as exc:
+            reason = str(exc)
+    return reason
+
+
+def corner_relief(
+    solid, corner, line_dir, shape_kind, size, thickness, k_factor, placement="intersection"
+):
     """Cut a 2-bend corner relief where the two bends meet: the part is laid flat (sm-flat's
     unfolder), a circle of diameter `size` (Round) or a square of side `size` (Square) is cut
-    centred where the two bends' centre lines cross (Placement Intersection), and the cut is
-    folded back onto the bends and walls (the unfolder's refold). Raises SheetMetalError."""
+    at the Relief Placement (Intersection: where the two bends' centre lines cross; Vertex:
+    where both bends start on the flat side; Tangent: a Round touching the far side of both
+    bend zones; core.relief_centre), and the cut is folded back onto the bends and walls (the
+    unfolder's refold). Raises SheetMetalError."""
     import Part
 
     from . import sheetmetal_unfold as uf
 
     if size <= 0:
         raise sb.SheetMetalError("The relief size must be more than 0.")
-    base = None
-    for i, face in enumerate(solid.Faces, start=1):
-        if not sb.is_plane(face) or abs(abs(sb.plane_normal(face).dot(line_dir)) - 1) > 1e-6:
-            continue
-        if not sb.face_thickness(solid, face, thickness):
-            continue
-        if base is None or face.Area > base[1].Area:
-            base = ("Face%d" % i, face)
+    if placement == "tangent" and shape_kind != "round":
+        raise sb.SheetMetalError(
+            "Tangent placement is for a Round relief only; use Intersection or Vertex."
+        )
+    bases = _flat_bases(solid, line_dir, thickness)
+    base = bases[0] if bases else None
     if base is None:
         raise sb.SheetMetalError("No flat sheet joins the two flanges' bends: no relief to cut.")
     try:
@@ -254,14 +365,12 @@ def corner_relief(solid, corner, line_dir, shape_kind, size, thickness, k_factor
     plane_point = base[1].Vertexes[0].Point
     target = corner - normal * (corner - plane_point).dot(normal)
     best = None
-    lines = []
-    for bend in result.bends:
-        a, b = bend.centre
-        if (b - a).Length > 1e-9:
-            lines.append((a, sb.unit(b - a)))
-    for i in range(len(lines)):
-        for j in range(i + 1, len(lines)):
-            (pa, da), (pb, db) = lines[i], lines[j]
+    bends = [bend for bend in result.bends if (bend.centre[1] - bend.centre[0]).Length > 1e-9]
+    for i in range(len(bends)):
+        for j in range(i + 1, len(bends)):
+            pa, pb = bends[i].centre[0], bends[j].centre[0]
+            da = sb.unit(bends[i].centre[1] - pa)
+            db = sb.unit(bends[j].centre[1] - pb)
             if abs(da.dot(db)) > 1.0 - 1e-6:
                 continue
             e1 = da
@@ -277,15 +386,26 @@ def corner_relief(solid, corner, line_dir, shape_kind, size, thickness, k_factor
             point = pa + da * meet[0]
             gap = (point - target).Length
             if best is None or gap < best[0]:
-                best = (gap, point, da, db)
+                best = (gap, point, da, bends[i], bends[j])
     if best is None or best[0] > 4.0 * (thickness + max(b.inner_radius for b in result.bends)):
         raise sb.SheetMetalError("The two flanges' bends do not meet at this corner.")
-    _gap, centre, da, db = best
+    _gap, crossing, da, bend_a, bend_b = best
+    e2 = normal.cross(da)
+    try:
+        x, y = core.relief_centre(
+            placement,
+            _bend_2d(bend_a, crossing, da, e2),
+            _bend_2d(bend_b, crossing, da, e2),
+            size,
+            shape_kind,
+        )
+    except ValueError as exc:
+        raise sb.SheetMetalError(str(exc))
+    centre = crossing + da * x + e2 * y
     reach = thickness * 4.0
     if shape_kind == "round":
         tool = Part.makeCylinder(size / 2.0, 2 * reach, centre - normal * reach, normal)
     else:
-        e2 = normal.cross(da)
         corner_pt = centre - da * (size / 2.0) - e2 * (size / 2.0) - normal * reach
         tool = sb.frame_box(corner_pt, da, e2, normal, 0, size, 0, size, 0, 2 * reach)
     flat_after = result.shape.cut(tool)
@@ -295,7 +415,39 @@ def corner_relief(solid, corner, line_dir, shape_kind, size, thickness, k_factor
         out = uf.refold(solid, result, flat_after)
     except uf.UnfoldError as exc:
         raise sb.SheetMetalError("The corner relief could not be folded back: %s" % exc)
-    return sb.one_solid(out, "This corner relief")
+    except Exception as exc:  # an OpenCASCADE failure while folding the cut back
+        raise sb.SheetMetalError(
+            "The corner relief could not be folded back here (%s): try another Relief "
+            "Placement or a different Relief Size." % exc
+        )
+    # folding the cut back at a mitred corner can leave specks of material (far below a
+    # thousandth of the sheet's thickness cubed) beside the mitre: drop them
+    solids = list(out.Solids)
+    kept = [s for s in solids if s.Volume > 1e-3 * thickness**3]
+    if len(solids) > 1 and len(kept) == 1:
+        log("corner relief: %d specks left by the refold dropped" % (len(solids) - 1))
+        out = kept[0]
+    elif len(kept) > 1:
+        raise sb.SheetMetalError(
+            "This corner relief would split the body into %d pieces here: try another Relief "
+            "Placement or a smaller Relief Size." % len(kept)
+        )
+    cut = sb.one_solid(out, "This corner relief")
+    if cut.Volume > solid.Volume + 1e-6:
+        # the bends' flat shapes overlap at this corner, and the cut came back as added
+        # material: refuse rather than build it
+        raise sb.SheetMetalError(
+            "The corner relief could not be cut cleanly at this placement (the two bends "
+            "overlap there when laid flat): try another Relief Placement or Relief Size."
+        )
+    # the corner must still lay flat (flat walls and round bends only)
+    reason = _lays_flat(cut, line_dir, thickness, k_factor)
+    if reason:
+        raise sb.SheetMetalError(
+            "With this relief the corner could not be laid flat any more (%s): try another "
+            "Relief Placement or Relief Size." % reason
+        )
+    return cut
 
 
 class CornerClosureFeature:
@@ -333,6 +485,9 @@ class CornerClosureFeature:
             obj.UseRuleRelief = True
         if add("App::PropertyLength", "ReliefSize", "Round: diameter, Square: side"):
             obj.ReliefSize = 4.0
+        if add("App::PropertyEnumeration", "ReliefPlacement", "Where the relief is centred"):
+            obj.ReliefPlacement = PLACEMENTS
+            obj.ReliefPlacement = PLACEMENTS[0]
         if add("App::PropertyBool", "Refine", "Merge faces that end up in one plane"):
             obj.Refine = True
         bodies.mark(obj, KIND)
@@ -373,6 +528,7 @@ def options_of(obj):
         "extend_aligned": bool(obj.ExtendAligned),
         "relief": _key(str(obj.Relief), core.CLOSURE_RELIEF_LABELS),
         "relief_size": None if obj.UseRuleRelief else float(obj.ReliefSize),
+        "placement": _key(str(obj.ReliefPlacement), core.CLOSURE_PLACEMENT_LABELS),
     }
 
 
@@ -425,6 +581,7 @@ def apply(obj, base, dominant, submissive, options):
     obj.UseRuleRelief = size is None
     if size is not None:
         obj.ReliefSize = float(size)
+    obj.ReliefPlacement = core.CLOSURE_PLACEMENT_LABELS[options.get("placement") or "intersection"]
 
 
 def make(body, base, dominant, submissive, options=None, name="CornerClosure"):

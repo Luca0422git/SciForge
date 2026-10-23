@@ -5,8 +5,9 @@ Click the Dominant Edge and the Submissive Edge: an edge at the end of each of t
 that meet at a corner (where they face each other). Alignment Symmetric Gap (both close to the
 corner's bisector, the Gap between them) or Overlap (the dominant runs over the other's end;
 Overlap 0..1 of the thickness, Flip Overlap swaps which), the Gap (the rule's Miter/Rip/Seam
-gap unless you set your own), Extend Aligned, and the relief shape (Trim To Bend; Round and
-Square are greyed with the reason). Geometry: sheetmetal_corner.py.
+gap unless you set your own), Extend Aligned, and the relief: Trim To Bend, or a Round /
+Square hole of the Relief Size at its Relief Placement (Intersection, Vertex, or Tangent for a
+Round). Geometry: sheetmetal_corner.py.
 """
 
 import FreeCAD as App
@@ -22,8 +23,8 @@ ALIGN_ITEMS = [
 NOT_YET = "Not available yet in SciForge (docs/sciforge/parity/sheet-metal-more.md)"
 PLACEMENT_ITEMS = [
     ("Intersection", "intersection", True, "Centred where the two bends' centre lines cross"),
-    ("Tangent", "tangent", False, NOT_YET),
-    ("Vertex", "vertex", False, NOT_YET),
+    ("Tangent", "tangent", True, "Round only: touches the far side of both bends"),
+    ("Vertex", "vertex", True, "Centred where both bends start (the inner corner)"),
 ]
 TRANSITION_ITEMS = [
     ("Trim To Bend", "trim_to_bend", True, "The bends end where they are at the corner"),
@@ -120,6 +121,10 @@ class CornerPanel(smp.SmPanel):
         return opts
 
     def check(self, options):
+        if options.get("relief") == "square" and options.get("placement") == "tangent":
+            raise sb.SheetMetalError(
+                "Tangent placement is for a Round relief only; use Intersection or Vertex."
+            )
         if options.get("relief") != "trim_to_bend" and options.get("alignment") == "overlap":
             raise sb.SheetMetalError(
                 "An overlapped corner lies over itself when laid flat, so a Round or Square "

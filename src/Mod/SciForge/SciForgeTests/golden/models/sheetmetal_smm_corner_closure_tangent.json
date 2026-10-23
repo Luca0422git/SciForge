@@ -1,0 +1,117 @@
+{
+  "id": "sheetmetal_smm_corner_closure_tangent",
+  "title": "Corner Closure: Symmetric Gap with a Round relief at the Tangent placement (it touches the far side of both bends)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              100,
+              0
+            ],
+            [
+              100,
+              55
+            ],
+            [
+              95,
+              55
+            ],
+            [
+              95,
+              60
+            ],
+            [
+              0,
+              60
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          100,
+          20,
+          1
+        ]
+      ],
+      "options": {
+        "height": 20
+      }
+    },
+    {
+      "op": "sf_flange",
+      "id": "f3",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          60,
+          1
+        ]
+      ],
+      "options": {
+        "height": 20
+      }
+    },
+    {
+      "op": "sf_sm_corner_closure",
+      "id": "c1",
+      "dominant": [
+        100,
+        55,
+        12
+      ],
+      "submissive": [
+        95,
+        60,
+        12
+      ],
+      "options": {
+        "alignment": "symmetric",
+        "relief": "round",
+        "placement": "tangent"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 9036.3347,
+    "bbox": [
+      -0.0,
+      -0.0,
+      -0.0,
+      100.0,
+      60.0,
+      21.0
+    ],
+    "solids": 1,
+    "faces": 34,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: a 4 mm circle whose edge touches both bends' far tangent lines in the flat state, folded back (it cuts more than the Intersection placement)",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}
