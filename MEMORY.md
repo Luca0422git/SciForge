@@ -1446,8 +1446,108 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   to the drill point or the shoulder, Polygon size (inscribed or circumscribed), Plane at
   Angle reference, how Symmetric counts pattern copies, pipe corners (mitred or rounded),
   Scale's default for profiles.
+- **Wave 6 (sheet metal, plastic, surface), screenshots of your Fusion would settle:** the
+  menu order of SHEET METAL > CREATE / MODIFY and PLASTIC > CREATE / MODIFY (only the
+  presence of each command could be sourced); the Flange window (default Height Datum and
+  Bend Position, where Lofted sits); the Snap Fit and Lip windows (labels, defaults, hook
+  shapes); the Boss window's tabs; Corner Closure's default relief; Revolve's Project Axis
+  default; Ruled's default type. Each guess is marked G in the parity docs.
 
 ## Session log
+
+### Session log: wave 6, SHEET METAL + PLASTIC tabs, SURFACE complete (`develop`, 2026-10-23 night)
+
+Luca (going to bed): "There are two areas of fusion that we are missing. Sheet metal and
+plastic ... plan all the features that belong in those tabs, and then build them all. In one
+shot. Both tabs. And ... take a look at the surface tab and make sure everything is fully
+fledged out. Research what fusion has to offer and include it in the plan." 8 hours. The
+breakdown for him: `docs/sciforge/sessions/wave6-overnight.md`.
+
+#### How (orchestrator + workflows)
+- Research (4 agents + 2 critics): `docs/sciforge/dev/research/` (fusion-sheet-metal.md,
+  fusion-plastic.md, fusion-surface.md, surface-gaps.md = SciForge's SURFACE tab audited
+  with file:line, integration-map.md = how tabs / body kinds / steps / icons / tests plug
+  in). **WebFetch cannot reach any host from the sandbox and the WebSearch budget is about
+  200 searches per turn shared by all agents**: facts come from search excerpts and from the
+  Fusion API stubs (`adsk/fusion.py` on PyPI). Menu order is mostly G.
+- Plan `docs/sciforge/plan-sheet-metal-plastic-surface.md`; briefs `dev/briefs/wave6-common.md`
+  + one per builder. Scaffold first (on develop): the two tabs in `ribbon_config.py` with
+  every new command `None` + `# owner:` comments, the SURFACE tab's full Fusion menus +
+  ASSEMBLE, `_same(group, label)` (a tab repeating SOLID entries uses the same dicts),
+  contracts `sheetmetal_core.py` / `sheetmetal.py` and `plastic_core.py` / `plastic.py`,
+  empty `*_ops.py` / `*_schema.py` per builder (imported by core.py / schema.py), and
+  `make_icons.py` now runs every `tools/sciforge/icons_<area>.py` in its namespace (no more
+  merge conflicts on the icon file).
+- Seven builders in worktrees (sm-forming, sm-flat, sm-more, plastic-1, plastic-2,
+  surface-3, surface-4), each followed by an independent QA agent on `sf/<area>-qa`; then
+  three journey testers (whole parts across the new tools) on top of the merged QA work.
+  Only conflict at the merges: PLASTIC CREATE's adjacent Boss / Snap Fit / Lip / Rest lines.
+- Machine: 4 CPUs; a workflow runs at most 2 agents at once (CPUs - 2), so builders were
+  spread over four workflows. CI on develop takes about 80 min and a push cancels the
+  running run: merge into a local integration worktree, push only at chosen points.
+
+#### Built (details, sources and gaps in the parity docs; per-area session logs in
+`docs/sciforge/sessions/<area>.md`)
+- **SHEET METAL** (`parity/sheet-metal.md`, `sheet-metal-flat.md`, `sheet-metal-more.md`):
+  rules (dialog, library, In This Design, Thickness expressions, Sheet Metal component type,
+  browser Document Settings row), Flange (base / contour / edge with Height Datum, Bend
+  Position, angle, flip, width types, To Object, mitres, reliefs, overrides), Bend, Hem (6
+  types), Join by Bend, Corner Closure, Lofted Flange (own entry), sheet metal Fillet /
+  Chamfer, the unfolder `sheetmetal_unfold.py`, Create Flat Pattern + FLAT PATTERN tab
+  (`ribbon_ui.set_flat_pattern_mode`; contextual tabs are now read from TABS' `contextual`)
+  + Export DXF (R12, layers), Unfold / Refold, Rip, Convert to Sheet Metal, DRAWING Bend
+  Table / Bend Note.
+- **PLASTIC** (`parity/plastic.md`, `plastic-2.md`): Assign / Manage Plastic Rules (per
+  component; 16-rule library incl. FDM PLA / PETG; material assigned; user library in prefs
+  `Mod/SciForge/Plastic`), rule defaults + links in Shell / Draft / Rib / Web / thin Extrude
+  (`plastic.apply_defaults` / `remember_links` / `follow`; nothing changes without a rule),
+  Boss (+ screws as a component), Rest, Rule Fillet, Snap Fit, Lip, Design Advice.
+- **SURFACE** (`parity/surface.md`, `surface-modify.md`): surface-3's options (Offset Type,
+  Patch per edge + Reverse Normal, Untrim Manual / Keep Copy, Revolve Partial / Project Axis
+  / To Two Sides, Extrude of a face, Sweep Guide Surface + rail extents, loft corner
+  matching, Extend Natural on curved faces + Align Edges, Stitch operations, Trim by one face,
+  Ruled Corner Type, Environmental Map Analysis, sketch Isoparametric Curve) and surface-4's
+  SOLID modify tools on surface bodies (Split Body by a surface, Delete without healing on
+  the SURFACE tab (`ribbon.current_tab()` decides), Fillet / Chamfer, Press Pull, Merge,
+  Move/Copy, Align, Scale, Pattern, Mirror Join with Stitch Tolerance, Split / Replace Face).
+- No FreeCAD core file changed: the quick update carries all of it.
+
+#### Tests
+- 73 new scenarios (sheetmetal 7, flatpattern 15, smmore 11, plastic 7, plastic2 5,
+  surface3 10, surface4 18), 144 new golden models, unit tests 1831 -> 1994. Every builder
+  and QA agent ran its scenarios and the regressions of the shared files it touched (all
+  PASS; numbers in their session logs). QA fixed 78 bugs in all (sm-forming 16, plastic-1
+  16, sm-more 13, sm-flat 12, plastic-2 10, surface-3 6, surface-4 5). On the merged tree:
+  unit all OK, golden 584 pass + 2 known xfail, check_install OK, `ribbon_sweep` over SHEET
+  METAL / PLASTIC / SURFACE / FLAT PATTERN 374 checks PASS. GitHub runs: "Results" below.
+
+#### FreeCAD / OpenCASCADE facts found (more in the area session logs)
+- One OpenCASCADE solid cannot hold two touching layers: a flat hem and a Tear relief keep a
+  0.01-0.05 mm gap.
+- A fused flange's end face merges with the plate's side face (coplanar): "is this edge on
+  the sheet's thickness" must probe the solid, not the face size (`sheetmetal_form.
+  _sheet_thick_at`).
+- `makeOffsetShape(..., join=2)` gives Fusion's Sharp offset; join=0 rounds (the old one).
+- PartDesign passes a *suppressed* FeaturePython step's base through as a solid: a
+  suppressed surface step leaves its body empty (fixed for surface-4 steps; still open for
+  the older surface.py steps).
+- PartDesign Thickness with Join=Intersection (SciForge's Shell Sharp) returns a half pipe
+  unshelled but "valid" with no error (found by plastic-1; pre-existing, not fixed: a silent
+  wrong result in Shell).
+
+#### Open
+- Not checked by Luca. Quick update zip with WHATS_NEW.txt made at the end of the session.
+- Gaps (all in the parity docs): corner-relief holes only in the flat pattern; Brake Form
+  lofted flange has no flat pattern; weld / 3-bend corner reliefs; Bend's crossing-line
+  relief; Lofted not yet inside the Flange dialog; Snap Fit / Lip exact Fusion dialogs
+  unknown; Design Advice is sampled and slow on big parts; Rib / Web without draft; Patch
+  Tangency Weight and Loft Align Edges greyed (kernel); Extrude Match Shape; some Press Pull
+  face combinations on surfaces refused.
+- Pre-existing problems seen: Shell Sharp half pipe (above); `sketch_draw`'s "sketch palette
+  shown" check failed locally under load, also on develop before wave 6.
+
+#### Results
+(filled in at the end of the session)
 
 ### Session log: Delete on Home and in the Data Panel (`develop`, 2026-10-23, later)
 
