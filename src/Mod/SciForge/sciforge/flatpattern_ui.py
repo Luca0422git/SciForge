@@ -86,7 +86,8 @@ def enter(fp):
         except Exception:
             pass
         STATE.update(fp=fp, doc=doc.Name, hidden=hidden, camera=camera)
-        if "Invalid" in list(fp.State) or fp.Shape.isNull():
+        if "Invalid" in list(fp.State) or fp.Shape.isNull() or doc.isTouched():
+            # the flat pattern is computed when it opens (after an undo / redo too)
             doc.recompute()
         if fp.ViewObject is not None:
             fp.ViewObject.Visibility = True
@@ -129,6 +130,18 @@ def leave():
         warn("finish flat pattern: %s" % exc)
 
 
+def _show_folded(doc, folded):
+    """The objects hidden for the open flat pattern shown again (folded=True), or hidden
+    again with the flat shown; the environment's state stays as it is."""
+    fp = STATE["fp"]
+    for name in STATE["hidden"]:
+        obj = doc.getObject(name)
+        if obj is not None and getattr(obj, "ViewObject", None) is not None:
+            obj.ViewObject.Visibility = folded
+    if fp is not None and flatpattern.is_flat_pattern(fp) and fp.ViewObject is not None:
+        fp.ViewObject.Visibility = not folded
+
+
 class _DocWatch:
     """Close the environment when its document closes or an undo takes the flat away."""
 
@@ -146,6 +159,21 @@ class _DocWatch:
                 QtCore.QTimer.singleShot(0, leave)
         except Exception as exc:
             warn("flat pattern watch: %s" % exc)
+
+    def slotStartSaveDocument(self, doc, filename):
+        """Saved while the flat pattern is open: the file keeps the folded part shown."""
+        try:
+            if STATE["doc"] == doc.Name:
+                _show_folded(doc, True)
+        except Exception as exc:
+            warn("flat pattern save: %s" % exc)
+
+    def slotFinishSaveDocument(self, doc, filename):
+        try:
+            if STATE["doc"] == doc.Name:
+                _show_folded(doc, False)
+        except Exception as exc:
+            warn("flat pattern save: %s" % exc)
 
     def slotUndoDocument(self, doc):
         self._check(doc)
