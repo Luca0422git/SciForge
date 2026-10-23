@@ -434,8 +434,30 @@ def compute(obj):
                 options["flip"],
             )
         if base is not None:
-            result = base.fuse(result)
-            result = form._clean(result)
+            # Join: the new sheet goes beside the body's sheet, never on top of it (a doubled
+            # thickness is no sheet metal), and it must touch it
+            stacked = base.common(result).Volume > 1e-3
+            if kind == "base" and not stacked:
+                # lying on the sheet's top or bottom face: half a thickness up or down it
+                # would sink into the sheet (beside it, it slides along the sheet's edge)
+                for sign in (1.0, -1.0):
+                    moved = result.copy()
+                    moved.translate(normal * (sign * rule["thickness"] / 2.0))
+                    if base.common(moved).Volume > 1e-3:
+                        stacked = True
+                        break
+            if stacked:
+                raise FormError(
+                    "The new sheet lies on the body's sheet (that would double its thickness): "
+                    "draw the profile beside it, against one of its edges."
+                )
+            joined = form._clean(base.fuse(result))
+            if len(joined.Solids) > len(base.Solids):
+                raise FormError(
+                    "The new sheet does not touch the sheet metal body: draw it against an "
+                    "edge of the body, or make it a New Body."
+                )
+            result = joined
     if result.isNull() or not result.Solids:
         raise FormError("The flange made no solid.")
     return bodies.to_local(result, body)
