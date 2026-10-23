@@ -63,31 +63,26 @@ def open_bend():
     h.ribbon("Bend")
 
 
-def lines_box():
-    p = panel()
-    h.check("Bend dialog open on the plate in the component", p is not None and p.body is s["body"])
-    st.click_box(p, "lines")  # the lines first: Fusion's boxes take picks in any order
-
-
-def click_lines():
-    p = panel()
-    h.check("the Bend Lines box takes the clicks", p is not None and p.active == "lines")
-    h.fit()
-    h.click_edge(V(30, 30, 1) + SHIFT)
-
-
 def click_second():
     h.click_edge(V(70, 30, 1) + SHIFT)
 
 
-def face_box():
-    p = panel()
-    h.check("two lines picked", p is not None and len(p.picks["lines"]) == 2, p and p.picks)
-    st.click_box(p, "stationary")
-
-
 def click_face():
     h.click(V(10, 20, 1) + SHIFT)
+
+
+def face_first():
+    p = panel()
+    h.check("Bend dialog open on the plate in the component", p is not None and p.body is s["body"])
+    h.fit()
+
+
+def line_one():
+    p = panel()
+    h.check(
+        "the Bend Lines box takes the clicks after the face", p is not None and p.active == "lines"
+    )
+    h.click_edge(V(30, 30, 1) + SHIFT)
 
 
 def u_shape():
@@ -151,11 +146,10 @@ h.run(
         refused_start,
         setup,
         open_bend,
-        lines_box,
-        click_lines,
-        click_second,
-        face_box,
+        face_first,
         click_face,
+        line_one,
+        click_second,
         u_shape,
         override_radius,
         radius_2,

@@ -55,6 +55,7 @@ class LoftedPanel(smp.SmPanel):
     title = "Lofted Flange"
     icon = "sm_lofted_flange"
     NEEDS_BASE = False
+    SKETCH_BOXES = ("profile1", "profile2")
     BOXES = [
         ("profile1", "Profile 1", "Select a profile", False),
         ("profile2", "Profile 2", "Select a profile", False),

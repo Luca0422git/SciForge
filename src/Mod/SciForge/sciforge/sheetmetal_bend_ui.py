@@ -24,6 +24,7 @@ POSITION_ITEMS = [
 class BendPanel(smp.SmPanel):
     title = "Bend"
     icon = "sm_bend"
+    SKETCH_BOXES = ("lines",)
     BOXES = [
         ("stationary", "Stationary Side", "Select a face", False),
         ("lines", "Bend Lines", "Select lines", True),

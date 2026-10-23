@@ -80,6 +80,7 @@ class SmPanel(pickpanel.PickPanel):
     title = "Sheet Metal"
     icon = None
     BOXES = []  # (name, label, empty text, multi)
+    SKETCH_BOXES = ()  # boxes that take sketch curves only: the part is clicked through then
     NEEDS_BASE = True
     last = None
 
@@ -352,7 +353,40 @@ class SmPanel(pickpanel.PickPanel):
         self._sync()
         self._picks_updated()
 
+    def _click_through(self, on):
+        """While a box takes sketch curves only, clicks go through the part (its faces are
+        not pickable): a sketch line drawn on a face that is shown see-through under the
+        preview was otherwise lost to that face. Coin fields only, nothing in the document."""
+        held = getattr(self, "_through", None)
+        if on and held is None:
+            base = self.base
+            if base is None or not bodies.alive(base) or base.ViewObject is None:
+                return
+            try:
+                from pivy import coin
+
+                saved = []
+                for node in pickpanel.nodes(base.ViewObject.RootNode, "SoPickStyle"):
+                    node.ref()
+                    saved.append((node, node.style.getValue()))
+                    node.style.setValue(coin.SoPickStyle.UNPICKABLE)
+                self._through = saved
+            except Exception as exc:
+                warn("%s: click-through: %s" % (self.title, exc))
+        elif not on and held is not None:
+            self._through = None
+            for node, old in held:
+                try:
+                    node.style.setValue(old)
+                    node.unref()
+                except Exception:
+                    pass
+
     def _refresh_boxes(self):
+        try:
+            self._click_through(self.active in self.SKETCH_BOXES and not self._closed)
+        except Exception:
+            pass
         for name, field in self.boxes.items():
             field.set_active(name == self.active)
             count = len(self.picks.get(name, []))
@@ -454,6 +488,7 @@ class SmPanel(pickpanel.PickPanel):
         """The step is good and the dialog closes with OK."""
 
     def cleanup(self):
+        self._click_through(False)
         for handle in list(self.handles.values()):
             try:
                 handle.remove()
