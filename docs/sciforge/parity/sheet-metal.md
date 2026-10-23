@@ -174,16 +174,18 @@ Fixed on `sf/sm-forming-qa`:
 - **An edge flange's override fields started at the active component's rule**, not at the
   body's (Bend Radius 1.00 shown for a 1.5 mm Aluminum body). They follow the picked body's
   rule now.
-- **A base flange Join standing on the sheet (or across its edge)** was fused into a T or a
-  sharp L: a solid no flat pattern can unfold (a corner between two sheets needs a bend).
-  Join now needs the new plate in the plane of one of the body's sheets, touching it; the
-  dialog says why and points to the edge and contour flanges.
+- **A To Object / Two Offsets face clicked on the flange being previewed** was looked up by
+  its name on the part before the flange; the preview numbers its faces its own way, so the
+  same name was another face (a wrong height or a refusal, depending on the face hit). It
+  is now the face in the same plane on the part before the flange (a face only the new
+  flange has is refused with the reason).
+- **A base or contour flange Join standing on the sheet (or across its edge)** was fused
+  into a T or a sharp L: a solid no flat pattern can unfold (a corner between two sheets
+  needs a bend). Join now needs the new sheet (a contour: one of its walls) to carry on a
+  sheet of the body in its own plane, touching it; the dialog says why. A contour drawn
+  from the end of a sheet edge is joined as before.
 
 Left as they are (reported, not fixed):
-
-- A contour flange Join that is not drawn from a sheet edge is joined wherever it touches
-  (a contour standing on the sheet makes a sharp corner); only the base flange checks the
-  plane.
 
 - Two separate profiles in one base flange make one body with two solids (Fusion probably
   makes a body per plate: not checked).

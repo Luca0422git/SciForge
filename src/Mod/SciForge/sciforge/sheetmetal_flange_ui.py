@@ -631,7 +631,10 @@ class FlangePanel(Panel):
             self.message.setText("⚠ To Object: pick a flat face or a plane.")
             return
         if self.target is not None and obj is self.target:
-            obj = self.target.BaseFeature
+            mapped = self._face_before(obj, short)
+            if mapped is None:
+                return
+            obj, short = mapped
         self.to_object = (obj, short)
         self.activate("selection")
         self._refresh_picks()
@@ -643,11 +646,29 @@ class FlangePanel(Panel):
             self.message.setText("⚠ Two Offsets: pick a flat face or a plane.")
             return
         if self.target is not None and obj is self.target:
-            obj = self.target.BaseFeature
+            mapped = self._face_before(obj, short)
+            if mapped is None:
+                return
+            obj, short = mapped
         self.offset_refs[index] = (obj, short)
         self.activate("ref2" if index == 0 and self.offset_refs[1] is None else "selection")
         self._refresh_picks()
         self._changed()
+
+    def _face_before(self, obj, short):
+        """(the step before the preview, its face) for a face clicked on the flange being
+        previewed: the face of the part before this flange that lies in the same plane (the
+        preview numbers its faces its own way: the same name there is another face, QA).
+        None, with the reason shown, for a face only the new flange has."""
+        base = self.target.BaseFeature
+        found = _same_plane_face(obj, short, base)
+        if found is None:
+            self.message.setText(
+                "⚠ That face belongs to the flange being made: pick a face of the part, of "
+                "another body or a plane."
+            )
+            return None
+        return base, found
 
     def _refresh_picks(self):
         if self.kind == "edge":
@@ -1108,6 +1129,36 @@ def _chain(sketch, sub):
         points += ends(edges[i])
     free = [p for p in points if sum(1 for q in points if (p - q).Length < 1e-6) == 1]
     return ["Edge%d" % (i + 1) for i in sorted(picked)], not free
+
+
+def _same_plane_face(obj, short, base):
+    """The name in `base`'s shape of a flat face in the plane of the face `short` of `obj`
+    (To Object and Two Offsets only use the plane), or None."""
+    import Part
+
+    try:
+        face = obj.Shape.getElement(short)
+    except Exception:
+        return None
+    if base is None or base.Shape.isNull() or face.ShapeType != "Face":
+        return None
+    if not isinstance(face.Surface, Part.Plane):
+        return None
+
+    def normal(f):
+        u0, u1, v0, v1 = f.ParameterRange
+        return f.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+
+    n = normal(face)
+    point = face.Vertexes[0].Point
+    for i, other in enumerate(base.Shape.Faces, 1):
+        if not isinstance(other.Surface, Part.Plane):
+            continue
+        if abs(normal(other).dot(n)) < 1.0 - 1e-9:  # the plane is what counts
+            continue
+        if abs((other.Vertexes[0].Point - point).dot(n)) < 1e-6:
+            return "Face%d" % i
+    return None
 
 
 def _same_edge(obj, short, base):

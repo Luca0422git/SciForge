@@ -475,13 +475,22 @@ def compute(obj):
                     "The new sheet lies on the body's sheet (that would double its thickness): "
                     "draw the profile beside it, against one of its edges."
                 )
+            # standing on the sheet or across its edge: a sharp corner between two sheets,
+            # which no flat pattern can unfold (a corner needs a bend) (QA)
             if kind == "base" and not _in_sheet_plane(base, result, normal):
-                # standing on the sheet or across its edge: a sharp corner between two
-                # sheets, which no flat pattern can unfold (a corner needs a bend) (QA)
                 raise FormError(
                     "The new sheet does not lie in the plane of the body's sheet: a corner "
                     "between two sheets needs a bend. Draw the profile in the sheet's plane, "
                     "against one of its edges, or use an edge or contour flange."
+                )
+            if kind == "contour" and not any(
+                _in_sheet_plane(base, result, d) for d in _wall_normals(result, plane.n)
+            ):
+                raise FormError(
+                    "The contour flange does not carry on a sheet of the body in its own "
+                    "plane: a corner between two sheets needs a bend. Draw the line from the "
+                    "end of a sheet edge (or in the sheet's plane against its edge), or make it "
+                    "a New Body."
                 )
             joined = form._clean(base.fuse(result))
             if len(joined.Solids) > len(base.Solids):
@@ -529,6 +538,25 @@ def _in_sheet_plane(base, plate, normal):
                 sides.add(nf.dot(n) > 0)
                 break
     return len(sides) == 2
+
+
+def _wall_normals(shape, along):
+    """The directions of the planar faces of `shape` square to `along` (a contour's walls
+    and end caps; one per opposite pair)."""
+    a = App.Vector(along)
+    if a.Length > 1e-12:
+        a.normalize()
+    found = []
+    for face in shape.Faces:
+        if face.Surface.__class__.__name__ != "Plane":
+            continue
+        u0, u1, v0, v1 = face.ParameterRange
+        n = face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+        if abs(n.dot(a)) > 1e-6:
+            continue
+        if not any(abs(abs(n.dot(m)) - 1.0) < 1e-6 for m in found):
+            found.append(n)
+    return found
 
 
 # -- making and editing -------------------------------------------------------------------------

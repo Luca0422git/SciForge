@@ -592,6 +592,75 @@ def d2_done():
     h.check("dialog closed", sm.panel() is None)
 
 
+# -- To Object: up to the top of the part's own wall (a face clicked on the preview) ----------
+def d2_to_flange():
+    h.fit()
+    h.click_empty()
+    h.ribbon("Flange")
+
+
+def d2_to_edge():
+    h.fit()
+    h.check("clicked the plate's front edge", h.click_edge(V(25, 0, 1.5)))
+
+
+def d2_to_extent():
+    sm.settle()
+    sm.choose("extent", "To Object")
+
+
+def d2_to_face():
+    sm.settle()
+    p = sm.panel()
+    h.check("the Object box waits for a pick", p is not None and p.active == "object")
+    # the top of the Outside wall on x = 50 (z 11.5: T + R + H - R)
+    h.click(V(50.75, 15, 11.5))
+
+
+def d2_to_check():
+    sm.settle()
+    p = sm.panel()
+    shape = s["body2"].Shape
+    picked = p.to_object if p is not None else None
+    h.check(
+        "the face is taken on the part before the flange",
+        picked is not None and p.target is not None and picked[0] is p.target.BaseFeature,
+        picked,
+    )
+    h.check("no message", not sm.message(), sm.message())
+    h.check("the new wall runs up to z = 11.5", shape.isInside(V(25, 0.75, 11.4), 1e-6, True))
+    h.check("and no higher", not shape.isInside(V(25, 0.75, 11.6), 1e-6, True))
+    h.check("one valid solid", shape.isValid() and len(shape.Solids) == 1)
+    # the same face can be hit on the preview, which numbers its faces its own way: it must
+    # map to the face in the same plane on the part before it (not the same name)
+    import Part
+
+    from sciforge import sheetmetal_flange_ui as fui
+
+    target = p.target if p is not None else None
+    base = target.BaseFeature if target is not None else None
+    name = None
+    for i, face in enumerate(target.Shape.Faces if target is not None else [], 1):
+        if face.distToShape(Part.Vertex(V(50.75, 15, 11.5)))[0] < 1e-6:
+            name = "Face%d" % i
+            break
+    mapped = fui._same_plane_face(target, name, base) if name else None
+    face = base.Shape.getElement(mapped) if mapped else None
+    h.check(
+        "a face picked on the preview maps to the same plane before it",
+        face is not None and abs(face.Vertexes[0].Point.z - 11.5) < 1e-6,
+        (name, mapped),
+    )
+
+
+def d2_to_ok():
+    sm.ok()
+
+
+def d2_to_done():
+    h.check("dialog closed", sm.panel() is None)
+
+
 # -- a Join that would stand on the sheet is refused (a third design) --------------------------
 def design_3():
     App.newDocument("SheetQA3")
@@ -767,6 +836,13 @@ h.run(
         d2_closed_corner,
         d2_ok_corner,
         d2_done,
+        d2_to_flange,
+        d2_to_edge,
+        d2_to_extent,
+        d2_to_face,
+        d2_to_check,
+        d2_to_ok,
+        d2_to_done,
         design_3,
         d3_sketch,
         pick_xy,
