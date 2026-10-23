@@ -616,21 +616,23 @@ def heal(shape, faces, refine=True):
     from . import direct_core
 
     kinds = [type(f.Surface).__name__ for f in faces]
-    refusal = direct_core.delete_refusal(
-        kinds, len(shape.Faces), neighbours_turn=_neighbours_turn(shape, faces)
-    )
+
+    def refusal():  # worked out only when refusing (the neighbour test walks the shape)
+        turn = _neighbours_turn(shape, faces)
+        return direct_core.delete_refusal(kinds, len(shape.Faces), neighbours_turn=turn)
+
     if len(faces) >= len(shape.Faces):
-        raise DeleteError(refusal)
+        raise DeleteError(refusal())
     try:
         healed = shape.defeaturing(faces)
     except Exception:
-        raise DeleteError(refusal)
+        raise DeleteError(refusal())
     if healed.isNull() or not healed.Solids or not healed.isValid():
-        raise DeleteError(refusal)
+        raise DeleteError(refusal())
     if len(healed.Solids) != len(shape.Solids):
-        raise DeleteError(refusal)
+        raise DeleteError(refusal())
     if len(healed.Faces) == len(shape.Faces) and abs(healed.Volume - shape.Volume) < 1e-9:
-        raise DeleteError(refusal)
+        raise DeleteError(refusal())
     if refine:
         try:
             healed = healed.removeSplitter()
