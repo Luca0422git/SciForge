@@ -249,8 +249,23 @@ class PressPullPanel(Panel):
         if self.picker is not None and self.picker.regions:
             self.message.setText("")
             self.what.setText("Click a sketch area (shaded blue) to extrude it.")
+        elif self._surface_shown():
+            # a surface body is shown: its faces and edges are what Press Pull takes here
+            # (the first click hands over to the surface Press Pull; surface-4)
+            self.message.setText("")
+            self.what.setText(
+                "Click a flat face of a surface body to push or pull it, or an edge to round it."
+            )
         else:
             self.message.setText("Make a solid first (Create Sketch, then Extrude).")
+
+    def _surface_shown(self):
+        try:
+            from . import surfmod_ui
+
+            return surfmod_ui.shown_surface_body(self.doc) is not None
+        except Exception:
+            return False
 
     # a click on a sketch area only the face's projected edges bound (Auto project) is
     # a click on the face (sketch_area_pick lets it through)

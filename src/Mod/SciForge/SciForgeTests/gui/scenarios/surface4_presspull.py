@@ -45,6 +45,14 @@ def setup():
 
 
 def click_floor():
+    from sciforge import presspull_ui
+
+    p = presspull_ui.PressPullPanel.last
+    shown = p is not None and not p._closed
+    h.check("Press Pull opened, waiting", shown)
+    if shown:
+        h.check("no 'make a solid first'", "solid" not in p.message.text(), p.message.text())
+        h.check("says to click a surface face", "surface body" in p.what.text(), p.what.text())
     h.click(V(8, 16, 0))
 
 
