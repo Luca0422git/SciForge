@@ -5,6 +5,7 @@ the dominant flange's corner edge then the submissive one's: both are taken in l
 rule's gap short of the corner's bisector (Symmetric Gap); Overlap with a 0 gap (the dominant
 runs over the other's end); the Round relief is greyed with its reason; OK; the timeline's
 Corner Closure 1; Ctrl+Z / Ctrl+Y; edit back to Symmetric Gap; Cancel keeps it."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -49,12 +50,18 @@ def open_corner():
 def waiting():
     p = panel()
     h.check("Corner Closure dialog open", p is not None)
-    h.check("Symmetric Gap, rule gap", p is not None and p.value("alignment") == "symmetric"
-            and p.value("use_rule_gap"))
+    h.check(
+        "Symmetric Gap, rule gap",
+        p is not None and p.value("alignment") == "symmetric" and p.value("use_rule_gap"),
+    )
     box = p.fields["relief"] if p else None
     item = box.model().item(1) if box else None
-    h.check("Round relief greyed with its reason", item is not None and not item.isEnabled()
-            and "Not available" in (item.toolTip() or box.itemData(1, 3) or ""))
+    h.check(
+        "Round relief greyed with its reason",
+        item is not None
+        and not item.isEnabled()
+        and "Not available" in (item.toolTip() or box.itemData(1, 3) or ""),
+    )
 
 
 def click_dominant():
@@ -71,10 +78,13 @@ def click_submissive():
 def closed():
     p = panel()
     st.settle(p)
-    h.check("submissive edge picked", p is not None and len(p.picks["submissive"]) == 1,
-            p and p.picks)
-    h.check("the corner is closed: the flanges reach the bisector", inside(V(99.5, 2.5, 12))
-            and inside(V(97.5, 0.5, 12)))
+    h.check(
+        "submissive edge picked", p is not None and len(p.picks["submissive"]) == 1, p and p.picks
+    )
+    h.check(
+        "the corner is closed: the flanges reach the bisector",
+        inside(V(99.5, 2.5, 12)) and inside(V(97.5, 0.5, 12)),
+    )
     h.check("a gap is left at the corner", not inside(V(99.5, 0.5, 12)))
     h.check("more material", st.volume(s["body"]) > s["open"] + 5)
     h.check("no message", st.message(p) == "", st.message(p))
@@ -111,8 +121,11 @@ def ok():
 def after_ok():
     steps = st.steps("SheetMetalCornerClosure")
     h.check("one Corner Closure step", len(steps) == 1, steps)
-    h.check("timeline shows Corner Closure 1", "Corner Closure 1" in st.timeline_titles(),
-            st.timeline_titles())
+    h.check(
+        "timeline shows Corner Closure 1",
+        "Corner Closure 1" in st.timeline_titles(),
+        st.timeline_titles(),
+    )
     s["over"] = st.volume(s["body"])
 
 
@@ -138,10 +151,17 @@ def edit():
 
 def edit_symmetric():
     p = panel()
-    h.check("edit opens with both edges", p is not None and p.editing
-            and len(p.picks["dominant"]) == 1 and len(p.picks["submissive"]) == 1)
-    h.check("Overlap and the 0 gap are back", p is not None and p.value("alignment") == "overlap"
-            and not p.value("use_rule_gap"))
+    h.check(
+        "edit opens with both edges",
+        p is not None
+        and p.editing
+        and len(p.picks["dominant"]) == 1
+        and len(p.picks["submissive"]) == 1,
+    )
+    h.check(
+        "Overlap and the 0 gap are back",
+        p is not None and p.value("alignment") == "overlap" and not p.value("use_rule_gap"),
+    )
     if p:
         st.choose(p, "alignment", "Symmetric Gap")
         st.toggle(p, "use_rule_gap")
@@ -169,15 +189,37 @@ def change_cancel():
 
 
 def after_cancel():
-    h.check("Cancel keeps the symmetric closure", panel() is None
-            and st.close(st.volume(s["body"]), s["sym"]))
+    h.check(
+        "Cancel keeps the symmetric closure",
+        panel() is None and st.close(st.volume(s["body"]), s["sym"]),
+    )
 
 
 h.run(
     "smmore_corner",
     [
-        setup, open_corner, waiting, click_dominant, click_submissive, closed, overlap,
-        zero_gap, type_zero, overlapped, ok, after_ok, undo, after_undo, redo, after_redo,
-        edit, edit_symmetric, edit_ok, after_edit, edit_cancel, change_cancel, after_cancel,
+        setup,
+        open_corner,
+        waiting,
+        click_dominant,
+        click_submissive,
+        closed,
+        overlap,
+        zero_gap,
+        type_zero,
+        overlapped,
+        ok,
+        after_ok,
+        undo,
+        after_undo,
+        redo,
+        after_redo,
+        edit,
+        edit_symmetric,
+        edit_ok,
+        after_edit,
+        edit_cancel,
+        change_cancel,
+        after_cancel,
     ],
 )

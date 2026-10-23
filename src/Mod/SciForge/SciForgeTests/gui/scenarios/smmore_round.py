@@ -4,6 +4,7 @@ real input: the MODIFY menu's Fillet; a click on a top edge is not taken (only t
 through the thickness light up); a corner at 5 mm, "+ New Set", another corner at 10 mm
 (volumes worked out by hand); OK; Fillet 1 in the timeline; Ctrl+Z / Ctrl+Y; the Chamfer at
 4 mm on a third corner; edit the fillet from the timeline (its two sets come back)."""
+
 import math
 
 import FreeCAD as App
@@ -62,8 +63,11 @@ def click_top_edge():
 
 def not_taken():
     p = fillet_panel()
-    h.check("a top edge is not taken (only corners)", p is not None and p.picks["edges"] == [],
-            p and p.picks)
+    h.check(
+        "a top edge is not taken (only corners)",
+        p is not None and p.picks["edges"] == [],
+        p and p.picks,
+    )
 
 
 def click_corner():
@@ -88,8 +92,11 @@ def new_set():
 
 def click_second():
     p = fillet_panel()
-    h.check("set 1 kept, the box empty again", p is not None and len(p.sets) == 1
-            and p.picks["edges"] == [], p and (p.sets, p.picks))
+    h.check(
+        "set 1 kept, the box empty again",
+        p is not None and len(p.sets) == 1 and p.picks["edges"] == [],
+        p and (p.sets, p.picks),
+    )
     h.click_edge(V(100, 0, 0.5))
 
 
@@ -167,8 +174,11 @@ def edit():
 
 def edit_open():
     p = fillet_panel()
-    h.check("edit opens with set 1 kept and set 2 in the box", p is not None and p.editing
-            and len(p.sets) == 1 and len(p.picks["edges"]) == 1, p and (p.sets, p.picks))
+    h.check(
+        "edit opens with set 1 kept and set 2 in the box",
+        p is not None and p.editing and len(p.sets) == 1 and len(p.picks["edges"]) == 1,
+        p and (p.sets, p.picks),
+    )
     h.check("set 2's radius back", p is not None and abs(p.value("value") - 10.0) < 1e-6)
     if p:
         st.type_into(p, "value", "8")
@@ -187,9 +197,32 @@ def after_edit():
 h.run(
     "smmore_round",
     [
-        setup, open_fillet, waiting, click_top_edge, not_taken, click_corner, type_5, rounded,
-        new_set, click_second, type_10, two_sets, ok, after_ok, undo, after_undo, redo,
-        after_redo, open_chamfer, chamfer_corner, type_4, chamfered, after_chamfer, edit,
-        edit_open, edit_ok, after_edit,
+        setup,
+        open_fillet,
+        waiting,
+        click_top_edge,
+        not_taken,
+        click_corner,
+        type_5,
+        rounded,
+        new_set,
+        click_second,
+        type_10,
+        two_sets,
+        ok,
+        after_ok,
+        undo,
+        after_undo,
+        redo,
+        after_redo,
+        open_chamfer,
+        chamfer_corner,
+        type_4,
+        chamfered,
+        after_chamfer,
+        edit,
+        edit_open,
+        edit_ok,
+        after_edit,
     ],
 )

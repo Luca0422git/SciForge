@@ -37,8 +37,7 @@ def new_design(name):
     return App.ActiveDocument
 
 
-def plate(x0, y0, x1, y1, holes=(), label=None, z=0.0, body=None, plane="XY_Plane",
-          outline=None):
+def plate(x0, y0, x1, y1, holes=(), label=None, z=0.0, body=None, plane="XY_Plane", outline=None):
     """A flat sheet metal plate 1 mm thick (rule Steel (mm): T = R = 1) from a rectangle on
     the XY plane (offset z): an extrude of the sheet's thickness in a body flagged as sheet
     metal, which is what a base flange makes."""
