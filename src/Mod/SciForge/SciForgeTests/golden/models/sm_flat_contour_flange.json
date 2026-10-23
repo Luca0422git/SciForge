@@ -1,0 +1,75 @@
+{
+  "id": "sm_flat_contour_flange",
+  "title": "Flat pattern of an L contour flange (sm-forming's Flange)",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              50,
+              0
+            ],
+            [
+              50,
+              50
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "contour",
+      "profile": "s1",
+      "options": {
+        "distance": 20
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          1,
+          0
+        ],
+        "at": {
+          "axis": "y",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1965.2389,
+    "bbox": [
+      0,
+      0,
+      -1,
+      98.26195,
+      20,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "the same L as sm_flat_l_bracket made with a contour flange: 48 + 48 + BA long, 20 wide"
+  }
+}

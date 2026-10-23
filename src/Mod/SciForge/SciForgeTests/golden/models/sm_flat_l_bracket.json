@@ -1,0 +1,149 @@
+{
+  "id": "sm_flat_l_bracket",
+  "title": "Flat pattern of an L bracket (T 1, R 1, K 0.44, 50 x 50 x 20)",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              50,
+              0
+            ],
+            [
+              50,
+              50
+            ],
+            [
+              49,
+              50
+            ],
+            [
+              49,
+              1
+            ],
+            [
+              0,
+              1
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 50
+          },
+          {
+            "axis": "z",
+            "value": 0
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "fillet",
+      "id": "f2",
+      "radius": 1,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 49
+          },
+          {
+            "axis": "z",
+            "value": 1
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "sf_sm_convert",
+      "id": "c1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "rule": "template"
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1965.2389,
+    "bbox": [
+      0,
+      0,
+      -1,
+      98.26195,
+      20,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "flat length = 48 + 48 + BA, BA = pi/2 * (R + K T) = 2.26195 (outer 50 + 50 - BD 1.73805 = 98.26195); width 20, T 1"
+  }
+}

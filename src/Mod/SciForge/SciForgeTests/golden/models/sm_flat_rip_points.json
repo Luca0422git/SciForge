@@ -1,0 +1,170 @@
+{
+  "id": "sm_flat_rip_points",
+  "title": "Rip a converted tube between two points, flat pattern from another wall",
+  "tags": [
+    "sheetmetal",
+    "rip",
+    "convert",
+    "flat-pattern"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "count": 4
+      }
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "thickness": 1,
+      "faces": {
+        "any_of": [
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              -1
+            ],
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "op": "sf_sm_convert",
+      "id": "c1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          -1,
+          0
+        ],
+        "at": {
+          "axis": "y",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "rule": "template"
+    },
+    {
+      "op": "sf_rip",
+      "id": "rp1",
+      "type": "points",
+      "gap": 1,
+      "point1": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "y",
+            "value": "min"
+          },
+          {
+            "axis": "z",
+            "value": "max"
+          }
+        ],
+        "count": 1
+      },
+      "point2": {
+        "type": "line",
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "y",
+            "value": "min"
+          },
+          {
+            "axis": "z",
+            "value": "min"
+          }
+        ],
+        "count": 1
+      },
+      "offset1": 18,
+      "offset2": 18
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          1,
+          0,
+          0
+        ],
+        "at": {
+          "axis": "x",
+          "value": "max"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2640.9557,
+    "bbox": [
+      0,
+      0,
+      -1,
+      132.04779,
+      20,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "a 1 mm slot down the middle of the 36 mm front wall opens the tube: walls 124 - 1 and its 4 bends (BA 2.26195 each) in one strip, 20 high, T 1"
+  }
+}

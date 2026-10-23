@@ -1,0 +1,154 @@
+{
+  "id": "sm_flat_unfold_one_bend",
+  "title": "Unfold one bend of a U channel (the other stays folded)",
+  "tags": [
+    "sheetmetal",
+    "unfold"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              30
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              60,
+              0
+            ],
+            [
+              60,
+              30
+            ],
+            [
+              59,
+              30
+            ],
+            [
+              59,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": {
+          "axis": "z",
+          "value": 0
+        },
+        "count": 2
+      }
+    },
+    {
+      "op": "fillet",
+      "id": "f2",
+      "radius": 1,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": {
+          "axis": "z",
+          "value": 1
+        },
+        "count": 2
+      }
+    },
+    {
+      "op": "sf_sm_convert",
+      "id": "c1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "rule": "template"
+    },
+    {
+      "op": "sf_unfold",
+      "id": "u1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "bends": {
+        "type": "cylinder",
+        "radius": 1,
+        "at": {
+          "axis": "x",
+          "value": "max"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2332.3628,
+    "bbox": [
+      0,
+      -20,
+      0,
+      88.26195,
+      0,
+      30
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "the right bend (x = 58) is laid flat along +x: 58 + BA + 28; its volume becomes BA * T * 20 instead of pi/2 (2^2 - 1^2)/2 * 20; the left bend and wall stay"
+  }
+}

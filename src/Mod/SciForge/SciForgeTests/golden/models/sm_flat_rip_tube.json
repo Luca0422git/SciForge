@@ -1,0 +1,144 @@
+{
+  "id": "sm_flat_rip_tube",
+  "title": "Convert a shelled tube, rip one bend away, flat pattern",
+  "tags": [
+    "sheetmetal",
+    "rip",
+    "convert",
+    "flat-pattern"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "count": 4
+      }
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "thickness": 1,
+      "faces": {
+        "any_of": [
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          },
+          {
+            "type": "plane",
+            "normal": [
+              0,
+              0,
+              -1
+            ],
+            "count": 1
+          }
+        ]
+      }
+    },
+    {
+      "op": "sf_sm_convert",
+      "id": "c1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          -1,
+          0
+        ],
+        "at": {
+          "axis": "y",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "rule": "template"
+    },
+    {
+      "op": "sf_rip",
+      "id": "rp1",
+      "type": "face",
+      "face": {
+        "type": "cylinder",
+        "radius": 2,
+        "at": [
+          {
+            "axis": "x",
+            "value": "max"
+          },
+          {
+            "axis": "y",
+            "value": "max"
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          -1,
+          0
+        ],
+        "at": {
+          "axis": "y",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2615.7168,
+    "bbox": [
+      0,
+      0,
+      -1,
+      130.78584,
+      20,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "40 x 30 tube, outer corner radius 2, T 1: walls 36 + 26 + 36 + 26 and the 3 bends left after the rip (BA 2.26195 each); 20 high"
+  }
+}
