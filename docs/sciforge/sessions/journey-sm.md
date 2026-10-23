@@ -27,6 +27,18 @@ Flat Pattern, Export DXF, Convert to Sheet Metal, Rip), only real clicks and key
   wall (1.000 mm, 4 bends, Template Rule); Rip (Face) on the back-right corner; Create Flat
   Pattern from the front wall: 36 + 26 + 36 + 26 + 3 BA = 130.79 x 20, 3 bends; Finish;
   Ctrl+Z / Ctrl+Y.
+- `journey_sheetmetal_tray`: Steel (mm); an 80 x 50 plate; Flange on all four top edges
+  (four clicks), Height 20: four mitred corners; Corner Closure on the front-right corner
+  with a Round relief (cut through the bends, less material); Create Flat Pattern from the
+  floor: 118.52 x 88.52, 4 bends, a cross-shaped blank with the corners open; Export DXF:
+  the reliefs are arcs of the outline, 4 up centre lines, 8 extent lines; Finish; Ctrl+Z /
+  Ctrl+Y.
+
+**Results (FreeCAD 1.1.4, xvfb)**: `journey_sheetmetal` PASS (151 checks),
+`journey_sheetmetal_convert` PASS (44), `journey_sheetmetal_tray` PASS (46); the eleven
+`flatpattern_*` scenarios PASS after the fix; golden `sm_flat*` 19 pass; unit OK. Checked
+headless as well: the flat pattern follows the rule's K factor and Bend Radius, and an edit
+of Flange 2's height rebuilds the hem and the Corner Closure exactly as a fresh build.
 
 **Fixed**
 
