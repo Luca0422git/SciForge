@@ -187,6 +187,8 @@ class FlangeFeature:
         add("App::PropertyLinkSubListGlobal", "Profiles", "Flange", "Sketch profiles or curves")
         add("App::PropertyLinkSubList", "Edges", "Flange", "Edges of the sheet metal body")
         add("App::PropertyLinkSubGlobal", "Target", "Flange", "To Object: face or plane")
+        add("App::PropertyLinkSubGlobal", "OffsetRef1", "Flange", "Two Offsets: first reference")
+        add("App::PropertyLinkSubGlobal", "OffsetRef2", "Flange", "Two Offsets: second reference")
         if add("App::PropertyLinkGlobal", "SciForgeRules", "Base", "The design's rules"):
             obj.setEditorMode("SciForgeRules", 2)
         for key, (prop, group) in ENUMS.items():
@@ -371,7 +373,11 @@ def _links(value):
 
 def _target_plane(obj):
     """(point, normal) in design coordinates of the To Object pick, or None."""
-    target = obj.Target
+    return _plane_of(obj.Target)
+
+
+def _plane_of(target):
+    """(point, normal) in design coordinates of a face / plane link value, or None."""
     if not target:
         return None
     linked, subs = target[0], list(target[1]) if len(target) > 1 else []
@@ -381,7 +387,7 @@ def _target_plane(obj):
         face = curves.to_global(face, linked)
         face = bodies.baked(face)
         if face.ShapeType != "Face":
-            raise FormError("To Object: pick a flat face or a plane.")
+            raise FormError("Pick a flat face or a plane.")
         u0, u1, v0, v1 = face.ParameterRange
         u, v = (u0 + u1) / 2.0, (v0 + v1) / 2.0
         return face.valueAt(u, v), face.normalAt(u, v)
@@ -408,6 +414,12 @@ def compute(obj):
         opts = form_options(options)
         if options["extent"] == "to_object":
             opts["target"] = _target_plane(obj)
+        if options["width_type"] == "two_offsets":
+            planes = [_plane_of(obj.OffsetRef1), _plane_of(obj.OffsetRef2)]
+            if any(planes) and not all(planes):
+                raise FormError("Two Offsets: pick the second face or plane.")
+            if all(planes):
+                opts["offset_planes"] = planes
         result = form.edge_flange(base, names, rule, opts)
     else:
         refs = _links(obj.Profiles)
@@ -528,6 +540,28 @@ def _set_refs(step, kind, refs, target=None):
         step.Target = None
 
 
+def _link(pick):
+    return (pick[0], [pick[1]] if pick[1] else []) if pick else None
+
+
+def set_offset_refs(step, refs):
+    """The two Two Offsets references [(object, sub) or None, (object, sub) or None]."""
+    refs = list(refs or []) + [None, None]
+    step.OffsetRef1 = _link(refs[0])
+    step.OffsetRef2 = _link(refs[1])
+
+
+def offset_refs_of(step):
+    out = []
+    for value in (step.OffsetRef1, step.OffsetRef2):
+        if value:
+            subs = list(value[1]) if len(value) > 1 else []
+            out.append((value[0], subs[0] if subs else ""))
+        else:
+            out.append(None)
+    return out
+
+
 def make(
     doc,
     kind,
@@ -539,6 +573,7 @@ def make(
     name=None,
     target=None,
     hide=True,
+    offset_refs=None,
 ):
     """Make a flange step. kind: base / contour / edge. refs: [(sketch, "InternalFaceN")]
     (base), [(sketch, "EdgeN")] (contour) or [(feature, "EdgeN")] (edge, the body's last
@@ -585,6 +620,8 @@ def make(
     bodies.save_meta(step, META, {"body": made})
     try:
         _set_refs(step, kind, refs, target)
+        if offset_refs:
+            set_offset_refs(step, offset_refs)
         apply_options(step, opts)
         preview.recompute(doc)
         problem = problem_of(step)
@@ -660,8 +697,10 @@ def problem_of(step):
     return ""
 
 
-def update(step, refs=None, options=None, target=None):
+def update(step, refs=None, options=None, target=None, offset_refs=None):
     """Change a flange's picks and/or options (the caller recomputes)."""
+    if offset_refs is not None:
+        set_offset_refs(step, offset_refs)
     opts = options_of(step)
     opts.update(options or {})
     kind = opts["kind"]

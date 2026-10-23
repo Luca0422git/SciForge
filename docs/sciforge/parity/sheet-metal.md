@@ -69,11 +69,11 @@ its **diameter** (said in the tooltip).
 | Height Datum Inner Faces / Outer Faces / Tangent To Bend | Same (research 4.3): walls H - R tan(a/2), H - (R + T) tan(a/2), H | A[R2], F[F15] |
 | Bend Position Inside / Outside / Adjacent / Tangent | Same (research 4.4): the plate is cut back (R + T) tan(a/2), R tan(a/2), 0; Tangent keeps the bend's outside on the side face from 90 degrees up (below 90 it is Inside, G) | A[R2], A[R29] |
 | Angle, default 90; Flip turns the flange over the plate | Same; angle 0 < a <= 180 | A[R27], A[R2] |
-| Width Full Edge / Symmetric / Two Sides / Two Offsets | Same; Two Offsets measures its two offsets from the edge's ends (Fusion: from two picked faces / planes, G) | A[R2] |
+| Width Full Edge / Symmetric / Two Sides / Two Offsets (between two picked reference faces or planes, an offset from each) | Same: Two Offsets lights Offset Object 1 then 2; the flange runs between where the two references cross the edge, each offset inwards. With no reference picked the offsets count from the edge's ends (SciForge) | A[R2] |
 | Several edges; adjacent ones mitred with the Miter/Rip/Seam Gap | Same: each pair of picked edges that meet at a corner of the same face is cut on the corner's bisector, gap/2 each side (a four-edge tray works) | A[R6], G(Inv) |
 | Bend relief where the flange stops inside its edge: Straight / Tear / Round, width, depth, remnant | Same (research 4.5): a slot from the edge back across the bend zone and Relief Depth more, Relief Width wide; Round ends in a half circle; a plate sliver narrower than Relief Remnant is cut away; Tear is a 0.05 mm slit (a solid cannot hold a zero-width cut) | A[R6], A[R1], G |
 | Rule overrides with their check boxes: Bend Radius, Bend Relief, Corner Relief (2 bends), Corner Relief (3 bends) | Same check boxes and fields. Bend Radius and Bend Relief change the geometry; the corner relief overrides are kept on the step (see Known gaps) | A[R1] |
-| Live preview, drag arrow with its value box, OK / Cancel | Same: the preview is the real step; the height arrow stands on the Height Datum point and points along the wall | A[R2] |
+| Live preview, drag arrow with its value box, OK / Cancel | Same: the preview is the real step; the height arrow stands on the Height Datum point and points along the wall; an angle handle turns about the bend's axis (G); every field and value box takes a number, a user parameter or a formula | A[R2], G |
 | Timeline "Flange<n>" with the flange icon; edit from the timeline | Same (double-click opens the dialog with the picks and values) | G |
 | Errors: curved edge, an edge not on a sheet metal body, a flange that runs into the part, a height that does not reach past the bend | Refused in the dialog with the reason (OK keeps it open): curved edge, edge across the thickness, edge of another body, overlapping flanges, a flange that would run into the part, Height Datum Inner / Outer or Bend Position Inside / Outside at 180 degrees, a contour line too short for its bends, a closed or branched contour, a spline in a contour | G |
 
@@ -83,15 +83,21 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
 
 ## Tests
 
-- Golden models (`SciForgeTests/golden/models/sheetmetal_*.json`, hand-derived volumes): base
-  flange rect, Side 2 / Centered with a 0.5 mm rule, New Component, L bracket, every Bend
-  Position and Height Datum, mitred corner, partial width with reliefs, rule edit recomputes,
-  contour L, angle edit, To Object.
+- Golden models (`SciForgeTests/golden/models/sheetmetal_*.json`, 17, hand-derived volumes):
+  base flange rect, Side 2 / Centered with a 0.5 mm rule, New Component, Join, L bracket, every
+  Bend Position and Height Datum, mitred corner, a four-edge tray, flange on a flange, partial
+  width with reliefs, Two Offsets between two planes, rule edit recomputes, contour L, contour
+  Two Sides / Side 2, angle edit, To Object, an Extrude cut through the sheet then a flange
+  edit.
 - Unit tests: `SciForgeTests/unit/test_sheetmetal_flange_core.py` (flange maths, rule lists).
-- Scenarios (real clicks): `sheetmetal_flange` (base + edge, datums, positions, drag, undo/redo,
-  edit, Esc), `sheetmetal_rules` (the whole rules dialog, refusals, undo of the visit),
-  `sheetmetal_contour` (contour options, drag, Cancel, save / reopen, edit after reopen),
-  `sheetmetal_edge_options` (miter, reliefs, refusals, To Object, Sheet Metal component).
+- Scenarios (real clicks): `sheetmetal_flange` (base + edge, Rule drop-down, datums, positions,
+  height arrow and angle handle drags, undo/redo, edit, Esc, swapping the body's rule),
+  `sheetmetal_rules` (the whole rules dialog, refusals, undo of the visit), `sheetmetal_contour`
+  (contour options, drag, Cancel, save / reopen, edit after reopen), `sheetmetal_edge_options`
+  (miter, reliefs, refusals, To Object, Two Offsets, Sheet Metal component),
+  `sheetmetal_parameters` (a user parameter in Height), `sheetmetal_components` (New
+  Component, Extrude cut through sheet metal, Join), and `ribbon_sweep` with
+  `SWEEP_TABS=sheet_metal`.
 
 ## Known gaps
 
@@ -107,10 +113,10 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
 - **Contour flange attached to an edge** (a profile drawn at the end of an edge, its width
   types and bend position) is not built; a contour flange makes a new body or joins one (Join
   fuses it where it touches the body).
-- **Width Two Offsets** takes two offsets from the edge's ends, not two picked faces or planes.
 - **Splines in a contour flange** are refused (only lines and arcs can be bent with the rule's
   radius here); Fusion accepts them.
-- **No angle handle** on the canvas (the Angle field only) and no flip arrow on a base flange.
+- **No flip arrow** on a base flange (the Orientation box only).
 - **Tear bend relief** is a 0.05 mm slit, not a zero-width split (a solid cannot hold one).
 - **The Lofted flange type** is sm-more's own entry.
-- **Rule expressions** accept Thickness only, not user parameters (critic pass CP2 item 4).
+- **Rule expressions** accept Thickness only, not user parameters (critic pass CP2 item 4); the
+  Flange's own fields do take user parameters.

@@ -56,6 +56,7 @@ class FlangePanel(Panel):
         self.kind = None
         self.refs = []
         self.to_object = None  # (object, sub) the flange runs to (To Object)
+        self.offset_refs = [None, None]  # Two Offsets: the two faces / planes
         self.active = "selection"
         self.made_with = None  # (kind, operation, rule) the preview step was made with
         self.component = self._component()
@@ -82,6 +83,7 @@ class FlangePanel(Panel):
                 if feature.Target:
                     subs = list(feature.Target[1]) if len(feature.Target) > 1 else []
                     self.to_object = (feature.Target[0], subs[0] if subs else "")
+                self.offset_refs = flange.offset_refs_of(feature)
                 self.rule_name = sheetmetal.body_rule_name(self.body) or self.rule_name
                 self.made_with = (self.kind, "existing", self.rule_name)
                 # the flange that made its body: its Rule box swaps the body's rule (Fusion
@@ -207,6 +209,12 @@ class FlangePanel(Panel):
         self._length("width", "Width", o["width"])
         self._length("distance1", "Distance 1", o["distance1"])
         self._length("width2", "Distance 2", o["width2"])
+        self.ref_fields = []
+        for i in (1, 2):
+            box = SelectionField(self, "ref%d" % i, "Select face or plane")
+            self._row("ref%d" % i, "Offset Object %d" % i, box.widget)
+            box.button.setObjectName("SciForgeFlange_ref%d_button" % i)
+            self.ref_fields.append(box)
         self.ov_radius = self._check(
             "override_bend_radius", "Bend Radius", o["override_bend_radius"]
         )
@@ -304,6 +312,8 @@ class FlangePanel(Panel):
                 keys.add("width")
             elif o["width_type"] in ("two_sides", "two_offsets"):
                 keys |= {"distance1", "width2"}
+                if o["width_type"] == "two_offsets":
+                    keys |= {"ref1", "ref2"}
             keys |= {"override_bend_radius", "override_bend_relief", "override_corner_relief"}
             keys.add("override_corner3_relief")
             if o["override_bend_radius"]:
@@ -328,6 +338,11 @@ class FlangePanel(Panel):
             if label is not None:
                 label.setVisible(visible)
         self.mode.setText(MODE_TEXT[self.kind])
+        offsets = self.options.get("width_type") == "two_offsets"
+        for key, word in (("distance1", 1), ("width2", 2)):
+            label = self.rows[key][0]
+            if label is not None:
+                label.setText(("Offset %d" if offsets else "Distance %d") % word)
         join = self.operation_box.model().item(2)
         if join is not None:
             join.setEnabled(self._join_body() is not None)
@@ -357,10 +372,17 @@ class FlangePanel(Panel):
         self.active = name
         self.field.set_active(name == "selection")
         self.object_field.set_active(name == "object")
+        for i, box in enumerate(self.ref_fields):
+            box.set_active(name == "ref%d" % (i + 1))
         if self.picker is not None:
             self.picker.paused = name != "selection"
 
     def clear_field(self, name):
+        if name in ("ref1", "ref2"):
+            self.offset_refs[int(name[3]) - 1] = None
+            self._refresh_picks()
+            self._changed()
+            return
         if name == "object":
             self.to_object = None
             self._refresh_picks()
@@ -439,6 +461,8 @@ class FlangePanel(Panel):
         for obj, short in picks:
             if self.active == "object":
                 self._object_clicked(obj, short)
+            elif self.active in ("ref1", "ref2"):
+                self._ref_clicked(obj, short, int(self.active[3]) - 1)
             elif short.startswith("Edge") and not extrude.is_sketch(obj):
                 self._edge_clicked(obj, short)
 
@@ -533,6 +557,18 @@ class FlangePanel(Panel):
         self._refresh_picks()
         self._changed()
 
+    def _ref_clicked(self, obj, short, index):
+        """A Two Offsets reference: a flat face or a plane crossing the edge."""
+        if short and not short.startswith("Face"):
+            self.message.setText("⚠ Two Offsets: pick a flat face or a plane.")
+            return
+        if self.target is not None and obj is self.target:
+            obj = self.target.BaseFeature
+        self.offset_refs[index] = (obj, short)
+        self.activate("ref2" if index == 0 and self.offset_refs[1] is None else "selection")
+        self._refresh_picks()
+        self._changed()
+
     def _refresh_picks(self):
         if self.kind == "edge":
             text = "%d edge%s" % (len(self.refs), "" if len(self.refs) == 1 else "s")
@@ -546,6 +582,8 @@ class FlangePanel(Panel):
         self.object_field.set_text(
             "%s %s" % (self.to_object[0].Label, self.to_object[1]) if self.to_object else ""
         )
+        for box, ref in zip(self.ref_fields, self.offset_refs):
+            box.set_text("%s %s" % (ref[0].Label, ref[1]) if ref else "")
         if self.picker is not None:
             try:
                 keys = {(o.Name, s) for o, s in self.refs if self.kind == "base"}
@@ -592,6 +630,17 @@ class FlangePanel(Panel):
         if self._quiet:
             return
         self._changed(new_geometry=True)
+        if (
+            self.kind == "edge"
+            and self.options["width_type"] == "two_offsets"
+            and self.offset_refs == [None, None]
+            and self.active == "selection"
+        ):
+            self.activate("ref1")  # Two Offsets: the next clicks pick the two references
+            self.message.setText(
+                "Click the two faces or planes the width runs between (none: the offsets "
+                "count from the edge's ends)."
+            )
         if (
             self.kind == "edge"
             and self.options["extent"] == "to_object"
@@ -648,6 +697,7 @@ class FlangePanel(Panel):
                     body=self._join_body(),
                     target=self.to_object,
                     hide=False,  # the sketch stays in view while picking; OK hides it
+                    offset_refs=self.offset_refs,
                 )
                 self.made_with = made_with
             else:
@@ -657,7 +707,13 @@ class FlangePanel(Panel):
                         from . import sheetmetal_rules
 
                         sheetmetal_rules.set_body_rule(body, self.rule_name)
-                flange.update(self.target, refs=self.refs, options=options, target=self.to_object)
+                flange.update(
+                    self.target,
+                    refs=self.refs,
+                    options=options,
+                    target=self.to_object,
+                    offset_refs=self.offset_refs,
+                )
                 if not self.to_object:
                     self.target.Target = None
             self._store_formulas()

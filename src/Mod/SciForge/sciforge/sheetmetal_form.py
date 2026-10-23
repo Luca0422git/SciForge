@@ -449,7 +449,9 @@ def edge_frame(shape, edge_name, thickness, flip=False):
         raise FormError("%s: the side face must be square to the sheet." % edge_name)
     up = n_face * (-1.0 if flip else 1.0)
     origin = p0 - up * thickness if not flip else V(p0)
-    return EdgeFrame(origin, p1 - p0, out, up, (p1 - p0).Length, thickness, edge_name)
+    frame = EdgeFrame(origin, p1 - p0, out, up, (p1 - p0).Length, thickness, edge_name)
+    frame.edge_z = 0.0 if flip else thickness  # where the picked edge itself lies
+    return frame
 
 
 class BendWall:
@@ -543,6 +545,7 @@ def flange_options(options=None):
         "distance1": 5.0,
         "distance2": 5.0,
         "target": None,  # To Object: (point, normal) of the plane the flange runs to
+        "offset_planes": None,  # Two Offsets: two (point, normal) references across the edge
         "target_offset": 0.0,
         "bend_radius": None,  # overrides (None: the rule's)
         "relief_shape": None,
@@ -599,6 +602,16 @@ def _wall_length(frame, opts, rule, angle):
         raise FormError("Height: %s." % exc)
 
 
+def _crossing(frame, plane):
+    """Where (mm along the edge from frame.origin) a reference plane (point, normal) crosses
+    the edge's line; ValueError when it runs parallel to the edge."""
+    point, normal = V(plane[0]), V(plane[1]).normalize()
+    along = frame.axis.dot(normal)
+    if abs(along) < 1e-6:
+        raise ValueError("a reference runs along the edge and never crosses it")
+    return (point - frame.point(0.0, getattr(frame, "edge_z", 0.0))).dot(normal) / along
+
+
 def _shared_vertex(fa, fb):
     """(point, ta, tb): the end the two frames share (ta/tb: 0 or the edge length), or None."""
     for ta in (0.0, fa.length):
@@ -631,15 +644,20 @@ def edge_flange(shape, edge_names, rule, options=None):
     frames = [edge_frame(shape, name, T, bool(opts["flip"])) for name in edge_names]
     length = _wall_length(frames[0], opts, eff, angle)
     pieces, cuts, ranges = [], [], []
+    refs = opts.get("offset_planes") if opts["width_type"] == "two_offsets" else None
     for frame in frames:
         try:
-            t0, t1 = core.width_range(
-                opts["width_type"],
-                frame.length,
-                opts["width"],
-                opts["distance1"],
-                opts["distance2"],
-            )
+            if refs:
+                t_a, t_b = (_crossing(frame, plane) for plane in refs)
+                t0, t1 = core.width_between(t_a, t_b, opts["distance1"], opts["distance2"])
+            else:
+                t0, t1 = core.width_range(
+                    opts["width_type"],
+                    frame.length,
+                    opts["width"],
+                    opts["distance1"],
+                    opts["distance2"],
+                )
         except ValueError as exc:
             raise FormError("Width: %s." % exc)
         made = bend_wall(frame, t0, t1, T, eff["bend_radius"], angle, length, opts["position"])
