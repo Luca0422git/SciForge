@@ -31,12 +31,18 @@ into an open design as a copy, Opacity Control in the browser, the 3D view's hov
 browser row), then Delete on Home and in the Data Panel: newest session logs. Waiting for his
 test on Windows.
 
-**Sandbox limit found at release time (2026-10-21): a Claude Code cloud session can only push to
-`develop`.** A tag push (`git push origin sciforge-v...`) and a push to `Release` get HTTP 403 from
-the session's git proxy, and having a workflow create the tag instead was refused as a bypass. So
-the release step (tag + moving `Release`) is Luca's: `git tag sciforge-v<version> <tested develop
-sha> && git push origin sciforge-v<version>`, later `git push origin <sha>:refs/heads/Release`.
-A future release session must say so at the START, not after the build work.
+**Sandbox limit at release time: a Claude Code cloud session cannot push a tag.** A tag push
+(`git push origin sciforge-v...`) gets HTTP 403 from the session's git proxy (2026-10-21 and again
+2026-10-23), and having a workflow create the tag instead was refused as a bypass. Pushing to
+`Release` was refused on 2026-10-21 but worked on 2026-10-23 (a session started on `Release`,
+fast-forward to the tested develop commit). So the tag is Luca's: `git tag sciforge-v<version>
+<tested develop sha> && git push origin sciforge-v<version>`, from Git Bash at home or, from
+anywhere with a browser, a GitHub Codespace (repo > Code > Codespaces > Create codespace on
+Release; delete it afterwards). A future release session must say so at the START.
+
+**0.1.0-beta.2 (2026-10-23): tested develop `fe50c786` (CI run #261 green), `Release` moved to
+it by the session; waiting for Luca to push the tag `sciforge-v0.1.0-beta.2` on `fe50c786`**
+(the tag starts `sciforge-build.yml`, about 3 hours, which publishes the GitHub pre-release).
 
 **Start here (2026-10-17):** read the newest session log ("Luca's improvement list").
 Every item of Luca's list (IMPROVEMENTS_AND_STUFF_TO_FIX.txt, 18 fixes + 3 additions) is
@@ -1641,6 +1647,13 @@ The session was started on `Release`.
   - `update_check`: my VERSION change broke it (the update code reads the running version,
     so a fake 0.1.0-beta.2 was "up to date"). The scenario now sets `update_ui.__version__`
     to the 0.1.0-beta it pretends to be (setup / teardown). Lesson: run a scenario you edit.
+- Pushed fe50c786 (three commits: the drawing close crash, the Boss companions, the tests).
+  **CI run #261 green** (every job, all 6 scenario parts).
+- Release step: `git push origin fe50c786:refs/heads/Release` worked (a6a5f7bd..fe50c786); the
+  tag push got HTTP 403 (not worked around). Luca pushes `sciforge-v0.1.0-beta.2` on fe50c786
+  (Codespaces steps given; he may be at work without Git Bash). After that: watch the build
+  (run #11 of beta 1 needed a re-run of a hung Windows job), check the release page's files
+  and SHA256SUMS, and "Update now" from 0.1.0-beta (a module-only update: same core id).
 
 ### Session log: wave 6, SHEET METAL + PLASTIC tabs, SURFACE complete (`develop`, 2026-10-23 night)
 
