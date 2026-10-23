@@ -1,0 +1,87 @@
+{
+  "id": "plastic_rule_boss_wall",
+  "title": "A plastic rule's wall drives a Constant Thickness boss (rule edited to 2.5 mm)",
+  "tags": [
+    "plastic",
+    "boss",
+    "rules"
+  ],
+  "steps": [
+    {
+      "op": "sf_plastic_rule",
+      "rule": "PC 2 mm",
+      "set": {
+        "thickness": "2.5"
+      }
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sf_boss",
+      "id": "b1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          30,
+          20
+        ]
+      ],
+      "side2": {
+        "shape": "constant_thickness",
+        "draft": 0,
+        "root_radius": 0,
+        "step": "none",
+        "extent": "from_top",
+        "hole_depth": 4
+      }
+    }
+  ],
+  "expect": {
+    "volume": 12104.999104,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      40,
+      20
+    ],
+    "source": "analytic",
+    "note": "Enclosure 11712. The rule PC 2 mm edited to 2.5 mm: the boss wall follows it, 0.6 x 2.5 = 1.5, outer diameter 2.4 + 3 = 5.4; the clearance is half the rule's 0.1. Shank pi 2.7^2 (20 - 0.05 - 2) = 411.094677, minus the hole pi 1.2^2 4 = 18.095574."
+  }
+}

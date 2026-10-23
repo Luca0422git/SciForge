@@ -21,6 +21,7 @@ import FreeCADGui as Gui
 
 from . import bodies, commands, hole_common, log, modify_bodies, pickpanel, preview, shelling
 from . import ui_icon_path, warn
+from . import plastic  # plastic rule defaults (plastic-1)
 from .compat import QtWidgets
 from .taskui import DistanceField, ValueBoxes
 
@@ -123,6 +124,8 @@ class ShellPanel(pickpanel.PickPanel):
                 member.target = follower
         else:
             self.body, self.base = start_body(body)
+            # plastic-1: a component with a plastic rule shells with its wall
+            plastic.apply_defaults(self.options, self.body, "shell")
         self._build()
         self.finish_layout()
         try:
@@ -725,6 +728,7 @@ class ShellPanel(pickpanel.PickPanel):
             if self.members_failed():
                 self.show_status()
                 return False
+            plastic.remember_links(obj, "shell", self.body)  # plastic-1: rule links
             return self.finish_ok()
         except Exception as exc:
             self.say("⚠ %s" % exc)

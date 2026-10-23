@@ -33,6 +33,7 @@ from . import commands, cut_preview, drag_guard, extrude, log, preview, profile_
 from . import bodies, extrude_bodies, extrude_to_face, protractor, text, ui_icon_path, warn
 from . import extrude_bodies_core as bodies_core
 from . import extrude_to_face_core as to_face
+from . import plastic  # plastic rule defaults (plastic-1)
 from .compat import QtCore, QtWidgets
 from .taskui import ArrowDragger, BoxCarrier, DistanceField, Panel, ValueBoxes
 
@@ -573,6 +574,8 @@ class ExtrudePanel(Panel):
             # type a distance (Luca, R5). extrude.DEFAULTS keeps 10 for scripts.
             self.options["distance"] = 0.0
             self.options["distance2"] = 0.0
+            # plastic-1: a thin extrude in a component with a plastic rule
+            plastic.apply_defaults(self.options, self.body, "extrude")
         self.user_picked_operation = feature is not None
         self.error = ""
         self.waiting = ""  # the selection box that waits for a click, said as a hint
@@ -2633,6 +2636,7 @@ class ExtrudePanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
+        plastic.remember_links(feature, "extrude", self.body)  # plastic-1: rule links
         # Fusion hides the profile's sketch once the extrude is made (inside this step:
         # Undo shows it again). A sketch shown for the edit is hidden again after the step
         # (_close), not in it.

@@ -498,6 +498,7 @@ MENUS = {
     ],
     "units": ["Change Active Units"],
     "sheet_metal_rule": ["Sheet Metal Rules"],
+    "plastic_rule": ["Assign Plastic Rule", "Manage Plastic Rules"],
     "settings": ["Change Active Units"],
     "views": ["New Named View"],
     "view": ["Go to View"],

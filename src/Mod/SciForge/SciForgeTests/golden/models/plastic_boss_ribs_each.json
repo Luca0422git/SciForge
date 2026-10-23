@@ -1,0 +1,89 @@
+{
+  "id": "plastic_boss_ribs_each",
+  "title": "Boss ribs one by one: four square ribs, the second suppressed",
+  "tags": [
+    "plastic",
+    "boss"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sf_boss",
+      "id": "b1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          10,
+          10
+        ],
+        [
+          50,
+          30
+        ]
+      ],
+      "side2": {
+        "draft": 0,
+        "step_draft": 0,
+        "root_radius": 0,
+        "ribs": true,
+        "rib_profile": "none",
+        "rib_draft": 0,
+        "rib_extents": [
+          "length",
+          "suppressed",
+          "length",
+          "length"
+        ]
+      }
+    }
+  ],
+  "expect": {
+    "volume": 13688.056619,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      40,
+      20.85
+    ],
+    "source": "analytic",
+    "note": "The enclosure's thread sides (no lid, no drafts or fillets) 742.968206 each, and per point three of four square ribs (the second suppressed): 1.2 thick (0.6 x the rule's 2), 7.75 from the axis, from 1 mm under the tip (z 18.95) down to the floor (z 2): (7.75 x 1.2 - the part inside the shank r 3.75: 0.6 sqrt(3.75^2 - 0.36) + 3.75^2 asin(0.6 / 3.75)) x 16.95 = 81.686701 each."
+  }
+}

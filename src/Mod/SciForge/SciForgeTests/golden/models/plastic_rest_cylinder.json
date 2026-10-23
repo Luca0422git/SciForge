@@ -1,0 +1,59 @@
+{
+  "id": "plastic_rest_cylinder",
+  "title": "Rest: a flat 20 x 12 landing 2 mm above the crown of a round bar",
+  "tags": [
+    "plastic",
+    "rest"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            20
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 60
+    },
+    {
+      "op": "sf_rest",
+      "id": "r1",
+      "plane": "XY",
+      "offset": 22,
+      "rect": [
+        20,
+        -6,
+        40,
+        6
+      ],
+      "thickness": 2,
+      "draft": 0
+    }
+  ],
+  "expect": {
+    "volume": 75951.228371,
+    "solids": 1,
+    "bbox": [
+      0,
+      -20,
+      -20,
+      60,
+      20,
+      22
+    ],
+    "source": "analytic",
+    "note": "Bar r 20 x 60 along X = pi 400 60 = 75398.223686. A solid part gets a solid pedestal: the air between z 22 and the bar inside the profile x 20..40, |y| <= 6 is filled: 20 (12 * 22 - (6 sqrt(400 - 36) + 400 asin(6/20))) = 553.004684."
+  }
+}

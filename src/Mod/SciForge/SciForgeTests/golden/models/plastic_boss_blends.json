@@ -1,0 +1,140 @@
+{
+  "id": "plastic_boss_blends",
+  "title": "Boss blends: counterbore tip and root radius, alignment recess and spigot tip radius",
+  "tags": [
+    "plastic",
+    "boss"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "shell",
+      "id": "sh2",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          -1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sf_boss",
+      "id": "b1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          10,
+          10
+        ],
+        [
+          50,
+          30
+        ]
+      ],
+      "side1": {
+        "draft": 0,
+        "step_draft": 0,
+        "root_radius": 0,
+        "major_tip_radius": 0.5,
+        "major_root_radius": 0.5,
+        "step_tip_radius": 0.5
+      },
+      "side2": {
+        "draft": 0,
+        "step_draft": 0,
+        "root_radius": 0,
+        "step_tip_radius": 0.3
+      },
+      "comment": "no drafts and no fillets: every piece is a cylinder"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 13197.042517,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 8479.059782,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 8479.059782,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      20,
+      60,
+      40,
+      30
+    ],
+    "source": "analytic",
+    "note": "plastic_boss_enclosure's bosses (bottom 13197.936411, lid 8481.881309) with rounds, each a ring by Pappus: (1 - pi/4) R^2 2 pi (r +- R (10 - 3 pi)/(12 - 3 pi)). Lid, per boss: the counterbore's mouth on the outside rounded 0.5 (r 3.25, cut), its floor's corner rounded 0.5 (r 3.25, left), the recess's mouth rounded 0.5 (r 3.85, cut). Enclosure, per boss: the spigot's top edge rounded 0.3 (r 3.75, cut)."
+  }
+}

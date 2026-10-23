@@ -664,8 +664,10 @@ PLASTIC_SETUP = group(
     "SETUP",
     ["Assign Plastic Rule"],
     [
-        item("Assign Plastic Rule", None, None),  # owner: plastic-1
-        item("Manage Plastic Rules", None, None),  # owner: plastic-1
+        item("Assign Plastic Rule", "SciForge_AssignPlasticRule", "pl_assign"),  # owner: plastic-1
+        item(
+            "Manage Plastic Rules", "SciForge_ManagePlasticRules", "pl_manage"
+        ),  # owner: plastic-1
     ],
 )
 PLASTIC_CREATE = group(
@@ -686,10 +688,10 @@ PLASTIC_CREATE = group(
         _same(SOLID_CREATE, "Hole"),
         _same(SOLID_CREATE, "Thread"),
         SEP,
-        item("Boss", None, None),  # owner: plastic-1
+        item("Boss", "SciForge_Boss", "pl_boss"),  # owner: plastic-1
         item("Snap Fit", None, None),  # owner: plastic-2
         item("Lip", None, None),  # owner: plastic-2
-        item("Rest", None, None),  # owner: plastic-1
+        item("Rest", "SciForge_Rest", "pl_rest"),  # owner: plastic-1
         SEP,
         _same(SOLID_CREATE, "Thicken"),
         _same(SOLID_CREATE, "Mirror"),
@@ -703,7 +705,7 @@ PLASTIC_MODIFY = group(
     [
         _same(SOLID_MODIFY, "Press Pull"),
         _same(SOLID_MODIFY, "Fillet"),
-        item("Rule Fillet", None, None),  # owner: plastic-1
+        item("Rule Fillet", "SciForge_RuleFillet", "pl_rule_fillet"),  # owner: plastic-1
         _same(SOLID_MODIFY, "Chamfer"),
         SEP,
         _same(SOLID_MODIFY, "Shell"),

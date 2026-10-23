@@ -1,0 +1,139 @@
+{
+  "id": "plastic_boss_alignment_roots",
+  "title": "Boss alignment root radius: the recess's floor corner and a narrow spigot's foot",
+  "tags": [
+    "plastic",
+    "boss"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "shell",
+      "id": "sh2",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          -1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sf_boss",
+      "id": "b1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          10,
+          10
+        ],
+        [
+          50,
+          30
+        ]
+      ],
+      "side1": {
+        "draft": 0,
+        "step_draft": 0,
+        "root_radius": 0,
+        "step_root_radius": 0.3
+      },
+      "side2": {
+        "draft": 0,
+        "step_draft": 0,
+        "root_radius": 0,
+        "step_diameter": 6.0,
+        "step_root_radius": 0.3
+      },
+      "comment": "no drafts and no fillets: every piece is a cylinder"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 13170.053039,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 8482.799474,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 8482.799474,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      20,
+      60,
+      40,
+      30
+    ],
+    "source": "analytic",
+    "note": "plastic_boss_enclosure with a spigot of diameter 6 (r 3, 0.9 high) and both alignment roots rounded 0.3, each a ring by Pappus. Enclosure, per boss: pi (3.75^2 17.95 + 3^2 0.9 - 1.2^2 19.85) plus the spigot's foot (1 - pi/4) R^2 2 pi (3 + R (10 - 3 pi)/(12 - 3 pi)) = 729.026520. Lid: 8481.881309 plus, per boss, the recess's floor corner left (1 - pi/4) R^2 2 pi (3.85 - R (10 - 3 pi)/(12 - 3 pi))."
+  }
+}
