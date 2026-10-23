@@ -10,8 +10,9 @@ loop standing on the other body (Hook and Loop). Rotation turns every catch (Uni
 one (Independent: one angle per point) or turns them away from the middle of the points
 (Aligned). The sizes start from the component's plastic rule (thickness, draft, base
 fillet, clearance) and follow it until a value is typed. The blue arrows drag the beam's
-length and the catch's depth; the strain at the beam's root is checked against the
-material's allowable strain. One timeline step; double-click it to edit.
+length, the catch's depth and (Extent Type Distance) the base's length; the strain at the
+beam's root is checked against the material's allowable strain. One timeline step;
+double-click it to edit.
 """
 
 import FreeCAD as App
@@ -713,6 +714,17 @@ class SnapFitPanel(Panel):
                 on_release=self._dragged("catch_depth"),
             )
             self._attach_box("catch_depth")
+            if self.options["extent"] == "distance":
+                # the hook's base, from the parting plane back into the hook body
+                self.arrows["extent_distance"] = ArrowDragger(
+                    back,
+                    ez * -1.0,
+                    self.options["extent_distance"],
+                    size,
+                    on_drag=self._dragged("extent_distance"),
+                    on_release=self._dragged("extent_distance"),
+                )
+                self._attach_box("extent_distance")
             self._make_turn_handles(placed)
         except Exception as exc:
             warn("Snap Fit arrows unavailable: %s" % exc)

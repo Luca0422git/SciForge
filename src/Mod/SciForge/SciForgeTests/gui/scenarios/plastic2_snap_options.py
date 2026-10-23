@@ -7,7 +7,9 @@ parting plane: against the right wall (58, 20), the left wall (2, 20) and the mi
 20). The lid hidden with its eye; Snap Fit; Selection Mode Manual; a click on the middle
 point: 1 point. Hook and Loop: the loop stands on the base's floor (+186.76, worked out in
 the golden model plastic2_snap_loop). Perpendicular Hook and Groove: there is no wall across
-the beam there, so no other body (said in the dialog), the hook alone. Parallel, Automatic,
+the beam there, so no other body (said in the dialog), the hook alone. Parallel; Extent Type
+Distance: an arrow for the base's length, the base stands above the lid, dragged 4 mm
+longer it grows by its section times the drag; To Next again: as before. Automatic,
 a click on the sketch's browser row: 3 points; Aligned: the catches face away from the
 middle, two grooves in the side walls (2 x 21.824) and a note that one snap fit found no
 wall. Independent with the angles 0, 180, 90: the same two grooves. Catch Length 1 (shorter
@@ -90,6 +92,52 @@ def perpendicular():
     h.check("the base unchanged", ps.near(base_change(), 0.0, 1e-9), base_change())
     h.check("the hook is made", ps.volume(s["lid"]) > 4800 + 150, ps.volume(s["lid"]))
     ps.choose(p.type, "Parallel Hook and Groove")
+
+
+def to_distance():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("To Next: no arrow for the base", "extent_distance" not in p.arrows, sorted(p.arrows))
+    s["lid_next"] = ps.volume(s["lid"])
+    ps.choose(p.extent, "Distance")
+
+
+def distance_arrow():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("Distance: its box shown", p.fields["extent_distance"].widget.isVisible())
+    if not h.check(
+        "Distance: an arrow for the base's length", "extent_distance" in p.arrows, sorted(p.arrows)
+    ):
+        return
+    s["d1"] = p.options["extent_distance"]
+    s["lid_d1"] = ps.volume(s["lid"])
+    h.check(
+        "the base now stands above the 2 mm lid",
+        s["lid_d1"] > s["lid_next"] + 1.0,
+        (s["d1"], s["lid_d1"], s["lid_next"]),
+    )
+    s["drag"] = ps.drag_arrow(p, "extent_distance", s["d1"] + 4.0)
+
+
+def distance_dragged():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    o = p.options
+    d2 = o["extent_distance"]
+    h.check("the arrow dragged the base longer", d2 > s["d1"] + 1.0, (s["d1"], d2))
+    grown = ps.volume(s["lid"]) - s["lid_d1"]
+    want = o["thickness"] * o["width"] * (d2 - s["d1"])
+    h.check("the base grew by its section x the drag", ps.near(grown, want, 1e-6), (grown, want))
+    ps.choose(p.extent, "To Next")
+
+
+def to_next_again():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("To Next again: the arrow gone", "extent_distance" not in p.arrows, sorted(p.arrows))
+    lid = ps.volume(s["lid"])
+    h.check("the lid as with To Next", ps.near(lid, s["lid_next"], 1e-9), (lid, s["lid_next"]))
 
 
 def automatic():
@@ -401,6 +449,10 @@ h.run(
         one_point,
         loop,
         perpendicular,
+        to_distance,
+        distance_arrow,
+        distance_dragged,
+        to_next_again,
         automatic,
         pick_sketch_row,
         three_points,

@@ -81,14 +81,15 @@ item 11).
 | The hook body | Found: the body behind the first point (the sketch normal's side); **Flip** puts the hook on the other side; or click the **Hook Body** box and a body. The other body is found as the one the groove would cut (Parallel / Perpendicular) or the one under the loop (Hook and Loop), or picked in the section's **Body** box; it is named in the dialog. |
 | Types (S2, S11 G) | **Parallel Hook and Groove**: the beam runs along a wall of the other body, the catch goes into a groove cut in it (a window when the wall is thinner than the groove). **Perpendicular Hook and Groove**: the beam passes through a slot in a wall across it, the catch hooks under that wall ("Hook Undercut"). **Hook and Loop**: a frame (Loop Thickness) is built on the other body in front of the catch, standing on it, with an opening the catch snaps through. |
 | Rotation Uniform / Independent / Aligned | Rotation Angle turns every catch about the sketch normal from the sketch's X, also with a **rotation handle** (with its value box) at the first snap fit; **Independent**: a rotation handle per snap fit (and an Angles field, one angle per point in the sketch's order); **Aligned**: each catch faces away from the middle of the points, or from what is picked in **Align To** (a point; a straight edge: straight away from its line; a face: its centre) (**Face In**: towards it), so snaps round a box all face out. |
-| Extent To Next / Distance | To Next: the base block runs from the parting plane to the body (and half a thickness into it); Distance: that long. |
+| Extent To Next / Distance | To Next: the base block runs from the parting plane to the body (and half a thickness into it); Distance: that long (its arrow drags it). |
 | Hook sizes | Beam Length, Beam Width, Thickness at Root, Thickness at Catch (taper), Catch Depth, Catch Length, Insertion Angle, Retention Angle (90 = permanent), Draft Angle (the beam's sides narrow towards the tip), Base Fillet Radius (round the root; away from the catch side when all round cannot be made, a note otherwise). |
 | Groove / Hook Undercut / Loop | The checkbox makes that side; Clearance (all round); Loop Thickness (loop); its Body box. |
 | "Visibility controls" (S13, meaning unknown) | **Hide Other Body**: the other body hidden while the dialog is open, to see the hooks (shown again on OK / Cancel). |
 | Rule values (S8) | Thickness at Root and at Catch, Draft Angle, Base Fillet Radius (Nominal Radius), Clearance and Loop Thickness start from the component's rule and **follow it** (changing the rule changes the snap fit) until a value is typed. The rule is named in the dialog. |
 | Strain (S12) | The strain at the root while the catch is pushed in is shown against the rule material's allowable strain; above it, a yellow warning (SciForge addition; Fusion does stress in Simulation). |
-| Manipulators | Blue arrows with value boxes: Beam Length (along the insertion axis) and Catch Depth; rotation handles (above). |
+| Manipulators | Blue arrows with value boxes: Beam Length (along the insertion axis), Catch Depth and, with Extent Type Distance, the base's length (research: "an extent arrow handle", G); rotation handles (above). |
 | Timeline | One step "Snap Fit N" in the hook body; the groove / loop is a hidden step of the other body (ModifyFollower: rolls back, suppresses, moves and deletes with the snap fit). Double-click edits; Change Parameters lists Beam Length, Width, Thickness, Catch Depth, Clearance. |
+| Join / New Body | Not a choice in Fusion's Snap Fit (research 2.4: the hook is joined into the hook body, the groove or loop made in the other body, no new bodies, G); the same here. |
 | Refusals | In the dialog, OK waits: catch shorter than its lead-in ramp, catch longer than the beam, a draft that closes the beam, angles out of range, no point, no body behind the point ("use Flip or a Distance extent"). Notes (not refusals): a snap fit that finds no wall / floor on the other body, a base fillet that cannot be made. |
 
 ### Lip (PLASTIC > CREATE > Lip)
@@ -133,8 +134,9 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
     typed; the catch depth arrow dragged; OK; undo / redo; edit from the timeline; Esc;
     save / reopen; the design's rule changed (linked values follow, typed ones stay); Change
     Parameters lists it; timeline Delete takes its groove step too.
-  - `plastic2_snap_options` (84): Manual (no point until one is clicked, then a point
-    clicked), Hook and Loop, Perpendicular, Automatic, Aligned, Independent (angles typed, a
+  - `plastic2_snap_options` (94): Manual (no point until one is clicked, then a point
+    clicked), Hook and Loop, Perpendicular, Extent Type Distance (its arrow dragged: the
+    base grows by its section times the drag) and back to To Next, Automatic, Aligned, Independent (angles typed, a
     rotation handle dragged), Align To a clicked face and a clicked edge, the other body
     picked, Hide Other Body, the catch-length refusal, Esc, components (a moved component),
     Hook Body picked (refused, then Flip), an empty design.
