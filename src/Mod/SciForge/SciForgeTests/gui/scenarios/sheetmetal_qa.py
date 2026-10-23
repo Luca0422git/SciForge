@@ -139,6 +139,29 @@ def empty_rules_back():
     h.check("Close is back", d is not None and d.close_button.isVisible())
 
 
+def empty_rules_new():
+    sm.pick_rule("design", "Steel (mm)")
+    sm.click_rules_button("design_new")
+
+
+def empty_rules_inch():
+    from SciForgeTests.gui import dialog_input as ui
+
+    d = sm.rules_dialog()
+    h.check("a new rule: units can be chosen", d is not None and d.units_field.isEnabled())
+    if d is None:
+        return
+    h.check("chose in", ui.choose(d.units_field, "in"))
+    thickness = d.fields["thickness"].text()
+    h.check("its thickness converted: 1 mm = 0.0394 in", thickness == "0.0394 in", thickness)
+    radius = d.fields["bend_radius"].text()
+    h.check("an expression stays", radius == "Thickness", radius)
+
+
+def empty_rules_cancel_new():
+    sm.click_rules_button("back")
+
+
 def empty_rules_esc():
     _esc_in_rules()
 
@@ -797,6 +820,9 @@ h.run(
         empty_rules_editor,
         empty_rules_esc_editor,
         empty_rules_back,
+        empty_rules_new,
+        empty_rules_inch,
+        empty_rules_cancel_new,
         empty_rules_esc,
         empty_rules_closed,
         create_sketch,

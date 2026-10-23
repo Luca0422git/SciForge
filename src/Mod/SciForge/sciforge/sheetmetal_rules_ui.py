@@ -283,6 +283,8 @@ class RulesDialog(QtWidgets.QDialog):
             self.units_field.addItem(unit, unit)
         self.units_field.setToolTip("A rule's units are fixed when it is made")
         form.addRow("Units", self.units_field)
+        self._units_shown = "mm"
+        self.units_field.currentIndexChanged.connect(self._units_changed)
         for title, keys in GROUPS:
             if title:
                 label = QtWidgets.QLabel("<b>%s</b>" % title)
@@ -347,10 +349,39 @@ class RulesDialog(QtWidgets.QDialog):
         except Exception as exc:
             warn("Sheet Metal Rules: %s" % exc)
 
+    def _units_changed(self, *_):
+        """Units chosen for a new rule: the plain-number lengths are converted into them
+        ("1.0 mm" -> "0.0394 in"); expressions in Thickness stay as typed. Before, the old
+        unit stayed in the boxes and Save refused them (QA)."""
+        try:
+            old, units = self._units_shown, self.units_field.currentData()
+            if old is None or units == old or units not in core.MM_PER_UNIT:
+                return
+            self._units_shown = units
+            for key, widget in self.fields.items():
+                if core.FIELDS[key][0] != "length":
+                    continue
+                text = widget.text().strip()
+                if text.endswith(old):
+                    text = text[: -len(old)].strip()
+                try:
+                    value = float(text)
+                except ValueError:
+                    continue  # an expression (Thickness * 2): the same in any unit
+                value = value * core.MM_PER_UNIT[old] / core.MM_PER_UNIT[units]
+                digits = 4 if units == "in" else 3
+                widget.setText(
+                    "%s %s" % (("%.*f" % (digits, value)).rstrip("0").rstrip("."), units)
+                )
+        except Exception as exc:
+            warn("Sheet Metal Rules: %s" % exc)
+
     def _open_editor(self, key, old, rule, new):
         self.editing = (key, old)
         self.name_field.setText(rule["name"])
+        self._units_shown = None  # no conversion while the rule's own values are put in
         self.units_field.setCurrentIndex(self.units_field.findData(rule.get("units", "mm")))
+        self._units_shown = rule.get("units", "mm")
         self.units_field.setEnabled(new)
         for field, widget in self.fields.items():
             value = rule.get(field, core.FIELDS[field][1])

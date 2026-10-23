@@ -501,6 +501,13 @@ def compute(obj):
             result = joined
     if result.isNull() or not result.Solids:
         raise FormError("The flange made no solid.")
+    if base is None and len(result.Solids) > 1:
+        # a body holds one solid (SciForge's Extrude says the same; the flat pattern
+        # unfolds one sheet): separate plates are refused, not kept as one body (QA)
+        raise FormError(
+            "These profiles make separate plates, and a body holds one solid: pick profiles "
+            "that touch each other, or make the plates one at a time."
+        )
     return bodies.to_local(result, body)
 
 

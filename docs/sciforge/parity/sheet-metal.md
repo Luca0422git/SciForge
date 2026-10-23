@@ -184,6 +184,13 @@ Fixed on `sf/sm-forming-qa`:
   later step and failed ("Edge54 is gone"). Picks on the flange itself and on later steps
   are now mapped to the part before the flange (same line / same plane), or refused with the
   reason ("made by a later step").
+- **Choosing other units for a new rule left the old unit in every box** ("1.0 mm" in an
+  inch rule), and Save refused them. The plain-number lengths are converted now ("0.0394
+  in"); expressions in Thickness stay as typed.
+- **Two profiles that do not touch made one body holding two separate plates** (SciForge's
+  Extrude refuses that: a body holds one solid, and the flat pattern unfolds one sheet).
+  Refused now with the reason (pick touching profiles, or one plate at a time; Fusion may
+  make a body per plate: not checked).
 - **A base or contour flange Join standing on the sheet (or across its edge)** was fused
   into a T or a sharp L: a solid no flat pattern can unfold (a corner between two sheets
   needs a bend). Join now needs the new sheet (a contour: one of its walls) to carry on a
@@ -192,8 +199,6 @@ Fixed on `sf/sm-forming-qa`:
 
 Left as they are (reported, not fixed):
 
-- Two separate profiles in one base flange make one body with two solids (Fusion probably
-  makes a body per plate: not checked).
 - An inserted design's rule with the same name as one In This Design but other values takes
   the design's values (Fusion's behaviour unknown).
 - Paste New of a sheet metal component leaves a hidden copy of the rule store in the design
