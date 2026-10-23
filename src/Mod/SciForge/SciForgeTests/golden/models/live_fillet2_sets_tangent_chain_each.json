@@ -1,0 +1,105 @@
+{
+  "id": "live_fillet2_sets_tangent_chain_each",
+  "title": "Live picture on the exact result: Fillet dialog: Tangent Chain is a setting of each set: set 1 (top front edge of a slot, chain off) rounds that edge only, set 2 (bottom front edge, chain on) rounds the whole bottom loop",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2",
+    "live-blend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "slot": [
+            10,
+            15,
+            30,
+            15,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet_sets",
+      "id": "f1",
+      "sets": [
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "max"
+              },
+              {
+                "axis": "y",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          },
+          "radius": 1,
+          "tangent_chain": false
+        },
+        {
+          "edges": {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": "min"
+              },
+              {
+                "axis": "y",
+                "value": "min"
+              }
+            ],
+            "count": 1
+          },
+          "radius": 1,
+          "tangent_chain": true
+        }
+      ]
+    },
+    {
+      "op": "live_blend_expect",
+      "target": "f1",
+      "comment": "every point of the drag picture lies on the result"
+    }
+  ],
+  "expect": {
+    "volume": 2766.0813232235587,
+    "solids": 1,
+    "bbox": [
+      5,
+      10,
+      0,
+      35,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "Slot 2000 + 250 pi. Set 1: the 20 mm straight edge alone, 20 r^2 (1 - pi/4). Set 2: the bottom loop, 40 r^2 (1 - pi/4) on the two straight edges and, by Pappus, 2 pi (5 - xbar) r^2 (1 - pi/4) round the two half circles (xbar = r (5/6 - pi/4)/(1 - pi/4))."
+  }
+}

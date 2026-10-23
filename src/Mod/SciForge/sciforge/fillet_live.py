@@ -302,7 +302,8 @@ class Picture:
                 data.get("end", 1.0),
                 [tuple(p) for p in data.get("points", [])],
             )
-            r = _np.interp(e.position, [p for p, _r in law], [x for _p, x in law])
+            positions, radii = [p for p, _r in law], [x for _p, x in law]
+            r = _np.array([core.smooth(positions, radii, x) for x in e.position])
         else:
             r = _np.full(n, float(data.get("radius", 1.0)))
         if (r <= 0).any() or not _np.isfinite(r).all():
@@ -354,7 +355,8 @@ class Picture:
                 d = (sub - o) @ m
                 along = e.T[rows] @ m
                 ok = _np.abs(along) > 1e-9
-                shift = _np.where((d < 0) & ok[:, None], d / _np.where(ok, along, 1.0)[:, None], 0.0)
+                safe = _np.where(ok, along, 1.0)[:, None]
+                shift = _np.where((d < 0) & ok[:, None], d / safe, 0.0)
                 pts[rows] = sub - shift[:, :, None] * e.T[rows][:, None, :]
             blocks.append(pts.reshape(-1, 3))
         out = _np.concatenate(blocks, axis=0)

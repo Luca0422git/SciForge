@@ -1,0 +1,114 @@
+{
+  "id": "live_fillet2_chord_90_120",
+  "title": "Live picture on the exact result: Fillet dialog: Chord Length 3 on a 90 degree edge and a 120 degree edge (one set)",
+  "tags": [
+    "fillet",
+    "blend",
+    "fillet-2",
+    "live-blend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              40,
+              0
+            ],
+            [
+              40,
+              20
+            ],
+            [
+              31.33974596215561,
+              25
+            ],
+            [
+              0,
+              25
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "fillet_sets",
+      "id": "f1",
+      "sets": [
+        {
+          "edges": {
+            "any_of": [
+              {
+                "type": "line",
+                "parallel": [
+                  1,
+                  0,
+                  0
+                ],
+                "at": [
+                  {
+                    "axis": "z",
+                    "value": "max"
+                  },
+                  {
+                    "axis": "y",
+                    "value": "min"
+                  }
+                ],
+                "count": 1
+              },
+              {
+                "type": "line",
+                "parallel": [
+                  0,
+                  0,
+                  1
+                ],
+                "at": [
+                  {
+                    "axis": "x",
+                    "value": 40
+                  },
+                  {
+                    "axis": "y",
+                    "value": 20
+                  }
+                ],
+                "count": 1
+              }
+            ],
+            "count": 2
+          },
+          "radius_type": "chord",
+          "chord": 3
+        }
+      ]
+    },
+    {
+      "op": "live_blend_expect",
+      "target": "f1",
+      "comment": "every point of the drag picture lies on the result"
+    }
+  ],
+  "expect": {
+    "volume": 9740.027684042212,
+    "faces": 9,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Profile (shoelace) 978.349365 mm2 x 10. A round turning by t has chord 2 R sin(t/2): R = 3/sqrt(2) on the 90 degree top edge (40 long), R = 3 on the 120 degree vertical edge (10 long). Cross-section removed R^2 (cot(g/2) - t/2), g the corner angle. 7 prism faces + 2 rounds."
+  }
+}

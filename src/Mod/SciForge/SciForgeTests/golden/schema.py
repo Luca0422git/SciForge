@@ -1815,3 +1815,5 @@ from . import modify2_schema  # noqa: E402,F401  (Modify part 2 steps; it wraps 
 from . import gear_schema  # noqa: E402,F401  (Gear steps; it wraps validate)
 from . import hardware_schema  # noqa: E402,F401  (Hardware steps; it wraps validate)
 from . import export_schema  # noqa: E402,F401  (export report checks; it wraps validate)
+# Fillet / Chamfer live picture on the exact result (live_checks.py)
+STEP_KEYS["live_blend_expect"] = ({"target"}, {"tol", "sizes", "min_points", "comment"})
