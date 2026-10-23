@@ -8,7 +8,8 @@ plane; OK: an "Align" step in the surface body, still a surface of area 1600. Un
 MODIFY > Combine: click the surface box (Target), then the solid (Tool): refused, the dialog
 says Combine works on solids and to use Stitch or Thicken; Esc. MODIFY > Physical Material:
 pick Aluminium, click the surface box's row in the browser: it is made of aluminium (a surface
-body has a material, only no mass) and listed under In This Design; OK.
+body has a material, only no mass) and listed under In This Design; OK. MODIFY > Appearance:
+pick a look, click the surface box's row: it has that look; OK.
 """
 
 import FreeCAD as App
@@ -156,6 +157,45 @@ def material_given():
 
 def done():
     h.check("dialog closed", not Gui.Control.activeDialog())
+    Gui.Selection.clearSelection()
+    st.menu("MODIFY", "Appearance")
+
+
+def pick_look():
+    from sciforge import appearance_ui
+
+    p = bs.panel()
+    h.check("the Appearance dialog", isinstance(p, appearance_ui.AppearancePanel), p)
+    if p is None or p.library.count() < 2:
+        return
+    item = p.library.item(1)
+    s["look"] = item.data(QtCore.Qt.UserRole)
+    rect = p.library.visualItemRect(item)
+    QtTest.QTest.mouseClick(
+        p.library.viewport(), QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, rect.center()
+    )
+
+
+def click_box_row():
+    bs.click_browser_row(s["box"].Label)
+
+
+def look_given():
+    from sciforge import appearance
+
+    h.idle_step()()
+    look = appearance.get(s["box"]).get("body")
+    want = s.get("look") or {}
+    h.check(
+        "the surface body has the look",
+        bool(look) and look.get("label") == want.get("label"),
+        (look, want.get("label")),
+    )
+    h.task_button("OK")
+
+
+def look_kept():
+    h.check("dialog closed", not Gui.Control.activeDialog())
 
 
 h.run(
@@ -176,5 +216,9 @@ h.run(
         click_box_body,
         material_given,
         done,
+        pick_look,
+        click_box_row,
+        look_given,
+        look_kept,
     ],
 )
