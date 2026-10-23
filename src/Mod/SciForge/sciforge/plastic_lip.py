@@ -287,7 +287,18 @@ def direction_of(rim, picked=None):
     return d
 
 
-def tools(rim, options, pull):
+def _leaned(section, sign, lean):
+    """A (bottom, top, height) section with its top moved along with a leaning wall."""
+    import math
+
+    bottom, top, h = section
+    if abs(lean) < 1e-12:
+        return section
+    shift = sign * h * math.tan(math.radians(lean))
+    return bottom, (top[0] + shift, top[1] + shift), h
+
+
+def tools(rim, options, pull, lean=0.0):
     """{"lip": (solid, extrusion sign), "groove": (solid, sign)}: the lip and the groove of
     the options in design coordinates. Sign +1: on the out-of-material side of the rim (the
     picked body's lip, the other body's groove), -1: into the picked body."""
@@ -295,18 +306,18 @@ def tools(rim, options, pull):
     out = {}
     scale = 1.0 / max(pull.dot(rim.normal), 1e-6)
     if o["type"] in ("lip", "lip_and_groove"):
-        bottom, top, h = core.lip_section(o)
         sign = -1 if (o["type"] == "lip_and_groove" and o["swap"]) else 1
+        bottom, top, h = _leaned(core.lip_section(o), sign, lean)
         vector = pull * sign
         solid = section_solid(rim, bottom, top, h * scale, vector)
         solid, note = round_tip(solid, rim, h, rim.normal * sign, o.get("tip_radius", 0.0))
         out["lip"] = (solid, sign, note)
     if o["type"] in ("groove", "lip_and_groove"):
-        bottom, top, d = core.groove_section(o)
         if o["type"] == "groove":
             sign = -1
         else:
             sign = 1 if not o["swap"] else -1
+        bottom, top, d = _leaned(core.groove_section(o), sign, lean)
         vector = pull * sign
         out["groove"] = (section_solid(rim, bottom, top, d * scale, vector), sign, "")
     return out
@@ -486,48 +497,59 @@ def rim_of_names(feature, names=None):
 
 
 def pull_of(rim, options):
-    """The unit pull vector of the options: Face Guide checks the walls first; with Pull
-    Direction a picked direction (meta "direction") or the rim's normal."""
+    """The unit pull vector of the options: Face Guide follows the walls (checked here; the
+    section is extruded along the rim's normal and leaned by lean_of); Pull Direction takes
+    a picked direction (meta "direction") or the rim's normal."""
     if options.get("guide") == "face":
-        check_face_guide(rim)
+        wall_lean(rim)
         return V(rim.normal)
     return direction_of(rim, V(*options["direction"]) if options.get("direction") else None)
 
 
-def check_face_guide(rim):
-    """Face Guide keeps the section at the angle of the wall beside the edges. SciForge builds
-    it where every such wall stands square to the rim (then it is the rim's normal) and
-    refuses a leaning wall with the reason."""
+def lean_of(rim, options):
+    """Degrees the section leans towards the rim per unit of height (Face Guide), else 0."""
+    return wall_lean(rim) if options.get("guide") == "face" else 0.0
+
+
+def wall_lean(rim, tol=0.05):
+    """The angle (degrees) the wall beside the picked edges leans by: going away from the
+    material along the rim's normal, the wall's face moves towards the rim by tan(angle) per
+    mm (a cavity drafted wider at its opening: positive). Face Guide keeps the section at
+    that angle. Refused when the walls along the chain lean by different angles."""
+    import math
+
     import Part
 
     n = rim.normal
+    found = []
     for edge in rim.edges:
         try:
             faces = rim.shape.ancestorsOfType(edge, Part.Face)
+            mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
         except Exception:
             continue
         for face in faces:
             if face.isSame(rim.face):
                 continue
-            surface = face.Surface
-            kind = type(surface).__name__
-            if kind == "Plane":
-                u0, u1, v0, v1 = face.ParameterRange
-                m = face.normalAt(0.5 * (u0 + u1), 0.5 * (v0 + v1))
-                square = abs(V(m.x, m.y, m.z).dot(n)) < 1e-6
-            elif kind == "Cylinder":
-                axis = V(surface.Axis)
-                axis.normalize()
-                square = abs(abs(axis.dot(n)) - 1.0) < 1e-9
-            else:
-                square = False
-            if not square:
-                raise LipError(
-                    "Face Guide follows the wall beside the edges, and this wall leans: "
-                    "SciForge builds Face Guide on walls square to the rim only. Use Pull "
-                    "Direction."
-                )
-    return True
+            try:
+                u, v = face.Surface.parameter(mid)
+                m = face.normalAt(u, v)
+            except Exception:
+                continue
+            m = V(m.x, m.y, m.z)
+            if m.Length < 1e-12:
+                continue
+            m.normalize()
+            found.append(math.degrees(math.asin(max(-1.0, min(1.0, m.dot(n))))))
+    if not found:
+        raise LipError("Face Guide needs the wall beside the edges: use Pull Direction.")
+    if max(found) - min(found) > tol:
+        raise LipError(
+            "Face Guide follows the wall beside the edges, and these walls lean by different "
+            "angles (%.2f to %.2f degrees): use Pull Direction, or pick edges along walls of "
+            "one draft." % (min(found), max(found))
+        )
+    return sum(found) / len(found)
 
 
 class LipFeature:
@@ -603,7 +625,7 @@ def build_own(obj, options, base):
     if refusal:
         raise LipError(refusal)
     pull = pull_of(rim, options)
-    made = tools(rim, options, pull)
+    made = tools(rim, options, pull, lean_of(rim, options))
     shape = bodies.global_shape(base)
     result = shape
     note = ""
@@ -640,7 +662,7 @@ class LipGrooveFollower(modify_bodies._Follower):
             return base_shape
         rim = rim_of(lead)
         pull = pull_of(rim, options)
-        made = tools(rim, options, pull)
+        made = tools(rim, options, pull, lean_of(rim, options))
         body = bodies.body_of(obj)
         place = body.getGlobalPlacement() if body is not None else App.Placement()
         shape = bodies.baked(base_shape)

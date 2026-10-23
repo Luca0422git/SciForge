@@ -14,6 +14,7 @@ OK: one "Lip 1" in the timeline. Undo / Redo. Double-click "Lip 1": the values r
 Lip Height 1, OK. Double-click again, 2, Esc: unchanged. Save, close, reopen: the same.
 """
 
+import math
 import os
 import tempfile
 
@@ -382,32 +383,72 @@ def cone_lip():
     added = ps.volume(s["cone"]) - s["cone_volume"]
     # a 1 x 1 ring inside the 8 mm rim: (64 - 49) pi = 47.12, a little less with 1 degree drafts
     h.check("a lip ring on the cone's top", 45.0 < added < 47.2, (added, ps.message(p)))
-    ps.choose(p.guide, "Face Guide")
+    ps.type_field(p, "inner_draft", "0")
+
+
+def cone_outer_draft():
+    ps.settle(ps.lip_panel)
+    ps.type_field(ps.lip_panel(), "outer_draft", "0")
+
+
+def cone_pull_exact():
+    ps.settle(ps.lip_panel)
+    added = ps.volume(s["cone"]) - s["cone_volume"]
+    h.check("Pull Direction, no drafts: 15 pi", ps.near(added, 15 * math.pi, 1e-6), added)
+    ps.choose(ps.lip_panel().guide, "Face Guide")
 
 
 def cone_face_guide():
     ps.settle(ps.lip_panel)
     p = ps.lip_panel()
-    text = ps.message(p)
-    h.check("Face Guide refused on the leaning cone side, with the reason", "leans" in text, text)
-    ps.ok()
-
-
-def cone_ok_refused():
-    p = ps.lip_panel()
-    h.check("OK refused: the dialog stays", p is not None)
-    if p is not None:
-        ps.choose(p.guide, "Pull Direction")
-
-
-def cone_ok():
-    ps.settle(ps.lip_panel)
+    h.check("Face Guide on the cone: no refusal", "⚠" not in ps.message(p), ps.message(p))
+    added = ps.volume(s["cone"]) - s["cone_volume"]
+    # the ring leans in with the cone's side (tan = 2 / 10): a frustum ring from radii 8 / 7 at
+    # the rim to 7.8 / 6.8 one up: pi / 3 (187.24 - 142.84) = 14.8 pi
+    h.check(
+        "Face Guide: the ring leans with the cone (14.8 pi)",
+        ps.near(added, 14.8 * math.pi, 1e-6),
+        added,
+    )
+    tops = [
+        e
+        for e in s["cone"].Shape.Edges
+        if type(e.Curve).__name__ == "Circle"
+        and abs(e.Curve.Radius - 7.8) < 1e-6
+        and abs(e.Curve.Center.z - 11.0) < 1e-6
+    ]
+    h.check("its outer face goes on along the cone (radius 7.8 at the top)", len(tops) == 1, tops)
     ps.ok()
 
 
 def cone_done():
-    h.check("Pull Direction again: OK closes it", ps.lip_panel() is None)
+    h.check("Face Guide: OK closes it", ps.lip_panel() is None)
     h.check("one Lip on the cone", len(ps.lip_steps()) == 1)
+    mixed_walls()
+
+
+def mixed_walls():
+    """Walls of different draft along the chain: Face Guide is refused with the reason (the
+    Lip's own check, called the way its dialog does when the edges are picked)."""
+    import Part
+
+    from sciforge import plastic_lip
+
+    box = Part.makeBox(20, 20, 10)
+    # one side wall drafted, the others square: cut a wedge off the +X side
+    wedge = Part.makePolygon(
+        [App.Vector(20, 0, 0), App.Vector(20, 0, 10), App.Vector(18, 0, 10), App.Vector(20, 0, 0)]
+    )
+    cut = Part.Face(wedge).extrude(App.Vector(0, 20, 0))
+    shape = box.cut(cut)
+    top = [f for f in shape.Faces if abs(f.CenterOfMass.z - 10) < 1e-6][0]
+    rim = plastic_lip.Rim(shape, list(top.Edges))
+    try:
+        plastic_lip.wall_lean(rim)
+        text = ""
+    except plastic_lip.LipError as exc:
+        text = str(exc)
+    h.check("walls of different draft: Face Guide refused, saying why", "different" in text, text)
 
 
 h.run(
@@ -457,9 +498,9 @@ h.run(
         cone_lip_type,
         click_cone_rim,
         cone_lip,
+        cone_outer_draft,
+        cone_pull_exact,
         cone_face_guide,
-        cone_ok_refused,
-        cone_ok,
         cone_done,
     ],
 )
