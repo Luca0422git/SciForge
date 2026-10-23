@@ -103,6 +103,15 @@ class LoftedPanel(smp.SmPanel):
                 ),
             ],
         )
+        if self.editing:
+            # the step stays in the body it was made in: a Join step turned into New Body
+            # would drop the body's earlier shape, a New Body step turned into Join would
+            # silently stay a body of its own
+            self.fields["operation"].setEnabled(False)
+            self.fields["operation"].setToolTip(
+                "The Operation cannot be changed in an edit: delete the Lofted Flange and make "
+                "it again with the other Operation."
+            )
         self.add_combo(
             "rule",
             "Rule",
