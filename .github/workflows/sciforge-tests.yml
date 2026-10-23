@@ -23,9 +23,11 @@ env:
   FREECAD_VERSION: "1.1.4"
 
 jobs:
-  # The tests run side by side on 5 machines (one machine took about 2 hours): "base" runs
-  # the unit tests, golden models, smoke test and journey; "1/4".."4/4" each run a quarter
-  # of the GUI scenarios (tools/sciforge/run_tests.sh --shard).
+  # The tests run side by side on 7 machines (one machine took about 2 hours): "base" runs
+  # the unit tests, golden models, smoke test and journey; "1/6".."6/6" each run a sixth
+  # of the GUI scenarios (tools/sciforge/run_tests.sh --shard). Four parts of 481 scenarios
+  # took 83-91 minutes (one hit the 90-minute limit, run #258); the merge of experimental
+  # (0.1.0-beta.2) made 519.
   tests:
     name: tests (${{ matrix.part }})
     runs-on: ubuntu-24.04
@@ -37,18 +39,24 @@ jobs:
           - part: base
             args: --only base
             id: base
-          - part: scenarios 1/4
-            args: --only scenarios --shard 1/4
+          - part: scenarios 1/6
+            args: --only scenarios --shard 1/6
             id: scenarios-1
-          - part: scenarios 2/4
-            args: --only scenarios --shard 2/4
+          - part: scenarios 2/6
+            args: --only scenarios --shard 2/6
             id: scenarios-2
-          - part: scenarios 3/4
-            args: --only scenarios --shard 3/4
+          - part: scenarios 3/6
+            args: --only scenarios --shard 3/6
             id: scenarios-3
-          - part: scenarios 4/4
-            args: --only scenarios --shard 4/4
+          - part: scenarios 4/6
+            args: --only scenarios --shard 4/6
             id: scenarios-4
+          - part: scenarios 5/6
+            args: --only scenarios --shard 5/6
+            id: scenarios-5
+          - part: scenarios 6/6
+            args: --only scenarios --shard 6/6
+            id: scenarios-6
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0

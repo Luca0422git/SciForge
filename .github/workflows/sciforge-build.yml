@@ -367,7 +367,7 @@ jobs:
           path: test-output/
           retention-days: 30
 
-  # The GUI scenarios on the built Linux AppImage, in 4 parts side by side. They test the
+  # The GUI scenarios on the built Linux AppImage, in 6 parts side by side (as sciforge-tests.yml). They test the
   # C++ fixes through the interface; the uploads above do not wait for them.
   scenarios:
     needs: [matrix, build]
@@ -380,7 +380,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: ["1/4", "2/4", "3/4", "4/4"]
+        shard: ["1/6", "2/6", "3/6", "4/6", "5/6", "6/6"]
     steps:
       - name: Checkout
         uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0

@@ -284,6 +284,22 @@ if not found:
     ok = False
 sys.exit(0 if ok else 1)
 EOF
+        # A FreeCAD that did not end cleanly (a crash at exit after the checks passed, or a
+        # kill) leaves SciForge's crash marker in the shared profile, and the next scenario's
+        # Home shows "SciForge closed unexpectedly" (CI #258: welcome_line failed for an
+        # earlier scenario's exit). Name the scenario it belongs to, keep the marker and its
+        # crash log with the reports, and clear them so the next scenario starts clean.
+        local marker left
+        for marker in "${PROFILE}"/SciForge/crash/running-*.json; do
+            [ -e "${marker}" ] || continue
+            left="${OUT}/crash-left-by-${name}"
+            mkdir -p "${left}"
+            mv "${marker}" "${left}/"
+            marker="$(basename "${marker}" .json)"
+            mv "${PROFILE}/SciForge/crash/session-${marker#running-}.log" "${left}/" 2>/dev/null || true
+            echo "  FAIL ${name}: FreeCAD did not end cleanly (SciForge's crash marker was left; see ${left})"
+            FAILED+=("scenario ${name} (exit)")
+        done
     done
 }
 

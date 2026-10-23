@@ -12,8 +12,8 @@ on:
         description: "Id of the SciForge build run whose Linux AppImage to use"
         default: "39490600523"
       shard:
-        description: "A shard like 1/4 (what a build's shard runs), or none to run the scenarios below"
-        default: "1/4"
+        description: "A shard like 1/6 (what a build's shard runs), or none to run the scenarios below"
+        default: "1/6"
       scenarios:
         description: "Scenario names, comma separated"
         default: "version_label"
@@ -133,7 +133,7 @@ jobs:
       - name: Run the scenarios and show their logs
         env:
           SCENARIOS: ${{ inputs.scenarios || 'version_label,home_screen' }}
-          SHARD: ${{ inputs.shard || '1/4' }}
+          SHARD: ${{ inputs.shard || '1/6' }}
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xauth libgl1-mesa-dri
           if [ -n "$SHARD" ] && [ "$SHARD" != "none" ]; then
