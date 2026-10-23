@@ -179,6 +179,26 @@ def follows_the_design():
     ps.doc().recompute()
     c = counts()
     h.check("checked again: the 3 mm block is fine", c["thickness"] == 0, c)
+    ps.click_eye("Design Advice1")
+
+
+def changed_while_hidden():
+    QtTest.QTest.qWait(300)
+    h.check("hidden", not s["analysis"].ViewObject.Visibility)
+    box = ps.doc().getObject("BlockBox")
+    box.Height = 20.0  # back to a 20 mm block while the analysis is hidden
+    ps.doc().recompute()
+    h.check("a hidden analysis waits", s["analysis"].Stale)
+    h.check("its results are the old ones", counts()["thickness"] == 0, counts())
+    ps.click_eye("Design Advice1")
+
+
+def shown_checks_again():
+    QtTest.QTest.qWait(600)
+    h.check("shown again", s["analysis"].ViewObject.Visibility)
+    h.check("checked now", not s["analysis"].Stale)
+    c = counts()
+    h.check("the 20 mm block is too thick again", c["thickness"] >= 6, c)
     path = os.path.join(tempfile.mkdtemp(prefix="sciforge-advice-"), "advice.FCStd")
     s["path"] = path
     s["summary"] = s["analysis"].Summary
@@ -272,6 +292,8 @@ h.run(
         shown_again,
         edit_again,
         follows_the_design,
+        changed_while_hidden,
+        shown_checks_again,
         ctrl_s,
         describe,
         close_reopen,

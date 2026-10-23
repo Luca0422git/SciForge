@@ -80,6 +80,22 @@ def face_colors(obj, body_result, rule):
     return out
 
 
+def _check_again(obj):
+    """An analysis shown again after the design changed while it was hidden: check now."""
+    try:
+        if not bodies.alive(obj):
+            return
+        doc = obj.Document
+        if doc.Recomputing:
+            QtCore.QTimer.singleShot(150, lambda: _check_again(obj))
+            return
+        obj.touch()
+        doc.recompute()
+        schedule(obj)
+    except Exception as exc:
+        warn("Design Advice: %s" % exc)
+
+
 class ViewProviderDesignAdvice:
     """Draws a Design Advice over its bodies. Saved documents store
     "sciforge.plastic_advice_ui.ViewProviderDesignAdvice": keep the name stable."""
@@ -116,7 +132,10 @@ class ViewProviderDesignAdvice:
 
     def onChanged(self, vobj, prop):
         if prop == "Visibility":
-            schedule(vobj.Object)
+            obj = vobj.Object
+            if vobj.Visibility and getattr(obj, "Stale", False):
+                QtCore.QTimer.singleShot(0, lambda: _check_again(obj))
+            schedule(obj)
 
     def getIcon(self):
         return ui_icon_path("pl_design_advice")

@@ -85,9 +85,10 @@ class DesignAdvice:
         add("App::PropertyString", "Problem", "Why the analysis shows nothing", "")
         add("App::PropertyString", "Results", "What was found (JSON)", "")
         add("App::PropertyString", "Summary", "What was found", "")
+        add("App::PropertyBool", "Stale", "Not checked again while hidden", False)
         try:
             obj.setEditorMode("SciForgeType", 2)
-            for name in ("Problem", "Results", "Summary"):
+            for name in ("Problem", "Results", "Summary", "Stale"):
                 obj.setPropertyStatus(name, ["Output", "Hidden"])
             obj.setEditorMode("PullVector", 2)
         except Exception:
@@ -97,7 +98,15 @@ class DesignAdvice:
         self.ensure_properties(obj)
 
     def execute(self, obj):
-        """Check the bodies again. Never fails: what is wrong goes to Problem."""
+        """Check the bodies again. Never fails: what is wrong goes to Problem. A hidden
+        analysis waits (Stale) until it is shown again: editing a big design does not pay for
+        checks nobody sees."""
+        if hidden(obj):
+            if not obj.Stale:
+                obj.Stale = True
+            return
+        if obj.Stale:
+            obj.Stale = False
         problem = ""
         results = {"bodies": []}
         try:
@@ -126,6 +135,16 @@ class DesignAdvice:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def hidden(obj):
+    """True when the analysis' eye is off in the GUI (headless: never)."""
+    if not App.GuiUp:
+        return False
+    try:
+        return obj.ViewObject is not None and not obj.ViewObject.Visibility
+    except Exception:
+        return False
 
 
 # -- which bodies -------------------------------------------------------------------------------
