@@ -664,6 +664,11 @@ class DetailsPane(QtWidgets.QFrame):
         self.insert_button.setMenu(self.insert_menu)
         buttons.addWidget(self.insert_button)
         buttons.addStretch(1)
+        self.delete_button = QtWidgets.QPushButton(ui_icon("delete"), "Delete")
+        self.delete_button.setObjectName("SciForgeDataPanelDetailsDelete")
+        self.delete_button.setToolTip("Move it to the trash folder (after a question)")
+        self.delete_button.clicked.connect(lambda *_: self._delete())
+        buttons.addWidget(self.delete_button)
         right.addLayout(buttons)
         right.addStretch(1)
         top.addLayout(right, 1)
@@ -809,6 +814,11 @@ class DetailsPane(QtWidgets.QFrame):
         if self.path:
             path = self.path
             QtCore.QTimer.singleShot(0, lambda: vui.open_design(path))
+
+    def _delete(self):
+        if self.path:
+            path = self.path
+            QtCore.QTimer.singleShot(0, lambda: self.panel._trash(path))
 
     def _info(self, item):
         number = item.data(ROLE) if item is not None else None
@@ -1595,21 +1605,7 @@ class DataPanel(QtWidgets.QWidget):
             self.refresh()
 
     def _trash(self, path):
-        try:
-            if vui.doc_for_file(path) is not None:
-                commands.tell("Close the design before deleting it.")
-                return
-            answer = QtWidgets.QMessageBox.question(
-                self,
-                "Delete design",
-                "Move %s to the project's trash folder (%s)?\nIt can be taken back from there."
-                % (core.design_name(path), core.TRASH_FOLDER),
-            )
-            if answer != QtWidgets.QMessageBox.Yes:
-                return
-            target = core.trash_design(path, vui.project_folder())
-            log("moved %s to %s" % (path, target))
+        """Delete (right-click, the details' Delete, the Delete key): versions_ui asks, then
+        moves it to this place's trash folder."""
+        if vui.delete_design(path, self.place_root(), self):
             self.refresh()
-        except Exception as exc:
-            warn("delete: %s" % exc)
-            commands.tell("Could not delete: %s" % exc)

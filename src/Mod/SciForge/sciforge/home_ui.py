@@ -11,9 +11,12 @@ page is). Luca's sketch (2026-10-19): one page of rows, top to bottom,
     folders of this computer too), then each cloud and NAS connected: all their designs,
     their folders' too.
 Each row's tiles run left to right on as many lines as they need. A tile: picture, name,
-place or folder, "edited 2 h ago", versions. Double-click opens; right-click: Open, Pin,
-Show in Folder, Version History, Remove from List (a missing design: Locate...). A place's
-... menu: Show in Folder, Change Folder... (This computer), Disconnect (the others).
+place or folder, "edited 2 h ago", versions. Double-click opens; right-click (or the ...
+button on the tile the mouse is over or that was clicked): Open, Pin, Show in Folder,
+Version History, Remove from List, Delete (a missing design: Locate...); the Delete key
+deletes the clicked tile's design (versions_ui.delete_design: after a question, to the trash
+folder). A place's ... menu: Show in Folder, Change Folder... (This computer), Disconnect
+(the others).
 The ribbon's commands are hidden while Home is in front (its top bar stays).
 
 The Home button at the left of the application bar and File > Home bring it back; closing
@@ -306,12 +309,55 @@ def _no_tab_focus(widget):
             child.setFocusPolicy(QtCore.Qt.ClickFocus if strong else QtCore.Qt.NoFocus)
 
 
+class _TileDelegate(QtWidgets.QStyledItemDelegate):
+    """The tile as before, plus a small ... button in its picture's top-right corner while
+    the mouse is over it or it is the clicked one: a click on it opens the tile's menu."""
+
+    def __init__(self, tiles):
+        super().__init__(tiles)
+        self.tiles = tiles
+
+    def paint(self, painter, option, index):
+        super().paint(painter, option, index)
+        try:
+            state = option.state
+            if not (
+                state & QtWidgets.QStyle.State_MouseOver or state & QtWidgets.QStyle.State_Selected
+            ):
+                return
+            box = QtCore.QRectF(more_rect(option.rect))
+            painter.save()
+            try:
+                painter.setRenderHint(QtGui.QPainter.Antialiasing, True)
+                painter.setPen(QtCore.Qt.NoPen)
+                painter.setBrush(QtGui.QColor(0, 0, 0, 150))
+                painter.drawRoundedRect(box, 4, 4)
+                painter.setBrush(QtGui.QColor("#ffffff"))
+                for i in (-1, 0, 1):
+                    painter.drawEllipse(box.center() + QtCore.QPointF(i * 5.5, 0), 1.7, 1.7)
+            finally:
+                painter.restore()
+        except Exception as exc:  # never an exception out of a paint
+            warn("home tile: %s" % exc)
+
+
+def more_rect(tile_rect):
+    """Where a tile's ... button is (the picture's top-right corner)."""
+    right = tile_rect.left() + (tile_rect.width() + THUMB) // 2
+    return QtCore.QRect(right - 30, tile_rect.top() + 6, 26, 18)
+
+
 class _Tiles(QtWidgets.QListWidget):
     """A row's tiles: left to right, on as many lines as they need so every design shows
     (no scroll bar of its own: the Home page scrolls)."""
 
     def __init__(self, row_id):
         super().__init__()
+        self.on_more = None  # function(item, global point): the tile's ... was clicked
+        self.on_delete = None  # function(item): the Delete key on the clicked tile
+        self.setItemDelegate(_TileDelegate(self))
+        self.setMouseTracking(True)
+        self.viewport().setAttribute(QtCore.Qt.WA_Hover, True)
         self.setObjectName("SciForgeHomeList")
         self.setProperty("row", row_id)
         self.setViewMode(QtWidgets.QListView.IconMode)
@@ -341,6 +387,45 @@ class _Tiles(QtWidgets.QListWidget):
     def resizeEvent(self, event):
         super().resizeEvent(event)
         QtCore.QTimer.singleShot(0, self.fit)
+
+    def more_point(self, item):
+        """The middle of a tile's ... button (tests)."""
+        return more_rect(self.visualItemRect(item)).center()
+
+    def mousePressEvent(self, event):
+        try:
+            if event.button() == QtCore.Qt.LeftButton and self.on_more is not None:
+                pos = event.position().toPoint()
+                item = self.itemAt(pos)
+                if item is not None and more_rect(self.visualItemRect(item)).contains(pos):
+                    self.setCurrentItem(item)
+                    corner = more_rect(self.visualItemRect(item)).bottomLeft()
+                    at = self.viewport().mapToGlobal(corner)
+                    on_more = self.on_more
+                    QtCore.QTimer.singleShot(0, lambda: on_more(item, at))
+                    return
+        except Exception as exc:
+            warn("home: %s" % exc)
+        super().mousePressEvent(event)
+
+    def event(self, event):
+        if event.type() == QtCore.QEvent.ShortcutOverride and event.key() == QtCore.Qt.Key_Delete:
+            event.accept()  # Delete deletes the clicked tile's design, not a SciForge shortcut
+            return True
+        return super().event(event)
+
+    def keyPressEvent(self, event):
+        try:
+            item = self.currentItem()
+            if event.key() == QtCore.Qt.Key_Delete and item is not None and item.isSelected():
+                if self.on_delete is not None:
+                    on_delete = self.on_delete
+                    QtCore.QTimer.singleShot(0, lambda: on_delete(item))
+                return
+        except Exception as exc:
+            warn("home: %s" % exc)
+            return
+        super().keyPressEvent(event)
 
 
 class _Row(QtWidgets.QWidget):
@@ -396,6 +481,8 @@ class _Row(QtWidgets.QWidget):
         column.addLayout(head)
         self.list = _Tiles(row_id)
         self.list.customContextMenuRequested.connect(lambda pos: page._menu(self.list, pos))
+        self.list.on_more = page.more_menu
+        self.list.on_delete = page.delete_item
         self.list.itemDoubleClicked.connect(page.open_item)
         column.addWidget(self.list)
         self.empty = QtWidgets.QLabel("")
@@ -1006,6 +1093,34 @@ class HomeView(QtWidgets.QWidget):
         except Exception as exc:
             warn("home: %s" % exc)
 
+    def more_menu(self, item, at):
+        """The tile's ... button: the same menu as a right-click."""
+        try:
+            self.context_menu(item).exec_(at)
+        except RuntimeError:
+            pass  # the rows were rebuilt meanwhile
+        except Exception as exc:
+            warn("home: %s" % exc)
+
+    def delete_item(self, item):
+        """Delete the design of a tile (its menu, its ... button, the Delete key)."""
+        try:
+            _kind, _key, path = item.data(_KIND)
+            missing = item.data(_STATUS) == core.MISSING
+            root = item.data(_ROOT) or None
+        except RuntimeError:
+            return
+        if missing:
+            commands.tell(
+                "%s is not there any more: right-click > Remove from List takes it off."
+                % versions.design_name(path)
+            )
+            return
+        from . import versions_ui
+
+        if versions_ui.delete_design(path, root, self):
+            self.refresh()
+
     def context_menu(self, item):
         """The tile's right-click menu (a QMenu; tests read its actions)."""
         kind, key, path = item.data(_KIND)
@@ -1036,9 +1151,11 @@ class HomeView(QtWidgets.QWidget):
         if not missing:
             add("Show in Folder", lambda: _show_in_folder(path))
             add("Version History", lambda: _history(path))
+        menu.addSeparator()
         if kind == "recent":
-            menu.addSeparator()
             add("Remove from List", lambda: self.forget(key))
+        if not missing:
+            add("Delete", lambda: self.delete_item(item)).setIcon(ui_icon("delete"))
         return menu
 
     def place_menu(self, location_id):
@@ -1110,6 +1227,19 @@ class HomeView(QtWidgets.QWidget):
 
 
 # -- actions shared with the commands --------------------------------------------------
+def forget_file(path):
+    """A design was deleted (moved to the trash folder): Recent forgets it, Home redraws."""
+    try:
+        state = load_state()
+        key = versions.path_key(os.path.abspath(path))
+        if core.find(state, key) is not None:
+            core.forget(state, key)
+            save_state(state)
+        refresh_soon()
+    except Exception as exc:
+        warn("home: %s" % exc)
+
+
 def new_design():
     """Home's New design: a new design with its first body, like File > New Design."""
     try:

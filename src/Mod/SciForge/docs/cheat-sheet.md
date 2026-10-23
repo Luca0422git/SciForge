@@ -65,8 +65,10 @@ Sketch keys (the SKETCH tab is open):
   every step; drag the marker, double-click a step to edit it, right-click for Delete /
   Suppress. **Navigation bar** (bottom centre): orbit mode, look at, pan, zoom, fit, display.
 - **Data Panel** (`Ctrl` + `Alt` + `P`): your project folder's designs with pictures and
-  versions; search, sort, click a design for its versions and what uses it; **drag a design
-  into the 3D view of an open design to insert a copy of it**.
+  versions; search, sort, click a design for its versions, what uses it and **Delete**; **drag
+  a design into the 3D view of an open design to insert a copy of it**. On **Home**, a design's
+  **...** button (or a right-click) has Delete too. Deleted designs go to the
+  `.sciforge-trash` folder of the project, so they can be taken back.
 - **SciForge menu** (top left): FreeCAD's own menus, Change Parameters, Diagnostics (the text
   to send when something misbehaves).
 

@@ -1835,6 +1835,83 @@ def copy_design(path, folder):
         return None
 
 
+def delete_design(path, root=None, parent=None):
+    """Delete a design (the Data Panel and Home, Luca 2026-10-23): after a question it moves,
+    with its plain versions, to the trash folder of its place (`root`, default the project
+    folder; a design outside it: a trash folder beside it). Nothing is deleted for good: it
+    can be taken back from there with the file manager (Fusion keeps deleted designs to
+    restore too). An open design is closed first, and the question says so (and that its
+    unsaved changes are lost); open designs that insert it are named (their link breaks).
+    Home's recent list forgets it. A STEP / IGES file goes the same way. Returns the path
+    in the trash folder, or None."""
+    try:
+        if not path or not os.path.exists(path):
+            commands.tell("%s is not there any more." % os.path.basename(path or "The design"))
+            return None
+        cad = core.is_cad_file(path)
+        name = os.path.basename(path) if cad else core.design_name(path)
+        root = root or project_folder()
+        trash_root = root if core.inside(root, path) else os.path.dirname(path)
+        trash = os.path.join(trash_root, core.TRASH_FOLDER)
+        doc = doc_for_file(path)
+        users = [] if cad else _open_referrers(path)
+        shown = doc is not None and _has_views(doc)
+        lines = [
+            "Move %s to the trash folder?" % name,
+            "",
+            "It goes to %s, where you can take it back with the file manager." % trash,
+        ]
+        if shown:
+            lost = " and its unsaved changes are lost" if is_modified(doc) else ""
+            lines += ["", "It is open: its tab will be closed%s." % lost]
+        if users:
+            lines += [
+                "",
+                "%s use%s it: %s link to it will be broken."
+                % (
+                    ", ".join(users),
+                    "" if len(users) > 1 else "s",
+                    "their" if len(users) > 1 else "its",
+                ),
+            ]
+        if not _ask_delete(parent, name, "\n".join(lines)):
+            return None
+        if doc is not None and (shown or not users):
+            close_without_asking(doc)  # (a design read only for another one's link stays)
+        target = core.trash_design(path, trash_root)
+        log("deleted %s: moved to %s" % (path, target))
+        try:
+            from . import home_ui
+
+            home_ui.forget_file(path)
+        except Exception as exc:
+            warn("home: %s" % exc)
+        commands.tell("%s is in the trash folder (%s)." % (name, trash))
+        _refresh_views()
+        return target
+    except Exception as exc:
+        warn("delete: %s" % exc)
+        commands.tell("Could not delete: %s" % exc)
+        return None
+
+
+def _ask_delete(parent, name, text):
+    """The Delete question: Move to Trash, or Cancel (the default: Enter keeps the design)."""
+    box = QtWidgets.QMessageBox(parent or _main())
+    box.setObjectName("SciForgeDeleteQuestion")
+    box.setIcon(QtWidgets.QMessageBox.Question)
+    box.setWindowTitle("Delete %s" % name)
+    box.setText(text)
+    yes = box.addButton("Move to Trash", QtWidgets.QMessageBox.AcceptRole)
+    yes.setObjectName("SciForgeDeleteYes")
+    no = box.addButton(QtWidgets.QMessageBox.Cancel)
+    no.setObjectName("SciForgeDeleteCancel")
+    box.setDefaultButton(no)
+    box.exec()
+    clicked = box.clickedButton()
+    return clicked is not None and clicked.objectName() == "SciForgeDeleteYes"
+
+
 def keep_conflict_copy(copy, original, root=None):
     """Keep This One: a sync app's conflict copy becomes the design; the other one goes to
     the trash folder of its place (never deleted). The design's path, or None."""

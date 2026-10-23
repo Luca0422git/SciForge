@@ -1495,15 +1495,20 @@ def project_folders(project_folder):
 
 
 def trash_design(path, project_folder):
-    """Move a design (and its plain versions) into the project's trash folder instead of
-    deleting it; the new path of the design."""
+    """Move a design (and its plain versions) into the trash folder of `project_folder` (the
+    place it is in; a design outside it: a trash folder beside it) instead of deleting it;
+    the new path of the design. A STEP / IGES file keeps its extension."""
     root = (
         project_folder if project_folder and inside(project_folder, path) else os.path.dirname(path)
     )
     trash = os.path.join(root, TRASH_FOLDER)
     os.makedirs(trash, exist_ok=True)
-    name = unique_name(trash, design_name(path), DESIGN_SUFFIX)
-    target = os.path.join(trash, name + DESIGN_SUFFIX)
+    if is_design(path):
+        base, suffix = design_name(path), DESIGN_SUFFIX
+    else:  # an uploaded STEP / IGES file keeps its own extension
+        base, suffix = os.path.splitext(os.path.basename(path))
+    name = unique_name(trash, base, suffix)
+    target = os.path.join(trash, name + suffix)
     os.replace(path, target)
     versions = os.path.join(os.path.dirname(path), design_name(path) + VERSIONS_SUFFIX)
     if os.path.isdir(versions):

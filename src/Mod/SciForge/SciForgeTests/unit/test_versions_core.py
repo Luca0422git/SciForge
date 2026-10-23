@@ -435,6 +435,27 @@ class ProjectFolderTests(Scratch):
         self.assertTrue(os.path.isdir(os.path.join(project, v.TRASH_FOLDER, "Arm.versions")))
         self.assertEqual([d["name"] for d in v.list_folder(project)[1]], ["Taken"])
 
+    def test_trash_keeps_a_step_files_extension_and_never_overwrites(self):
+        project = os.path.join(self.root, "proj")
+        os.makedirs(os.path.join(project, "Parts"))
+        step = os.path.join(project, "Parts", "robot.step")
+        with open(step, "w") as handle:
+            handle.write("ISO-10303-21;")
+        trashed = v.trash_design(step, project)
+        self.assertEqual(trashed, os.path.join(project, v.TRASH_FOLDER, "robot.step"))
+        with open(step, "w") as handle:
+            handle.write("ISO-10303-21; again")
+        self.assertEqual(os.path.basename(v.trash_design(step, project)), "robot 2.step")
+        first = make_design(os.path.join(project, "Arm.FCStd"))
+        v.trash_design(first, project)
+        second = make_design(os.path.join(project, "Arm.FCStd"))
+        self.assertEqual(os.path.basename(v.trash_design(second, project)), "Arm 2.FCStd")
+        outside = make_design(os.path.join(self.root, "elsewhere", "Gear.FCStd"))
+        trashed = v.trash_design(outside, project)
+        self.assertEqual(
+            os.path.dirname(trashed), os.path.join(self.root, "elsewhere", v.TRASH_FOLDER)
+        )
+
     def test_version_count_without_git_cache(self):
         path = make_design(os.path.join(self.root, "Bracket.FCStd"))
         self.assertEqual(v.version_count(path), 0)

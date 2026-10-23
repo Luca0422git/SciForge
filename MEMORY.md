@@ -9,7 +9,8 @@ R0-R4 are built and merged on `develop` (2026-10-20, three parallel agents). Wha
 
 **2026-10-23: Luca's four additions are on `develop`** (Fusion-style Data Panel, drag a design
 into an open design as a copy, Opacity Control in the browser, the 3D view's hover lighting the
-browser row): newest session log. Waiting for his test on Windows.
+browser row), then Delete on Home and in the Data Panel: newest session logs. Waiting for his
+test on Windows.
 
 **Sandbox limit found at release time (2026-10-21): a Claude Code cloud session can only push to
 `develop`.** A tag push (`git push origin sciforge-v...`) and a push to `Release` get HTTP 403 from
@@ -1408,6 +1409,32 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Delete on Home and in the Data Panel (`develop`, 2026-10-23, later)
+
+Luca: "In the Home Screen, clicking on a file should give you the option to delete it. Same
+in the data panel".
+
+- One shared action, `versions_ui.delete_design(path, root, parent)`: a question
+  (`SciForgeDeleteQuestion`, buttons "Move to Trash" `SciForgeDeleteYes` / Cancel, Cancel the
+  default) saying where it goes; then `versions.trash_design` into the place's
+  `.sciforge-trash` (never deleted for good; safer than the Windows Recycle Bin, which deletes
+  files on network drives for good). An open design is closed first (`close_without_asking`;
+  the question says so and that unsaved changes are lost), except a hidden one an open
+  design's link still uses; open designs that insert it are named; `home_ui.forget_file`
+  drops it from Recent.
+- Home: tile menu gets **Delete** (not for a missing design); `_TileDelegate` paints a
+  **...** button on the hovered / clicked tile (`more_rect`), a click on it opens the same
+  menu (`HomeView.more_menu`); the **Delete** key on the clicked tile (`_Tiles.on_delete`).
+- Data Panel: a **Delete** button in the details a click shows (`DetailsPane.delete_button`);
+  right-click > Delete and the Delete key use the shared action (an open design no longer
+  refused: closed after the question).
+- Fix: `trash_design` kept only `.FCStd`: a deleted `robot.step` became `robot.step.FCStd` in
+  the trash folder; it keeps its extension now (unit test).
+- Tests: scenario `delete_designs` (36 checks, real clicks, the question answered by a
+  timer like a person), unit `test_versions_core` trash test (unit 1831 OK); also PASS:
+  `home_screen`, `cloud_place`, `versions_data_panel`, `polish2_data_panel`,
+  `data_panel_fusion`, `exchange2_step_open`.
 
 ### Session log: Data Panel part 2, drag-in copies, Opacity Control, hover lights the browser (`develop`, 2026-10-23)
 
