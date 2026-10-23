@@ -51,6 +51,21 @@ Steps and hand-worked numbers: `SciForgeTests/gui/journey_plastic_steps.py`.
   what it hid (Fusion: what is inside keeps its own eyes); without a memory (hidden before a
   reopen) it shows all but the origin, sketches and construction.
 
+- **Deleting the Snap Fit broke the Lip after it** (`timeline_ops.py`): the Lip's `Edges`
+  sit on the step before it, here the Snap Fit's hidden groove step in the Base; Delete took
+  that step and FreeCAD emptied the link, so the Lip failed and the lip vanished. The
+  timeline's reference memory (which keeps a fillet's edges when the step under it goes)
+  now covers `Edges` too (Lip, Hem, Corner Round), and a link FreeCAD emptied is found
+  again by geometry on the new base step.
+
+## Not bugs (documented behaviour, worked around in the journey)
+
+- Suppressing the Lip also suppressed the Rest (parity `timeline-browser.md`: "Suppress
+  also suppresses what depends on it"): the offset plane for the Rest was made on the front
+  face of the Base's last step at that time (the Lip), so it counts as depending on the Lip.
+  Fusion would see that face as the Shell's and leave the Rest on. Listed as an open issue
+  (attachments follow the Tip step, not the step that made the face).
+
 ## Not bugs (documented behaviour, worked around in the journey)
 
 - A Join touching a body of another component joins into that body (parity

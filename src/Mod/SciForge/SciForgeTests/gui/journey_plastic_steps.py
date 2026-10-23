@@ -1323,3 +1323,102 @@ def reopen_steps():
         step(lip_higher, "lip_higher"),
         step(lip_esc, "lip_esc"),
     ]
+
+
+# -- 12. the timeline across both components --
+def timeline_steps():
+    def root():
+        tab("plastic")
+        cs.click_radio(doc().Label)
+
+    def marker_before_boss():
+        h.check("the root active: the whole timeline", cs.active_label() is None)
+        s["v_base_end"], s["v_lid_end"] = vol(base()), vol(lid())
+        boss = [t for t in titles() if t.startswith("Boss")]
+        s["boss_title"] = boss[0] if boss else "Boss 1"
+        s["lip_title"] = next((t for t in titles() if t.startswith("Lip")), "Lip 1")
+        s["snap_title"] = next((t for t in titles() if t.startswith("Snap Fit")), "Snap Fit 1")
+        tl.drag_marker(before_title=s["boss_title"])
+
+    def rolled_back():
+        h.check(
+            "marker before the Boss: Base as shelled", near(vol(base()), BASE_SHELL), vol(base())
+        )
+        h.check("marker before the Boss: Lid as shelled", near(vol(lid()), LID_SHELL), vol(lid()))
+        h.shot("journey_pl_10_marker")
+        tl.drag_marker(to_end=True)
+
+    def at_end():
+        h.check("marker at the end: Base back", near(vol(base()), s["v_base_end"]), vol(base()))
+        h.check("marker at the end: Lid back", near(vol(lid()), s["v_lid_end"]), vol(lid()))
+        ok_errors("marker at the end")
+        tl.menu(s["lip_title"], "Suppress Features")
+
+    def lip_suppressed():
+        bad = [o.Label for o in doc().Objects if "Invalid" in o.State or "Error" in o.State]
+        h.check("Lip suppressed: the steps after it still computed", not bad, bad)
+        lip = s["v_base_lip"] - s["v_base_snap"]
+        groove = s["v_lid_snap"] - s["v_lid_lip"]
+        # The offset plane was made on the front face of the Base's last step then (the
+        # Lip), so SciForge counts it, its sketch and the Rest as depending on the Lip, and
+        # Suppress takes "what depends on it" too (parity timeline-browser.md): the Rest
+        # goes off with the Lip. (Fusion would see the face as the Shell's.)
+        rest_gain = s["v_base_rest"] - s["v_base_lip"]
+        h.check(
+            "Lip suppressed: no lip on the Base (and the Rest on its face off too)",
+            near(vol(base()), s["v_base_end"] - lip - rest_gain),
+            (vol(base()), s["v_base_end"] - lip - rest_gain),
+        )
+        from sciforge import timeline_ops
+
+        h.check(
+            "Lip suppressed: the Rest went off with it",
+            bool(rests()) and timeline_ops.is_suppressed(rests()[0]),
+        )
+        h.check(
+            "Lip suppressed: no groove in the Lid (its follower too)",
+            near(vol(lid()), s["v_lid_end"] + groove),
+            (vol(lid()), s["v_lid_end"] + groove),
+        )
+        tl.menu(s["lip_title"], "Unsuppress Features")
+
+    def lip_back():
+        h.check("Lip back: Base", near(vol(base()), s["v_base_end"]), vol(base()))
+        h.check("Lip back: Lid", near(vol(lid()), s["v_lid_end"]), vol(lid()))
+        tl.menu(s["snap_title"], "Delete")
+
+    def snap_deleted():
+        h.check("Snap Fit deleted", not snaps())
+        left = [o.Label for o in doc().Objects if getattr(o, "SciForgeType", "") == "SnapFitGroove"]
+        h.check("its groove step went with it", not left, left)
+        h.check(
+            "the Base's back wall whole again",
+            near(vol(base()) - s["v_base_end"], p2.GROOVE, 1e-4),
+            vol(base()) - s["v_base_end"],
+        )
+        h.check("the hook gone from the Lid", vol(lid()) < s["v_lid_end"] - 100, vol(lid()))
+        ok_errors("snap deleted")
+        tl.undo()
+
+    def snap_back():
+        h.check("Ctrl+Z: the Snap Fit back", len(snaps()) == 1)
+        h.check("Ctrl+Z: Base", near(vol(base()), s["v_base_end"]), vol(base()))
+        h.check("Ctrl+Z: Lid", near(vol(lid()), s["v_lid_end"]), vol(lid()))
+        ok_errors("snap back")
+
+    return [
+        step(root, "timeline_root"),
+        step(marker_before_boss, "marker_before_boss"),
+        h.idle_step("marker_idle"),
+        step(rolled_back, "marker_rolled_back"),
+        h.idle_step("marker_end_idle"),
+        step(at_end, "marker_at_end"),
+        h.idle_step("suppress_idle"),
+        step(lip_suppressed, "lip_suppressed"),
+        h.idle_step("unsuppress_idle"),
+        step(lip_back, "lip_unsuppressed"),
+        h.idle_step("delete_idle"),
+        step(snap_deleted, "snap_deleted"),
+        h.idle_step("snap_undo_idle"),
+        step(snap_back, "snap_back"),
+    ]
