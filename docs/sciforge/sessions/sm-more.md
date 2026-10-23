@@ -177,6 +177,11 @@ volume exact) - a note for sm-flat. The golden runner's `SCIFORGE_GOLDEN_FILTER`
 needs its own `source`. Comparing a step's property strings before / after Cancel must skip
 shapes, `ShapeMaterial` and `SciForgePicks` (rebuilt with float noise).
 
+Final QA run on `sf/sm-more-qa` (10:02-10:18 UTC): the 11 smmore_* scenarios PASS (bend 44,
+bend_two 18, bend_tab 20, hem 40, join 25, corner 37, round 26, lofted 27, qa_reopen 92,
+qa_refusals 60, qa_join_order 21), the SHEET METAL ribbon sweep PASS (109 checks), `--only base`
+PASS (unit 1906 OK / 9 skipped; golden 513 pass + 2 known xfail; smoke, journey, restart).
+
 Left (parity doc Known gaps 13-15 and the builder's): Corner Closure's default relief is not
 the rule's (Fusion's "Use rule defaults"), Hem's Override Rules has no bend relief override,
 a Brake Form lofted flange still has no flat pattern, Join by Bend reads the other body live.
