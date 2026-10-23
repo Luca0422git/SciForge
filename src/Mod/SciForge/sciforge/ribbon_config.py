@@ -1271,6 +1271,12 @@ DRAWING_TEXT = group(
             note="Click an edge, then where the text goes; type the text.",
         ),
         item("Note", None, "dw_text"),
+        item(
+            "Bend Note",
+            "SciForge_DrawingBendNote",
+            "dw_text",
+            note="Click bend centre lines of a flat pattern view: direction, angle and radius.",
+        ),  # owner: sm-flat
     ],
 )
 DRAWING_SYMBOLS = group(

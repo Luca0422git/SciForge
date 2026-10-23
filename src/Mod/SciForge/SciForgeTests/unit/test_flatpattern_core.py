@@ -190,6 +190,16 @@ class RibbonTest(unittest.TestCase):
         ):
             self.assertIn(name, names)
 
+    def test_drawing_bend_commands(self):
+        tab = next(t for t in cfg.TABS if t["id"] == "drawing")
+        found = {}
+        for grp in tab["groups"]:
+            for entry in cfg.iter_items(grp["items"]):
+                if entry and entry.get("command"):
+                    found[entry["command"]] = grp["title"]
+        self.assertEqual(found.get("SciForge_DrawingBendTable"), "TABLES")
+        self.assertEqual(found.get("SciForge_DrawingBendNote"), "TEXT")
+
 
 class BrowserTest(unittest.TestCase):
     def test_flat_pattern_node(self):

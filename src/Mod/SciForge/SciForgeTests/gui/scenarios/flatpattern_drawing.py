@@ -5,8 +5,10 @@ New Drawing; Contents Select lists "Flat Pattern / Body" (not ticked); tick it, 
 body; OK: the drawing opens and its Base View shows the flat pattern from the top (the flat
 lies on XY): the outline, the hole and the bend lines are its 11 visible edges; a click places
 it; OK. TABLES > Bend Table: a table of the two bends (B1, B2: UP, 90 degrees, R 1.00, K 0.44)
-and an identifier balloon on each bend centre line; undo / redo; the design's rule set to K
-0.33: the table and the identifiers follow."""
+and an identifier balloon on each bend centre line; undo / redo. TEXT > Bend Note: a click on
+B1's centre line writes "UP 90° R 1.00" along it (turned with the line), a click on the flat
+away from the bend lines is refused, B2's line gets its note, B1 again is refused; OK; undo /
+redo. The design's rule set to K 0.33: the table, the identifiers and the notes follow."""
 
 import FreeCAD as App
 from PySide import QtCore, QtWidgets
@@ -175,6 +177,112 @@ def table_redone():
     h.check("redo brings it back", fpd.bend_table_of(d.page()) is not None)
 
 
+def _line_point(index, at):
+    """The page point `at` of the way along bend `index`'s centre line (identifier order)."""
+    from sciforge import flatpattern_drawing as fpd
+
+    view = d.bases()[0]
+    fp = fpd.flat_of(view)
+    a, b = fpd._centre_local(view, fp, fpd._ordered(fp)[index])
+    return d.to_page(view, (a[0] + (b[0] - a[0]) * at, a[1] + (b[1] - a[1]) * at))
+
+
+def _notes():
+    from sciforge import flatpattern_drawing as fpd
+
+    return fpd.bend_notes_of(d.page())
+
+
+def bend_note():
+    d.group_menu("TEXT", "Bend Note")
+
+
+bend_note.wait_ms = 1500
+
+
+def click_b1():
+    p = d.panel_of("BendNotePanel")
+    h.check("Bend Note dialog open", p is not None, d.panel())
+    x, y = _line_point(0, 0.3)
+    d.click_at(x, y)
+
+
+def b1_noted():
+    from sciforge import flatpattern_drawing as fpd
+
+    notes = _notes()
+    h.check("one bend note", len(notes) == 1, len(notes))
+    if not notes:
+        return
+    note = notes[0]
+    h.check("it says UP 90\u00b0 R 1.00", list(note.Text) == ["UP 90\u00b0 R 1.00"], note.Text)
+    h.check("turned with the (vertical) line", abs(note.Rotation.Value - 90.0) < 1e-6)
+    view = d.bases()[0]
+    fp = fpd.flat_of(view)
+    x, y, _a = fpd.note_place(view, fp, fpd._ordered(fp)[0])
+    mx, my = _line_point(0, 0.5)
+    h.check(
+        "beside the middle of B1's centre line",
+        abs(note.X.Value - x) < 1e-6 and abs(note.Y.Value - my) < 1e-6 and 2 < mx - x < 5,
+        (note.X.Value, note.Y.Value, mx, my),
+    )
+
+
+def click_outline():
+    from sciforge import flatpattern_drawing as fpd
+
+    view = d.bases()[0]
+    fp = fpd.flat_of(view)
+    bb = fp.Shape.BoundBox
+    # on the flat, 10 mm in from its left end: far from both bend lines
+    x, y = d.to_page(view, (-bb.XLength / 2.0 + 10.0, 0.0))
+    d.click_at(x, y)
+
+
+def outline_refused():
+    p = d.panel_of("BendNotePanel")
+    text = p.message.text() if p is not None else ""
+    h.check("away from the bend lines: refused", "not a bend centre line" in text, text)
+    h.check("still one note", len(_notes()) == 1)
+
+
+def click_b2():
+    x, y = _line_point(1, 0.7)
+    d.click_at(x, y)
+
+
+def click_b1_again():
+    h.check("two bend notes", len(_notes()) == 2, len(_notes()))
+    x, y = _line_point(0, 0.6)
+    d.click_at(x, y)
+
+
+def again_refused():
+    p = d.panel_of("BendNotePanel")
+    text = p.message.text() if p is not None else ""
+    h.check("B1 has its note already", "already" in text, text)
+    h.check("still two notes", len(_notes()) == 2)
+    h.shot("3-bend-notes")
+
+
+def notes_ok():
+    d.ok()
+
+
+def undo_notes():
+    h.check("Bend Note closed", d.panel_of("BendNotePanel") is None)
+    d.undo()
+
+
+def notes_undone():
+    h.check("undo takes both notes away (one step)", len(_notes()) == 0, len(_notes()))
+    d.redo()
+
+
+def notes_redone():
+    h.check("redo brings them back", len(_notes()) == 2, len(_notes()))
+
+
 def change_k():
     # the design's rule changes (Sheet Metal Rules: K 0.33): the flat and its table follow
     from sciforge import sheetmetal
@@ -206,6 +314,16 @@ def table_follows():
         len(offsets) == 2 and all(abs(o - want) < 0.01 for o in offsets),
         (offsets, want),
     )
+    view = d.bases()[0]
+    lefts = []
+    for note in _notes():
+        mx, _my = _line_point(int(note.SciForgeBend), 0.5)
+        lefts.append(mx - note.X.Value)
+    h.check(
+        "the bend notes follow their lines",
+        len(lefts) == 2 and all(abs(v - 3.15) < 1e-3 for v in lefts),
+        (lefts, view.Label),
+    )
 
 
 h.run(
@@ -228,6 +346,18 @@ h.run(
         table_undone,
         redo_table,
         table_redone,
+        bend_note,
+        click_b1,
+        b1_noted,
+        click_outline,
+        outline_refused,
+        click_b2,
+        click_b1_again,
+        again_refused,
+        notes_ok,
+        undo_notes,
+        notes_undone,
+        notes_redone,
         change_k,
         table_follows,
     ],

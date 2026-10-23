@@ -1,12 +1,17 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""DRAWING > TABLES > Bend Table (Fusion's behaviour for a flat pattern drawing; the work is
-flatpattern_drawing.py): the flat pattern view picked (or the drawing's only one) gets its
-bend identifiers and a table of its bends at the top left of the sheet. One undo step."""
+"""DRAWING > TABLES > Bend Table and DRAWING > TEXT > Bend Note (Fusion's behaviour for a flat
+pattern drawing; the work is flatpattern_drawing.py).
+
+Bend Table: the flat pattern view picked (or the drawing's only one) gets its bend
+identifiers and a table of its bends at the top left of the sheet. One undo step.
+Bend Note: click bend centre lines of a flat pattern view; each gets a note along it (its
+direction, angle and inside radius); OK keeps them (one undo step), Esc / Cancel drops them.
+"""
 
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import commands, drawing, log, ui_icon_path, warn
+from . import commands, drawing, drawing_ui, log, ui_icon_path, warn
 from . import drawing_core as core
 from . import flatpattern_drawing as fpd
 
@@ -56,6 +61,69 @@ def bend_table(page=None):
     return table
 
 
+class BendNotePanel(drawing_ui.DrawingPanel):
+    """Fusion's Bend Note: every click on a bend centre line of a flat pattern view writes
+    that bend's note along it."""
+
+    title = "Bend Note"
+    icon = "dw_text"
+
+    def __init__(self, page):
+        super().__init__(page, "Bend Note")
+        self.notes = []
+        self.finish_layout()
+        self.say("Click a bend centre line of the flat pattern view.")
+
+    def on_press(self, point, event):
+        try:
+            self._press(point)
+        except Exception as exc:
+            warn("bend note: %s" % exc)
+        return True
+
+    def _press(self, point):
+        view, _name, local = drawing_ui.pick_at(
+            self.page, point, self.tolerance(), want_vertex=False, curve="line"
+        )
+        if view is None or fpd.flat_of(view) is None:
+            self.message.setText("Click a bend centre line of a flat pattern view.")
+            return
+        reach = self.tolerance() / (drawing.scale_of(view) or 1.0)
+        index = fpd.bend_at(view, local, reach)
+        if index is None:
+            self.message.setText("That is not a bend centre line: click the dash-dot line.")
+            return
+        try:
+            note = fpd.add_bend_note(self.page, view, index)
+        except drawing.DrawingError as exc:
+            self.message.setText(str(exc))
+            return
+        self.notes.append(note)
+        self.message.setText("")
+        self._recompute()
+        self.say("%d bend note(s). Click more bend centre lines, then OK." % len(self.notes))
+
+
+class BendNoteCommand(drawing_ui._Base):
+    title = "Bend Note"
+    tip = (
+        "Click bend centre lines of a flat pattern view: each gets its direction, angle and radius"
+    )
+    icon = "dw_text"
+
+    def run(self):
+        page = drawing_ui._need_page()
+        if page is None:
+            return
+        if not fpd.flat_views(page):
+            commands.tell(
+                "Bend notes go on a view of a flat pattern: make a drawing of the flat pattern "
+                "(New Drawing > Contents Select > Flat Pattern)."
+            )
+            return
+        drawing_ui._start(BendNotePanel)
+
+
 class BendTableCommand:
     def GetResources(self):
         return {
@@ -76,4 +144,7 @@ class BendTableCommand:
             warn("Bend Table: %s" % exc)
 
 
-COMMANDS = {"SciForge_DrawingBendTable": BendTableCommand}
+COMMANDS = {
+    "SciForge_DrawingBendTable": BendTableCommand,
+    "SciForge_DrawingBendNote": BendNoteCommand,
+}

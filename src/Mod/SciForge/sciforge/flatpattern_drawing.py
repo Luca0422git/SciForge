@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""The Bend Table of a flat pattern drawing (FreeCAD, no Qt).
+"""The Bend Table and the Bend Notes of a flat pattern drawing (FreeCAD, no Qt).
 
 Fusion: Tables > Bend Table, then a flat pattern view: a table of the bends (identifier,
 direction, angle, radius) is placed and every bend gets its identifier on the view. Here the
@@ -9,9 +9,15 @@ drawn like the parts list (drawing_core.table_layout with its own columns).
     flat_views(page)                   the views of the page that show a flat pattern
     bend_rows(fp)                      the table's rows, in identifier order
     add_bend_table(page, view, top_left)   -> (table, balloons)
+    bend_at(view, local, reach)        the bend whose centre line passes a view point
+    add_bend_note(page, view, index)   Fusion's Bend Note: the bend's direction, angle and
+                                       radius written along its centre line
+
+Both follow later edits of the design (refresh, called by drawing.refresh_page).
 """
 
 import json
+import math
 
 import FreeCAD as App
 
@@ -19,6 +25,8 @@ from . import drawing, flatpattern
 from . import drawing_core as core
 
 TYPE = "BendTable"
+NOTE_TYPE = "BendNote"
+NOTE_SIZE = 3.5  # mm on the paper, like the drawing's other text
 COLUMNS = (
     ("Item", "BEND ID", 16.0),
     ("Direction", "DIRECTION", 22.0),
@@ -125,9 +133,127 @@ def add_bend_table(page, view, top_left):
     return table, balloons
 
 
+def note_text(bend):
+    """What a bend note says: direction, angle and inside radius ("UP 90° R 1.00")."""
+    angle = ("%.2f" % bend["angle"]).rstrip("0").rstrip(".")
+    return "%s %s\u00b0 R %.2f" % ("UP" if bend.get("up") else "DOWN", angle, bend["radius"])
+
+
+def _centre_local(view, fp, bend):
+    """The bend's centre line in the view's own (unscaled) coordinates: two (u, v)."""
+    axes = drawing.axes_of(view)
+    centre = drawing.centre_of(view)
+    place = fp.getGlobalPlacement()
+    out = []
+    for x, y in bend["centre"]:
+        p = place.multVec(App.Vector(x, y, 0.0))
+        out.append(core.to_view(axes, centre, (p.x, p.y, p.z)))
+    return out
+
+
+def _to_segment(p, a, b):
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    n = dx * dx + dy * dy
+    t = 0.0 if n < 1e-18 else max(0.0, min(1.0, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / n))
+    return math.hypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t)
+
+
+def bend_at(view, local, reach):
+    """Index (identifier order) of the bend whose centre line passes within `reach` of the
+    view point `local` (unscaled view coordinates), or None."""
+    fp = flat_of(view)
+    if fp is None:
+        return None
+    best = None
+    for i, bend in enumerate(_ordered(fp)):
+        a, b = _centre_local(view, fp, bend)
+        d = _to_segment(local, a, b)
+        if d <= reach and (best is None or d < best[0]):
+            best = (d, i)
+    return None if best is None else best[1]
+
+
+def note_place(view, fp, bend):
+    """(x, y, rotation) of a bend's note on the paper: along its centre line, beside it, the
+    text reading left to right or upwards."""
+    a, b = [drawing.local_to_page(view, p) for p in _centre_local(view, fp, bend)]
+    angle = math.degrees(math.atan2(b[1] - a[1], b[0] - a[0]))
+    if angle <= -90.0 + 1e-6:
+        angle += 180.0
+    elif angle > 90.0 + 1e-6:
+        angle -= 180.0
+    rad = math.radians(angle)
+    side = NOTE_SIZE * 0.9  # beside the line (to its left as the text reads), not on it
+    x = (a[0] + b[0]) / 2.0 - math.sin(rad) * side
+    y = (a[1] + b[1]) / 2.0 + math.cos(rad) * side
+    return x, y, angle
+
+
+def bend_notes_of(page, view=None):
+    out = []
+    for obj in drawing.annotations(page):
+        if drawing.kind(obj) != NOTE_TYPE:
+            continue
+        if view is None or drawing.same(getattr(obj, "SciForgeView", None), view):
+            out.append(obj)
+    return out
+
+
+def add_bend_note(page, view, index):
+    """Fusion's Bend Note on the bend `index` (identifier order) of the flat pattern view.
+    Raises drawing.DrawingError."""
+    fp = flat_of(view)
+    if fp is None:
+        raise drawing.DrawingError("Click a bend centre line of a flat pattern view.")
+    bends = _ordered(fp)
+    if not 0 <= index < len(bends):
+        raise drawing.DrawingError("That flat pattern has no such bend.")
+    for note in bend_notes_of(page, view):
+        if int(getattr(note, "SciForgeBend", -1)) == index:
+            raise drawing.DrawingError("That bend has its note already.")
+    bend = bends[index]
+    x, y, angle = note_place(view, fp, bend)
+    note = drawing.add_text(page, [note_text(bend)], (x, y), size=NOTE_SIZE)
+    drawing._mark(note, NOTE_TYPE)
+    note.Label = "Bend Note"
+    drawing._add(note, "App::PropertyLink", "SciForgeView", view)
+    drawing._add(note, "App::PropertyInteger", "SciForgeBend", index)
+    note.Rotation = angle
+    return note
+
+
+def _refresh_notes(page):
+    changed = False
+    for note in bend_notes_of(page):
+        view = getattr(note, "SciForgeView", None)
+        fp = flat_of(view) if drawing.alive(view) else None
+        if fp is None:
+            continue
+        bends = _ordered(fp)
+        index = int(getattr(note, "SciForgeBend", -1))
+        if not 0 <= index < len(bends):
+            continue
+        bend = bends[index]
+        text = [note_text(bend)]
+        if list(note.Text) != text:
+            note.Text = text
+            changed = True
+        x, y, angle = note_place(view, fp, bend)
+        old = (note.X.Value, note.Y.Value, note.Rotation.Value)
+        if max(abs(old[0] - x), abs(old[1] - y), abs(old[2] - angle)) > 1e-6:
+            note.X, note.Y, note.Rotation = x, y, angle
+            changed = True
+    return changed
+
+
 def refresh(page):
-    """After the design changed: the bend table's rows and its identifiers follow the flat
-    pattern (another K-factor, a bend moved). True when anything changed."""
+    """After the design changed: the bend table's rows, its identifiers and the bend notes
+    follow the flat pattern (another K-factor, a bend moved). True when anything changed."""
+    changed = _refresh_notes(page)
+    return _refresh_table(page) or changed
+
+
+def _refresh_table(page):
     table = bend_table_of(page)
     if table is None:
         return False
