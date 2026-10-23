@@ -67,5 +67,5 @@ Done: AI: Fillet 5 mm. Its id is 'Fillet1'. Bodies now: Body1: 23785.4 mm3, 60 x
 - Recipe: [revolved knob with grip grooves](sciforge://docs/recipes/revolved-knob.md)
 - Recipe: [stepped shaft with a keyway](sciforge://docs/recipes/shaft-with-keyway.md)
 - Recipe: [cantilever snap-fit hook](sciforge://docs/recipes/snap-fit.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature`, `blend_fillet_edit_radius`, `blend_fillet_presspull_radius`, `blend_fillet_slot_chain`, `blend_fillet_top_face`, `blend_insert_chamfer_before_fillet`, `export_report_design`, `mirror_fillet_feature`, `pattern_edit_keeps_later_fillet`, `picks_fillet_chamfer_kept_after_reopen`
+- Golden models built with its steps (read one with docs_read golden/<id>): `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature`, `blend_fillet_edit_radius`, `blend_fillet_presspull_radius`, `blend_fillet_slot_chain`, `blend_fillet_top_face`, `blend_insert_chamfer_before_fillet`, `export_report_design`, `live_blend_fillet_boss_feature`, `live_blend_fillet_slot_chain`, `live_spline_top_fillet`, `mirror_fillet_feature` and 2 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

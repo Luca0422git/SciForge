@@ -2,7 +2,7 @@
 
 <!-- Generated from the tool catalogue (src/Mod/SciForge/sciforge/ai/catalog) by tools/sciforge/make_ai_docs.py: do not edit by hand. The unit test test_ai_docs_contract.py fails when this file and the catalogue differ. -->
 
-SciForge's golden models are 453 small designs, each a list of design steps with the measurements the finished part must have (volume, area, faces, bounding box), worked out by hand where possible (`expect.source: analytic`, the formula in `expect.note`). The tests rebuild every one in real FreeCAD. They prove what each feature does and show which options exist. Their steps are SciForge's design-step language (what the AI tools build), not tool calls: the table at the end gives the tools that build each op. Read one with docs_read `golden/<id>` (or the resource sciforge://examples/golden/<id>); examples_search finds them by words, op, tool or tag. Models marked (known gap) document something SciForge does not do yet.
+SciForge's golden models are 469 small designs, each a list of design steps with the measurements the finished part must have (volume, area, faces, bounding box), worked out by hand where possible (`expect.source: analytic`, the formula in `expect.note`). The tests rebuild every one in real FreeCAD. They prove what each feature does and show which options exist. Their steps are SciForge's design-step language (what the AI tools build), not tool calls: the table at the end gives the tools that build each op. Read one with docs_read `golden/<id>` (or the resource sciforge://examples/golden/<id>); examples_search finds them by words, op, tool or tag. Models marked (known gap) document something SciForge does not do yet.
 
 ## By feature
 
@@ -105,6 +105,40 @@ Each model is listed under its first tag; its other tags follow it.
 - `sf_torus_inside_cut`: Box 40x40x20 around the origin, a Torus on XY (inner 30, torus 6, Inside) cut into it [torus, cut]
 - `sf_torus_new_body`: Box, then a Torus away from it on XY (inner 20, torus 4, Outside): the dialog makes a new body [torus, new-body, auto-operation]
 - `sf_torus_param_driven`: Torus whose inner diameter is the parameter ring_d (30, then 40), torus diameter 6, Inside [torus, parameters]
+
+### fillet (31)
+
+- `blend_edit_keeps_later_chamfer`: Fillet r2 then chamfer 1 mm; edit the fillet to round one more edge that trims the chamfered edge [chamfer, blend, edit, reference]
+- `blend_fillet_boss_feature`: Fillet dialog: click the boss extrude in the timeline, radius 1 (top and foot rounded) [blend, feature-pick, concave]
+- `blend_fillet_edit_radius`: Fillet two top edges meeting at a corner r2, then edit the fillet to r3 [blend, edit]
+- `blend_fillet_presspull_radius`: Fillet dialog r1 on a vertical edge, then Press Pull on its round face: r5 [blend, press-pull]
+- `blend_fillet_slot_chain`: Slot 30 long, 10 wide, 10 high: Fillet one straight top edge r2, the tangent chain rounds the whole top outline [blend, tangent-chain]
+- `blend_fillet_top_face`: Fillet dialog: click the top face of a 40x30x10 box, radius 2 (its 4 edges round) [blend, face-pick]
+- `blend_insert_chamfer_before_fillet`: Fillet the front edge r2, roll the marker back, insert a chamfer on the right edge before it [chamfer, blend, timeline, rollback, reference]
+- `bracket_inner_fillet`: L bracket with the inside corner filleted r3 [concave, bracket]
+- `fillet2_chord_90_120`: Fillet dialog: Chord Length 3 on a 90 degree edge and a 120 degree edge (one set) [blend, fillet-2]
+- `fillet2_face_and_its_edge_in_two_sets`: Two fillet sets: set 1 the top face r 1, set 2 one of its edges r 2: the edge picked on its own takes set 2's radius [blend, fillet-2]
+- `fillet2_full_round_rib`: Full Round Fillet: the end of a 4 mm rib becomes a half round (r 2) [blend, fillet-2, full_round]
+- `fillet2_presspull_set_radius`: Press Pull on the round of set 2 of a two-set fillet edits set 2's radius (3 -> 2) [blend, fillet-2, presspull]
+- `fillet2_rule_all_edges`: Rule Fillet: All Edges of the extrude, r 1 (every edge of the box) [blend, fillet-2, rule]
+- `fillet2_rule_between_follows_edit`: Rule Fillet: Between the plate and the boss (fillets at its foot, r 1), then the boss made wider: the rule follows [blend, fillet-2, rule]
+- `fillet2_sets_tangent_chain_each`: Fillet dialog: Tangent Chain is a setting of each set: set 1 (top front edge of a slot, chain off) rounds that edge only, set 2 (bottom front edge, chain on) rounds the whole bottom loop [blend, fillet-2]
+- `fillet2_tangent_chain_off`: Fillet dialog: Tangent Chain off, r 1 on one straight top edge of a slot (the arcs stay sharp) [blend, fillet-2]
+- `fillet2_two_sets`: Fillet dialog: two selection sets in one step (r 1 on the front top edge, r 3 on the back top edge), saved and reopened [blend, fillet-2]
+- `fillet2_variable_points`: Fillet dialog: Variable radius on the front top edge, start 1, point 0.5 at 3, end 1.5 [blend, fillet-2]
+- `fillet_all_edges`: Box 40x20x10, all 12 edges filleted r2 [vertex-blend]
+- `fillet_one_vertical_edge`: Box 40x20x10, one vertical edge fillet r5
+- `fillet_top_edges`: Box 40x20x10, the 4 top edges filleted r2 [corner]
+- `live_blend_fillet_boss_feature`: Live picture on the exact result: Fillet dialog: click the boss extrude in the timeline, radius 1 (top and foot rounded) [blend, feature-pick, concave, live-blend]
+- `live_blend_fillet_slot_chain`: Live picture on the exact result: Slot 30 long, 10 wide, 10 high: Fillet one straight top edge r2, the tangent chain rounds the whole top outline [blend, tangent-chain, live-blend]
+- `live_bracket_inner_fillet`: Live picture on the exact result: L bracket with the inside corner filleted r3 [concave, bracket, live-blend]
+- `live_fillet2_chord_90_120`: Live picture on the exact result: Fillet dialog: Chord Length 3 on a 90 degree edge and a 120 degree edge (one set) [blend, fillet-2, live-blend]
+- `live_fillet2_rule_all_edges`: Live picture on the exact result: Rule Fillet: All Edges of the extrude, r 1 (every edge of the box) [blend, fillet-2, rule, live-blend]
+- `live_fillet2_sets_tangent_chain_each`: Live picture on the exact result: Fillet dialog: Tangent Chain is a setting of each set: set 1 (top front edge of a slot, chain off) rounds that edge only, set 2 (bottom front edge, chain on) rounds the whole bottom loop [blend, fillet-2, live-blend]
+- `live_fillet2_tangent_chain_off`: Live picture on the exact result: Fillet dialog: Tangent Chain off, r 1 on one straight top edge of a slot (the arcs stay sharp) [blend, fillet-2, live-blend]
+- `live_fillet2_two_sets`: Live picture on the exact result: Fillet dialog: two selection sets in one step (r 1 on the front top edge, r 3 on the back top edge), saved and reopened [blend, fillet-2, live-blend]
+- `live_fillet2_variable_points`: Live picture on the exact result: Fillet dialog: Variable radius on the front top edge, start 1, point 0.5 at 3, end 1.5 [blend, fillet-2, live-blend]
+- `live_fillet_top_edges`: Live picture on the exact result: Box 40x20x10, the 4 top edges filleted r2 [corner, live-blend]
 
 ### bodies (28)
 
@@ -240,30 +274,6 @@ Each model is listed under its first tag; its other tags follow it.
 - `pp_top_pull`: Press Pull: top face of a box +5
 - `pp_top_push`: Press Pull: top face of a box -4
 
-### fillet (21)
-
-- `blend_edit_keeps_later_chamfer`: Fillet r2 then chamfer 1 mm; edit the fillet to round one more edge that trims the chamfered edge [chamfer, blend, edit, reference]
-- `blend_fillet_boss_feature`: Fillet dialog: click the boss extrude in the timeline, radius 1 (top and foot rounded) [blend, feature-pick, concave]
-- `blend_fillet_edit_radius`: Fillet two top edges meeting at a corner r2, then edit the fillet to r3 [blend, edit]
-- `blend_fillet_presspull_radius`: Fillet dialog r1 on a vertical edge, then Press Pull on its round face: r5 [blend, press-pull]
-- `blend_fillet_slot_chain`: Slot 30 long, 10 wide, 10 high: Fillet one straight top edge r2, the tangent chain rounds the whole top outline [blend, tangent-chain]
-- `blend_fillet_top_face`: Fillet dialog: click the top face of a 40x30x10 box, radius 2 (its 4 edges round) [blend, face-pick]
-- `blend_insert_chamfer_before_fillet`: Fillet the front edge r2, roll the marker back, insert a chamfer on the right edge before it [chamfer, blend, timeline, rollback, reference]
-- `bracket_inner_fillet`: L bracket with the inside corner filleted r3 [concave, bracket]
-- `fillet2_chord_90_120`: Fillet dialog: Chord Length 3 on a 90 degree edge and a 120 degree edge (one set) [blend, fillet-2]
-- `fillet2_face_and_its_edge_in_two_sets`: Two fillet sets: set 1 the top face r 1, set 2 one of its edges r 2: the edge picked on its own takes set 2's radius [blend, fillet-2]
-- `fillet2_full_round_rib`: Full Round Fillet: the end of a 4 mm rib becomes a half round (r 2) [blend, fillet-2, full_round]
-- `fillet2_presspull_set_radius`: Press Pull on the round of set 2 of a two-set fillet edits set 2's radius (3 -> 2) [blend, fillet-2, presspull]
-- `fillet2_rule_all_edges`: Rule Fillet: All Edges of the extrude, r 1 (every edge of the box) [blend, fillet-2, rule]
-- `fillet2_rule_between_follows_edit`: Rule Fillet: Between the plate and the boss (fillets at its foot, r 1), then the boss made wider: the rule follows [blend, fillet-2, rule]
-- `fillet2_sets_tangent_chain_each`: Fillet dialog: Tangent Chain is a setting of each set: set 1 (top front edge of a slot, chain off) rounds that edge only, set 2 (bottom front edge, chain on) rounds the whole bottom loop [blend, fillet-2]
-- `fillet2_tangent_chain_off`: Fillet dialog: Tangent Chain off, r 1 on one straight top edge of a slot (the arcs stay sharp) [blend, fillet-2]
-- `fillet2_two_sets`: Fillet dialog: two selection sets in one step (r 1 on the front top edge, r 3 on the back top edge), saved and reopened [blend, fillet-2]
-- `fillet2_variable_points`: Fillet dialog: Variable radius on the front top edge, start 1, point 0.5 at 3, end 1.5 [blend, fillet-2]
-- `fillet_all_edges`: Box 40x20x10, all 12 edges filleted r2 [vertex-blend]
-- `fillet_one_vertical_edge`: Box 40x20x10, one vertical edge fillet r5
-- `fillet_top_edges`: Box 40x20x10, the 4 top edges filleted r2 [corner]
-
 ### hole (20)
 
 - `hole_blind`: Blind hole d6 depth 6 in a 40x40x10 plate
@@ -384,6 +394,19 @@ Each model is listed under its first tag; its other tags follow it.
 - `direct_split_face_then_press_pull`: Split Face then Press Pull on one half of the split top [modify, split-face, press-pull]
 - `direct_split_face_yz`: Split Face: a box's top split by the YZ origin plane (one more face, same solid) [modify, split-face]
 
+### chamfer (10)
+
+- `blend_chamfer_angle`: Chamfer dialog: Distance and Angle, 3 mm at 30 degrees on the front top edge [blend]
+- `blend_chamfer_top_face`: Chamfer dialog: click the top face of a 40x30x10 box, equal distance 2 [blend, face-pick]
+- `blend_chamfer_two_flip`: Chamfer dialog: Two Distances 2 and 4 on the front top edge, flipped [blend]
+- `chamfer_one_edge`: Box 40x20x10, one top edge chamfer 3
+- `chamfer_top_edges`: Box 40x20x10, the 4 top edges chamfered 2 [corner]
+- `fillet2_chamfer_sets_angle_flip`: Chamfer dialog: two sets in one step, Equal 1 on the front top edge, Distance and Angle 2 mm at 30 degrees flipped on the back top edge [blend, fillet-2]
+- `live_blend_chamfer_angle`: Live picture on the exact result: Chamfer dialog: Distance and Angle, 3 mm at 30 degrees on the front top edge [blend, live-blend]
+- `live_blend_chamfer_top_face`: Live picture on the exact result: Chamfer dialog: click the top face of a 40x30x10 box, equal distance 2 [blend, face-pick, live-blend]
+- `live_blend_chamfer_two_flip`: Live picture on the exact result: Chamfer dialog: Two Distances 2 and 4 on the front top edge, flipped [blend, live-blend]
+- `live_fillet2_chamfer_sets_angle_flip`: Live picture on the exact result: Chamfer dialog: two sets in one step, Equal 1 on the front top edge, Distance and Angle 2 mm at 30 degrees flipped on the back top edge [blend, fillet-2, live-blend]
+
 ### timeline (10)
 
 - `tl_delete_before_fillet`: Box, hole, round on a box edge; delete the hole: the round stays on its edge [delete, fillet]
@@ -483,15 +506,6 @@ Each model is listed under its first tag; its other tags follow it.
 - `sf_web_one_side`: Web: one line 1 from a wall, One Side 3 thick (towards the wall: only 1 of it is new) [fusion-web]
 - `sf_web_one_side_flip`: Web: the same line, One Side 3 thick, edited to Flip Side (away from the wall) [fusion-web]
 
-### chamfer (6)
-
-- `blend_chamfer_angle`: Chamfer dialog: Distance and Angle, 3 mm at 30 degrees on the front top edge [blend]
-- `blend_chamfer_top_face`: Chamfer dialog: click the top face of a 40x30x10 box, equal distance 2 [blend, face-pick]
-- `blend_chamfer_two_flip`: Chamfer dialog: Two Distances 2 and 4 on the front top edge, flipped [blend]
-- `chamfer_one_edge`: Box 40x20x10, one top edge chamfer 3
-- `chamfer_top_edges`: Box 40x20x10, the 4 top edges chamfered 2 [corner]
-- `fillet2_chamfer_sets_angle_flip`: Chamfer dialog: two sets in one step, Equal 1 on the front top edge, Distance and Angle 2 mm at 30 degrees flipped on the back top edge [blend, fillet-2]
-
 ### components (6)
 
 - `comp_move_captured_roll`: A component moved with Capture Position, then the history marker before the move and back [move, timeline]
@@ -544,6 +558,11 @@ Each model is listed under its first tag; its other tags follow it.
 - `inspect_com_materials`: Center of Mass of a steel and an aluminium box (mass-weighted) [center-of-mass, material]
 - `inspect_measure_section`: Box with a round boss: Measure distances / angles and Section Analysis cuts [measure, section]
 
+### blend (2)
+
+- `live_spline_top_chamfer`: Live picture on the exact result: spline wall's top edge, chamfer 1 mm [chamfer, live-blend, free-form]
+- `live_spline_top_fillet`: Live picture on the exact result: spline wall's top edge, fillet 1 mm [fillet, live-blend, free-form]
+
 ### export (2)
 
 - `export_report_design`: Export report: what STEP, IGES, STL, 3MF and OBJ leave out of a design with components, a hidden body and a material [export-report, components]
@@ -584,11 +603,11 @@ Each model is listed under its first tag; its other tags follow it.
 |---|---|---|---|
 | `age` | (a test helper) | 2 | `sf_coil_old_narrow_upgraded`, `sf_pipe_old_upgraded` |
 | `align_bodies` | `align` | 2 | `direct_align_block_on_table`, `direct_align_flip_angle` |
-| `blend_chamfer` | `chamfer` | 5 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `picks_fillet_chamfer_kept_after_reopen` |
+| `blend_chamfer` | `chamfer` | 9 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `live_blend_chamfer_angle` |
 | `blend_edit` | `edit_step` | 1 | `blend_edit_keeps_later_chamfer` |
-| `blend_fillet` | `fillet` | 11 | `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature`, `blend_fillet_edit_radius`, `blend_fillet_presspull_radius`, `blend_fillet_slot_chain` |
+| `blend_fillet` | `fillet` | 14 | `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature`, `blend_fillet_edit_radius`, `blend_fillet_presspull_radius`, `blend_fillet_slot_chain` |
 | `blend_insert` | `fillet`, `chamfer` | 1 | `blend_insert_chamfer_before_fillet` |
-| `blend_radius_expect` | (a test helper) | 1 | `fillet2_variable_points` |
+| `blend_radius_expect` | (a test helper) | 2 | `fillet2_variable_points`, `live_fillet2_variable_points` |
 | `body_material` | `physical_material` | 2 | `export_report_design`, `inspect_com_materials` |
 | `body_tool_edit` | `edit_step` | 4 | `bodies_combine_edit_operation`, `bodies_move_edit`, `bodies_move_two_bodies`, `bodies_split_edit_tool` |
 | `chamfer` | (a test helper) | 2 | `chamfer_one_edge`, `chamfer_top_edges` |
@@ -613,9 +632,9 @@ Each model is listed under its first tag; its other tags follow it.
 | `expect_move_refused` | (a test helper) | 1 | `extrude_multi_move` |
 | `expect_radius` | (a test helper) | 1 | `sf_sweep_guide_surface` |
 | `export_report_expect` | (a test helper) | 2 | `export_report_design`, `export_report_sketch_dxf` |
-| `extrude` | `extrude` | 351 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
-| `fillet` | (a test helper) | 14 | `bodies_delete_face_fillet`, `bracket_inner_fillet`, `edit_fillet_radius`, `edit_width_after_fillet_and_hole`, `fillet_all_edges` |
-| `fillet_sets` | `fillet_sets` | 8 | `fillet2_chamfer_sets_angle_flip`, `fillet2_chord_90_120`, `fillet2_face_and_its_edge_in_two_sets`, `fillet2_presspull_set_radius`, `fillet2_sets_tangent_chain_each` |
+| `extrude` | `extrude` | 367 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
+| `fillet` | (a test helper) | 16 | `bodies_delete_face_fillet`, `bracket_inner_fillet`, `edit_fillet_radius`, `edit_width_after_fillet_and_hole`, `fillet_all_edges` |
+| `fillet_sets` | `fillet_sets` | 14 | `fillet2_chamfer_sets_angle_flip`, `fillet2_chord_90_120`, `fillet2_face_and_its_edge_in_two_sets`, `fillet2_presspull_set_radius`, `fillet2_sets_tangent_chain_each` |
 | `full_round` | `full_round_fillet` | 1 | `fillet2_full_round_rib` |
 | `fusion_mirror` | `mirror` | 8 | `mirror_body_join_face`, `mirror_body_new_body`, `mirror_body_new_body_move_after`, `mirror_faces_hole`, `mirror_features_yz_fusion` |
 | `hide_bodies` | (a test helper) | 1 | `export_report_design` |
@@ -626,6 +645,7 @@ Each model is listed under its first tag; its other tags follow it.
 | `hole_points` | `hole` | 1 | `hole_points_flipped` |
 | `import_report_expect` | (a test helper) | 1 | `export_report_imports` |
 | `interference_expect` | (a test helper) | 1 | `inspect_com_interference` |
+| `live_blend_expect` | (a test helper) | 16 | `live_blend_chamfer_angle`, `live_blend_chamfer_top_face`, `live_blend_chamfer_two_flip`, `live_blend_fillet_boss_feature`, `live_blend_fillet_slot_chain` |
 | `measure_bodies` | (a test helper) | 28 | `bodies_combine_tool_deleted`, `extrude_multi_cut`, `extrude_multi_cut_all`, `extrude_multi_cut_all_far`, `extrude_multi_cut_edit` |
 | `measure_components` | (a test helper) | 3 | `comp_paste_instance_follows`, `comp_paste_new_independent`, `pattern_bodies_in_moved_component` |
 | `measure_expect` | (a test helper) | 2 | `inspect_measure_section`, `inspect_three_points_oblique_hole` |
@@ -644,12 +664,12 @@ Each model is listed under its first tag; its other tags follow it.
 | `press_pull_type` | `press_pull` | 4 | `modify2_presspull_modify_extrude`, `modify2_presspull_modify_offset`, `modify2_presspull_modify_pocket`, `modify2_presspull_new_offset` |
 | `rectangular_pattern` | `rectangular_pattern` | 16 | `mirror_hole_and_its_pattern`, `modify2_pattern_adjust_to_slope`, `modify2_pattern_identical_to_slope`, `modify2_pattern_multibody_cut`, `pattern_bodies_in_moved_component` |
 | `remove_bodies` | `remove_bodies` | 1 | `direct_remove_body` |
-| `reopen` | (a test helper) | 4 | `fillet2_two_sets`, `picks_fillet_chamfer_kept_after_reopen`, `sf_coil_old_narrow_upgraded`, `sf_pipe_old_upgraded` |
+| `reopen` | (a test helper) | 5 | `fillet2_two_sets`, `live_fillet2_two_sets`, `picks_fillet_chamfer_kept_after_reopen`, `sf_coil_old_narrow_upgraded`, `sf_pipe_old_upgraded` |
 | `reopen_check` | (a test helper) | 1 | `extrude_multi_cut_reopen` |
 | `replace_face` | `replace_face` | 3 | `direct_replace_face_edit_down`, `direct_replace_face_up_to_body`, `modify2_replace_face_cone` |
 | `revolve` | (a test helper) | 4 | `groove_ring`, `revolve_cylinder`, `revolve_quarter`, `revolve_washer` |
 | `roll` | `roll_timeline` | 8 | `blend_insert_chamfer_before_fillet`, `comp_move_captured_roll`, `extrude_multi_cut_timeline`, `extrude_multi_move`, `tl_insert_before_fillet` |
-| `rule_fillet` | `rule_fillet` | 2 | `fillet2_rule_all_edges`, `fillet2_rule_between_follows_edit` |
+| `rule_fillet` | `rule_fillet` | 3 | `fillet2_rule_all_edges`, `fillet2_rule_between_follows_edit`, `live_fillet2_rule_all_edges` |
 | `section_expect` | (a test helper) | 1 | `inspect_measure_section` |
 | `sf_coil` | `coil` | 13 | `sf_coil_basic`, `sf_coil_cut_block`, `sf_coil_edit_turns`, `sf_coil_old_narrow_upgraded`, `sf_coil_param_driven` |
 | `sf_curves` | `create_curve_sketch` | 60 | `extrude_thin_arc_center`, `extrude_thin_open_l`, `sf_loft_centerline_ends`, `sf_loft_centerline_torus`, `sf_loft_cone_point` |
@@ -684,7 +704,7 @@ Each model is listed under its first tag; its other tags follow it.
 | `sf_sweep_edit` | `edit_step` | 1 | `sf_sweep_edit_distance` |
 | `shell` | `shell` | 3 | `edit_extrude_then_shell`, `shell_filleted_box`, `shell_open_box` |
 | `silhouette_split` | `silhouette_split` | 3 | `direct_silhouette_body_sphere`, `direct_silhouette_edit_to_faces`, `direct_silhouette_faces_sphere` |
-| `sketch` | `create_sketch` | 389 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
+| `sketch` | `create_sketch` | 405 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
 | `sketch_extras` | (a test helper) | 1 | `export_report_sketch_dxf` |
 | `sketch_polygon` | `sketch_polygon` | 2 | `sketch_inscribed_pentagon`, `sketch_nut_trap_polygon` |
 | `sketch_trim` | `sketch_trim` | 1 | `sketch_trim_union` |

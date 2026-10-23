@@ -67,5 +67,5 @@ Done: AI: Rule fillet. Its id is 'Fillet1'. Bodies now: Body1: 24393.3 mm3, 60 x
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `fillet2_rule_all_edges`, `fillet2_rule_between_follows_edit`
+- Golden models built with its steps (read one with docs_read golden/<id>): `fillet2_rule_all_edges`, `fillet2_rule_between_follows_edit`, `live_fillet2_rule_all_edges`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)
