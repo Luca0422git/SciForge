@@ -125,10 +125,10 @@ ray runs along inside a wall (a rim's top, a hole through a wall), the wall acro
 (nearest face straight through to the opposite one); beside the edge where two walls meet,
 where that way across runs along inside the other wall, no reading (the walls' other points
 show them). Points: 8 on a small face, up to 32 on a big one (about one every 3 wall
-thicknesses). The rays run against the body's display
-triangles, looked up in a grid of cubes (only the triangles near a ray are tested), and each
-hit is then moved onto the exact face it lies on (the triangles cut corners off round faces:
-a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
+thicknesses). The rays run against the body's display triangles (meshed once, on a copy),
+looked up in a grid of cubes (only the triangles near a ray are tested), and each hit is
+then moved onto the exact face it lies on (the triangles cut corners off round faces: a
+1.5 mm boss wall reads 1.5 mm from both of its round sides).
 
 ## Tests
 
@@ -139,11 +139,11 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
     Parameters lists it; timeline Delete takes its groove step too.
   - `plastic2_snap_options` (99): Manual (no point until one is clicked, then a point
     clicked), Hook and Loop, Perpendicular, Extent Type Distance (its arrow dragged: the
-    base grows by its section times the drag) and back to To Next, Automatic, Aligned, Independent (angles typed, a
-    rotation handle dragged), Align To a clicked face and a clicked edge, the other body
-    picked, Hide Other Body, the catch-length refusal, Esc, components (a moved component),
-    Hook Body picked (refused, then Flip), a point added off the part (left out with a
-    note, the same one groove), an empty design.
+    base grows by its section times the drag) and back to To Next, Automatic, Aligned,
+    Independent (angles typed, a rotation handle dragged), Align To a clicked face and a
+    clicked edge, the other body picked, Hide Other Body, the catch-length refusal, Esc,
+    components (a moved component), Hook Body picked (refused, then Flip), a point added off
+    the part (left out with a note, the same one groove), an empty design.
   - `plastic2_lip` (98): lip on a base and groove in its lid (the shoulder shown); drafts;
     height typed and dragged; the edges' body refused as the other body; Swap; Groove; Lip;
     the wall refusal; Face Guide; a direction picked along the rim refused; OK; undo / redo;
@@ -151,14 +151,13 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
     Guide leaning with the cone, exact); walls of different draft refused; a click on the
     rim's flat face (its 4 inside edges, the same lip and groove), Cancel; a lip exactly as
     wide as the wall refused (a hair less fits).
-  - `plastic2_advice` (81): checks, colours, click-to-zoom, Draft unticked, Thickness display,
-    a body left out and back, the pull direction picked and flipped, OK, Undo / Redo (gone,
-    back and drawn), browser eye, reopen from
-    the browser, it follows the design (and waits while hidden), save / reopen, the empty
-    bodies refusal, an empty design, a round boss (its 1.5 mm wall read exactly from both
-    round faces, its hole no undercut), a box rounded 4 mm outside with 2 mm walls (the thin
-    top of its walls and its 1.17 mm bottom corners found, the walls 2 mm elsewhere, no false
-    alarm at the corners).
+  - `plastic2_advice` (81): checks, colours, click-to-zoom, Draft unticked, Thickness
+    display, a body left out and back, the pull direction picked and flipped, OK, Undo /
+    Redo (gone, back and drawn), browser eye, reopen from the browser, it follows the design
+    (and waits while hidden), save / reopen, the empty bodies refusal, an empty design, a
+    round boss (its 1.5 mm wall read exactly from both round faces, its hole no undercut), a
+    box rounded 4 mm outside with 2 mm walls (the thin top of its walls and its 1.17 mm
+    bottom corners found, the walls 2 mm elsewhere, no false alarm at the corners).
   - `ribbon_sweep` with `SWEEP_TABS=plastic` (112): every PLASTIC command opens with no
     pop-up or error.
 - Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 19):
