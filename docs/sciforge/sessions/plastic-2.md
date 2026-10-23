@@ -144,17 +144,24 @@ two moved and turned components give the same volumes as unmoved (lip +188, groo
 Fit's sketch is gone"; a lip on the outside edges puts the reveal inside (196 mm3), as the
 help's tip implies.
 
-Fixed (details in the parity doc's QA section): Hide Other Body ticked first; Hook Body in
-an edit refused with the reason; a note when no body is in front of the catches (a sketch
-facing away from the hook body); Manual points kept by the sketch's geometry ids too (an
-earlier point deleted no longer moves the snap fit); Design Advice's Display change and OK
-no longer check the design again, and showing it again recomputes only it; its default
-pull is each body's component's Z (research 2.11), not the design's; it checks again after
-an Undo / Redo that brings back bodies other than those it last checked (a change made
-while it was hidden, checked when shown, then undone left the results of the undone
-design). New scenario
-`plastic2_qa`; before the fixes it failed exactly on those checks (5 of them on the
-builder's code).
+Fixed (details in the parity doc's QA section):
+
+- Snap Fit: Hide Other Body ticked before the sketch is picked; Hook Body in an edit
+  refused with the reason; a note when no body is in front of the catches (a sketch facing
+  away from the hook body); a note when a hook runs into the other body (a beam through
+  the floor, a catch in a too-thick panel, a point on a wall's top); Manual points kept by
+  the sketch's geometry ids too (deleting an earlier point no longer moves the snap fit).
+- Design Advice: a Display change and OK no longer check the design again; shown again it
+  recomputes only itself; its default pull is each body's component's Z (research 2.11);
+  it checks again after an Undo / Redo that brings back bodies other than those it last
+  checked (a change made while it was hidden, checked when shown, then undone, left the
+  results of the undone design).
+
+New scenario `plastic2_qa`. Run on the builder's code it failed on exactly the 5 checks of
+the first fixes (Hide Other Body, Hook Body in an edit, the no-body note, the Display
+change, OK). Also checked headless: resizing the enclosure's boxes after a Lip keeps it on
+the same edges (lip +208, groove -252.164, exact). A trial merge into `develop` (with
+plastic-1) is clean; the five `plastic2_*` scenarios and `plastic_rules` pass on it.
 
 FreeCAD facts found:
 
@@ -168,11 +175,14 @@ FreeCAD facts found:
   it (here: an analysis checked when shown again) keeps its new values after Undo, and is
   not touched, so nothing recomputes it. A touch + `doc.recompute([obj])` after the Undo
   keeps the Redo.
+- In xvfb, a browser eye click right after closing a design (whose body of the same name
+  was hidden) and making a new one selected the row instead of hiding the body: the QA
+  scenario hides the lid in its setup there.
 - A recompute error in a scenario prints "Failed to recompute" / a traceback, which the
   harness and run_tests.sh count as failures: test a feature's error state headlessly.
 
 Left (not fixed): the Lip's edges are kept by name on the step before it (FreeCAD 1.1's
 element map follows most changes, but an edit that renumbers the rim's edges can still
-move or refuse the lip); a hook that runs through another body (no groove found) is
-noted but not refused.
+move or refuse the lip); a hook that runs into another body is noted, not refused (as
+the research's warning row).
 

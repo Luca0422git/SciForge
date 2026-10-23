@@ -26,7 +26,9 @@ turned 90 degrees about X: its pull is the component's Z (the design's -Y), so i
 sides lack draft; Esc leaves nothing.
 
 Manual points: three points, the second picked; the first deleted from the sketch (the
-indices shift): the snap fit stays on its point, and its edit shows it.
+indices shift): the snap fit stays on its point, and its edit shows it. Beam Length 20 in
+that edit (through the base's floor): the dialog says the hook runs into the base; 12: no
+more; Esc.
 """
 
 import FreeCAD as App
@@ -374,6 +376,29 @@ def ids_edit_reads():
 def ids_esc():
     h.check("Esc closed it", ps.snap_panel() is None)
     h.check("Esc: the same hook and groove", same(bodies_volumes(), s["ids_ok"], 1e-7))
+    h.check("double-click opens the edit again", ps.double_click_timeline("Snap Fit 1"))
+
+
+def too_long():
+    """A beam longer than the room it has (20 mm from the parting plane: through the base's
+    2 mm floor): the dialog says so."""
+    p = ps.snap_panel()
+    if not h.check("the edit dialog", p is not None and p.editing):
+        return
+    ps.type_field(p, "length", "20")
+    ps.settle(ps.snap_panel)
+    text = ps.message(p)
+    h.check("Beam Length 20: the hook runs into the base", "runs into" in text, text)
+    ps.type_field(p, "length", "12")
+    ps.settle(ps.snap_panel)
+    text = ps.message(p)
+    h.check("Beam Length 12: room enough", "runs into" not in text, text)
+    ps.esc()
+
+
+def too_long_esc():
+    h.check("Esc closed it", ps.snap_panel() is None)
+    h.check("Esc: the same hook and groove", same(bodies_volumes(), s["ids_ok"], 1e-7))
 
 
 # -- Lip -----------------------------------------------------------------------------------------
@@ -710,6 +735,8 @@ h.run(
         ids_point_deleted,
         ids_edit_reads,
         ids_esc,
+        too_long,
+        too_long_esc,
         lip_design,
         open_lip,
         click_edge(0),

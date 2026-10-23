@@ -17,8 +17,8 @@ Code (`src/Mod/SciForge/sciforge/`):
 | INSPECT > Design Advice | `plastic_advice_core.py` | `plastic_advice.py` | `plastic_advice_ui.py` |
 
 Status: **built, first pass** (every command, its options, live preview, arrows with value
-boxes, one timeline step, edit, undo / redo, save / reopen, refusals with the reason).
-No core patch.
+boxes, one timeline step, edit, undo / redo, save / reopen, refusals with the reason);
+**QA pass done** (its fixes under "QA pass" below). No core patch.
 
 ## Behaviour spec (what Fusion does), with sources
 
@@ -160,13 +160,14 @@ then moved onto the exact face it lies on (the triangles cut corners off round f
     bottom corners found, the walls 2 mm elsewhere, no false alarm at the corners).
   - `ribbon_sweep` with `SWEEP_TABS=plastic` (112): every PLASTIC command opens with no
     pop-up or error.
-  - `plastic2_qa` (added by QA): Hide Other Body ticked before the sketch is picked (the
+  - `plastic2_qa` (167, added by QA): Hide Other Body ticked before the sketch is picked (the
     base hidden once found, shown again on OK); an edit from the timeline switched to Hook
     and Loop then Cancel (the groove back exactly); the Hook Body box in an edit refused
     with the reason; an edit OK'd, Undo / Redo of the edit; Ctrl+Z inside an edit (the
     dialog cancelled, the design as before it); a sketch with no points; a sketch facing
     away from the hook body (the note, then Flip finds the groove body); a Manual point
-    followed after an earlier point is deleted from the sketch (the edit shows it too); a
+    followed after an earlier point is deleted from the sketch (the edit shows it too);
+    Beam Length 20 through the floor noted, 12 not; a
     Lip edit switched to Groove then Cancel; a Lip edit OK'd, Undo / Redo; Design Advice:
     the Display switched without checking the design again, OK without checking again,
     Esc on a second one; hidden, the Lip edited, shown, Undo and Redo (it checks the bodies
@@ -195,6 +196,12 @@ Fixed:
 - **No word when no body lies in front of the catches** (e.g. a sketch on the hook body's
   own face: its normal points away from that body, so the hooks went on the other body
   and no groove was made). The dialog now notes it and points to the Body box and Flip.
+- **A hook running into the other body was not mentioned** (research 2.4, G: "beam longer
+  than the available distance: warning"): a beam through the floor, a catch inside a
+  panel thicker than its reach, a point on top of a wall. The groove / loop step now
+  notes "the hook of snap fit N runs into this body: shorten Beam Length or move the
+  point" when a beam or catch overlaps that body (checked headless: through a 2 mm floor,
+  a loop's floor, a too-thick panel, a point on the rim; none for the normal cases).
 - **Manual points followed the wrong point after a sketch edit**: the picked points were
   kept by geometry index only, so deleting an earlier point of the sketch moved the snap
   fit to another point without a word. They are now also kept by the sketch's own

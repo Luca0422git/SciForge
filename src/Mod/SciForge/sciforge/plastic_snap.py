@@ -675,13 +675,13 @@ class SnapGrooveFollower(modify_bodies._Follower):
 
 def other_side(lead, options, shape):
     """(the other body's solid with the grooves cut / loops joined, design coordinates; note)."""
-    placed = frames(lead.Sketch, options, indices_of(lead))
+    placed = list(enumerate(frames(lead.Sketch, options, indices_of(lead))))
     if options["hook"]:
         skipped = skipped_of(lead)
-        placed = [frame for k, frame in enumerate(placed) if k not in skipped]
+        placed = [(k, frame) for k, frame in placed if k not in skipped]
     result = shape
     missed = 0
-    for origin, axes in placed:
+    for _k, (origin, axes) in placed:
         if options["type"] == "loop":
             reach = loop_reach(origin, axes, options, shape)
             if reach is None:
@@ -705,7 +705,31 @@ def other_side(lead, options, shape):
             len(placed),
             "stand the loop on" if options["type"] == "loop" else "cut the groove in",
         )
+    clashes = hooks_into(placed, options, result) if options["hook"] else []
+    if clashes:
+        # research 2.4 (G): a beam longer than the room it has is warned about
+        note = (note + "; " if note else "") + (
+            "the hook of snap fit %s runs into this body: shorten Beam Length or move the "
+            "point" % ", ".join(str(k + 1) for k in clashes)
+        )
     return result, note
+
+
+CLASH = 1e-3  # mm3: less is the two touching
+
+
+def hooks_into(placed, options, shape):
+    """[k] of the snap fits whose beam or catch overlaps `shape` (the other body with its
+    grooves / loops): a beam longer than the room it has, a panel thicker than the catch's
+    reach, a point on top of a wall."""
+    out = []
+    for k, (origin, axes) in placed:
+        try:
+            if hook_solid(origin, axes, options, 0.0, 0.0).common(shape).Volume > CLASH:
+                out.append(k)
+        except Exception:
+            continue
+    return out
 
 
 def _before(lead, body):
