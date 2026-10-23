@@ -9,7 +9,6 @@ timeline and Esc, save and reopen."""
 
 import math
 import os
-import re
 import tempfile
 
 import FreeCAD as App

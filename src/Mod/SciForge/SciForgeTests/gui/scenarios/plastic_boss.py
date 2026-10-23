@@ -17,7 +17,6 @@ import FreeCADGui as Gui
 
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import plastic_steps as ps
-from SciForgeTests.gui import versions_input as vi
 
 V = App.Vector
 s = {}

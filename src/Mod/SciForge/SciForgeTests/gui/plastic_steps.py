@@ -12,8 +12,8 @@ on the parting plane z = 20:
 
   thread side (enclosure, Side 2): a frustum r 3.75 at the tip (z 19.95, clearance 0.05)
   widening by tan 1 deg down to the floor (z 2), its tip carried on 0.9 into the lid's
-  recess (r 3.75, base r 3.75 + 0.9 tan 1), a 1 mm root fillet, minus the pilot hole r 1.2 from the spigot's top
-  down to 1 mm above the outside (floor 1 mm);
+  recess (r 3.75, base r 3.75 + 0.9 tan 1), a 1 mm root fillet, minus the pilot hole r 1.2
+  from the spigot's top down to 1 mm above the outside (floor 1 mm);
   head side (lid, Side 1): a frustum r 5 from z 20.05 up to the lid's inside (z 28), a 1 mm
   root fillet, minus the alignment recess r 3.85 (the mate's 7.5 + 2 x 0.1 clearance,
   drafted 1 deg) 1 mm deep, the clearance hole
