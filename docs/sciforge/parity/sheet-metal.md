@@ -102,14 +102,16 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
   `sheetmetal_components` (New Component, Extrude cut through sheet metal, Join), and
   `ribbon_sweep` with `SWEEP_TABS=sheet_metal`.
 - QA (2026-10-23, branch `sf/sm-forming-qa`): scenario `sheetmetal_qa` (an empty design:
-  Flange waits, OK refused, Esc adds no undo step, Sheet Metal Rules visit with Esc in the
-  editor; an edge picked before Flange; Cancel; a mitred corner saved, closed and reopened
-  with its proxies, view providers and rule link; edit from the timeline and Cancel; a rule
-  edit after the reopen with Undo / Redo; a later Flange on the two edges next to the earlier
-  ones; a component's active rule cannot be deleted; New Component with another rule; an
-  Outside mitre that closes its corner), golden models
-  `sheetmetal_edge_flange_adjacent_later` and `sheetmetal_edge_flange_miter_outside` (volumes
-  by hand).
+  Flange waits, OK refused, Esc adds no undo step, a Sheet Metal Rules visit with Esc in the
+  editor and units chosen for a new rule; an edge picked before Flange; Cancel; a mitred
+  corner saved, closed and reopened with its proxies, view providers and rule link; edit from
+  the timeline and Cancel; a rule edit after the reopen with Undo / Redo; a later Flange on
+  the two edges next to the earlier ones; editing the earlier flange refuses a later step's
+  edge; a component's active rule cannot be deleted; New Component with a rule tried and
+  another chosen; an Outside mitre that closes its corner; To Object up to the part's own
+  wall; a Join standing on the sheet refused; To Object then Distance again), the contour
+  scenario's edit checks its options, golden models `sheetmetal_edge_flange_adjacent_later`
+  and `sheetmetal_edge_flange_miter_outside` (volumes by hand).
 
 ## Known gaps
 

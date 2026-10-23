@@ -1,24 +1,27 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """SHEET METAL paths the builder's scenarios left out (QA, wave 6), only real input.
 
-An empty design: Flange waits, OK is refused with what to pick, Esc leaves the design empty
-and adds no undo step; Sheet Metal Rules on the empty design lists Steel (mm) as active, Edit
-then Esc goes back to the lists, Esc closes, nothing is added. Then a 50 x 30 plate (base
-flange), an edge preselected before Flange starts an edge flange on it, Cancel leaves the
-plate as it was. Two edges that meet, Height 15: the mitred corner; OK. Save, close, reopen:
-the steps and their view providers come back, the same solid after a recompute; double-click
-"Flange 2": its two edges and Height 15; Height 20 changes the part, Cancel puts it back
-with no undo step. Sheet Metal Rules after the reopen: Steel (mm) Thickness 2 recomputes the
-whole part (2 mm, still one valid solid); Undo takes it back to 1 mm, Redo to 2 mm. A later
-Flange on the two plate edges next to the earlier flanges (their side faces run on into the
-flanges' end faces) is taken. New Component, Type Sheet Metal with Aluminum (mm): deleting
-that rule in Sheet Metal Rules is refused (it is the component's active rule). A second
-design: a plate made as New Component with the Rule Copper (mm), then Aluminum (mm), chosen
-after the pick: the component's active rule follows, Copper (mm) is not left in the design;
-two edges with Bend Position Outside: the walls run on to the
-mitre and close the corner up to the gap. A third design: a plate, then a sketch standing on
-it (XZ): Flange Join is refused with the reason (a corner between two sheets needs a bend),
-OK keeps the dialog open, Esc leaves the plate as it was.
+1. An empty design: Flange waits, OK is refused with what to pick, Esc leaves the design
+   empty and adds no undo step. Sheet Metal Rules on the empty design: Steel (mm) active;
+   Edit shows only Save / Cancel, Esc goes back to the lists; New, units "in": the plain
+   lengths are converted, expressions stay; Cancel; Esc closes; nothing added.
+2. A 50 x 30 plate. An edge picked before Flange starts an edge flange on it; Cancel leaves
+   the plate. Two edges that meet, Height 15: the mitred corner; OK. Save, close, reopen:
+   steps, view providers and the rule link come back, the same solid after a recompute.
+   Double-click "Flange 2": its two edges, Height 15; Height 20, Cancel: as it was, no undo
+   step. Sheet Metal Rules: Steel (mm) Thickness 2 rebuilds the whole part; Undo, Redo. A
+   later Flange on the two plate edges next to the earlier flanges is taken (their side faces
+   run on into the flanges' end faces). Editing Flange 2 again: an edge of the later flange
+   is refused ("made by a later step"); Esc. New Component (Sheet Metal, Aluminum (mm)):
+   deleting that rule is refused (the component's active rule).
+3. A second design: a plate made as New Component, Rule Copper (mm) then Aluminum (mm)
+   after the pick: the component's rule follows, Copper (mm) is not left in the design. Two
+   edges with Bend Position Outside: the override fields start at the body's rule, the walls
+   run on to the mitre and close the corner up to the gap. To Object up to the top of the
+   part's own wall (and a face picked on the preview maps to the same plane before it).
+4. A third design: a plate, then a sketch standing on it (XZ): Flange Join is refused with
+   the reason (a corner between two sheets needs a bend), OK keeps the dialog open, Esc
+   leaves the plate. To Object chosen, then Distance again: the next click is an edge again.
 """
 
 import os
