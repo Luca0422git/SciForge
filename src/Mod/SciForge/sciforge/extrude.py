@@ -1904,7 +1904,10 @@ def _structure(feature, profiles, options, participants=None):
             target = None  # always a new component with a new body in it
         elif feature is not None and owner_body(feature) is src and not _has_solid(src, feature):
             target = src  # the first solid of a body is already a new body
-        elif feature is None and not _has_solid(src):
+        elif not _has_solid(src) and (feature is None or owner_body(feature) is not src):
+            # an empty sketch body (a sketch in a new component) holds the new solid; also
+            # when the dialog's automatic Join had put the preview in a touched body of
+            # another component first (else that empty body stayed beside a second one)
             target = src
         else:
             target = None  # a new body

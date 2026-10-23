@@ -1928,7 +1928,10 @@ def _place_followers(doc, places):
             body.insertObject(obj, lead, True)
 
 
-REBASE_PROPS = ("Base", "Faces")  # fillet/chamfer/draft/shell edges; Press Pull faces
+# fillet/chamfer/draft/shell edges; Press Pull faces; the edges a Lip, Hem or Corner Round
+# picked on its base (journey_plastic: deleting the Snap Fit before a Lip deleted the step
+# its edges were on, and the Lip failed)
+REBASE_PROPS = ("Base", "Faces", "Edges")
 
 
 def _rebase_geometry(doc, tl, p, follower_bodies=()):
@@ -2111,6 +2114,10 @@ def repair_references(doc):
             continue
         base = getattr(obj, "BaseFeature", None)
         ref = _ref_value(obj)
+        if ref is None and prop in obj.PropertiesList and not getattr(obj, prop, None):
+            # the step its edges/faces were on was deleted and FreeCAD emptied the link
+            # (a Lip's Edges on a deleted Snap Fit's groove step): found again on its base
+            ref = (prop, None, [])
         if base is None or ref is None or ref[0] != prop:
             continue
         _prop, linked, subs = ref

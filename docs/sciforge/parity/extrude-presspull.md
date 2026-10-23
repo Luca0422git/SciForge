@@ -275,3 +275,8 @@ sketches, a profile in another body) a hidden SubShapeBinder carries it into the
   the open sketch than FreeCAD makes areas (a pick extrudes the smallest area around it).
 - Ctrl+Z / Ctrl+Y are not bound while SciForge is on (FreeCAD only honours them with its menu bar
   visible); the application-bar Undo/Redo buttons work.
+- Journey pass (sf/journey-pl): New Body chosen after the automatic Join had put the preview
+  into a touched body of another component made a second body and left the sketch's own empty
+  body beside it; the empty sketch body takes the new solid now. Open question: a Join
+  touching only another component's body joins into it (documented above); Fusion keeps a
+  feature's new bodies in the active component (G), where New Body may be the better guess.

@@ -98,6 +98,22 @@ def _depth_range(shape, origin, inward):
     return lo, hi
 
 
+def _first_layer(piece, origin, inward):
+    """The material the profile meets first going in. Behind a shelled box's near wall the
+    profile's shadow also crosses the far wall; that wall's inside face looks out towards the
+    plane like the outer skin, and the rest's walls then ran through the whole inside of the
+    part (journey_plastic: a rest on the front wall filled the box up to the back wall)."""
+    import Part
+
+    solids = list(piece.Solids)
+    if len(solids) < 2:
+        return piece
+    ranges = sorted((_depth_range(s, origin, inward), i) for i, s in enumerate(solids))
+    first_hi = ranges[0][0][1]
+    kept = [solids[i] for (lo, _hi), i in ranges if lo <= first_hi + 1e-6]
+    return Part.makeCompound(kept)
+
+
 def _face_normal(face):
     u0, u1, v0, v1 = face.ParameterRange
     return face.normalAt(0.5 * (u0 + u1), 0.5 * (v0 + v1))
@@ -140,6 +156,7 @@ def rest_shape(base, faces, origin, normal, options):
             "The profile does not lie over the body: draw it on a plane that cuts the part "
             "(or flip the side)."
         )
+    piece = _first_layer(piece, origin, inward)
     # the old outer skin (faces looking out) and inner skin (faces looking in) under it
     outer_depth = None
     inner = []

@@ -183,3 +183,9 @@ Ctrl+Z / Ctrl+Y, the browser's "Sketch 1" / "Sketch 2", Enter renames nothing, p
   FreeCAD loses the names of its edges for the steps after it ("?Edge4", "missing element
   reference", printed while the Pad recomputes): `sciforge/picks.py` finds them again in the
   same recompute (`slotRecomputedObject` of the Pad comes before the later steps run).
+
+- Journey pass (sf/journey-pl, 2026-10-23): Delete keeps the edges a Lip, Hem or Corner Round
+  picked on its base (`Edges` is in the remembered references), also when FreeCAD emptied the
+  link because that base step was the deleted one (a Snap Fit's groove step under a Lip).
+  Open: a plane or sketch made on a face of the last step counts as depending on that step,
+  so Suppress takes it (and what is built on it) along even when the face was made earlier.
