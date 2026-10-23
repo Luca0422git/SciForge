@@ -11,9 +11,11 @@ Path F (Offset Sharp where OpenCASCADE cannot close the corners): SURFACE > Offs
         came back "valid" with faces 2e7 mm across); OK waits. Rounded Offset: 2981.67
         (measured), the offset top 2 above the box. OK: "Offset 1".
 Path K (Untrim Keep Copy, save / reopen, delete): SURFACE > Untrim, Manual, click the hole's
-        edge, Keep Copy, OK. (Saved and reopened below: the closed patch (900) and the copy
+        edge, Keep Copy, OK; Change Parameters lists no Extend Distance (Extend is off; the
+        Offset lists its Distance). (Saved and reopened below: the closed patch (900) and the copy
         (900 - 25 pi) are back and fine.) Delete "Untrim 1" from the timeline: the copy body
-        goes and the hole is back; Undo: both back.
+        goes and the hole is back; Undo: both back. Double-click Untrim 1: Keep Copy read
+        back; clear it: the copy goes; Cancel: the copy is back, the patch still closed.
 Path I (Isoparametric Curve: an empty click, Esc, undo / redo, save / reopen): a sketch on XZ;
         Isoparametric Curve; a click on empty space: the panel asks for a face, nothing is
         kept; Esc: the tool ends, nothing kept. Again: click the cylinder, Esc: nothing kept.
@@ -182,6 +184,8 @@ def offset_done():
     titles = st.timeline_titles()
     h.check("Offset 1 in the timeline", "Offset 1" in titles, titles)
     s["offset_label"] = s["offset"].Label if s.get("offset") is not None else ""
+    rows = _parameter_rows("SurfaceOffset")
+    h.check("Change Parameters: the Offset's Distance (2)", rows == [("Distance", 2.0)], rows)
     # frame the patch (from the whole design its hole's edge is a few pixels from the face)
     Gui.Selection.clearSelection()
     Gui.Selection.addSelection(doc().Name, s["patch"].Tip.Name)
@@ -231,7 +235,21 @@ def untrim_done():
     copy = by_label(s.get("copy_label", "?"))
     h.check("the copy (900 - 25 pi)", copy is not None and st.near(st.area(copy), HOLED, 1e-6))
     s["patch_label"] = s["patch"].Label
+    rows = _parameter_rows("Untrim")
+    h.check("Change Parameters: no Extend Distance while Extend is off", rows == [], rows)
     h.fit()
+
+
+def _parameter_rows(kind):
+    """[(label, value)] Change Parameters lists for the steps of SciForgeType `kind`."""
+    from sciforge import parameters
+
+    names = [o.Name for o in doc().Objects if getattr(o, "SciForgeType", "") == kind]
+    return [
+        (r["label"], round(r["value"], 6))
+        for r in parameters.model_parameters(doc())
+        if r["object"] in names
+    ]
 
 
 # -- Isoparametric Curve ----------------------------------------------------------------------
@@ -431,6 +449,32 @@ def delete_undone():
     h.check("Undo: the patch closed again", st.near(st.area(patch), 900.0, 1e-6), st.area(patch))
     h.check("and the copy back", copy is not None and st.near(st.area(copy), HOLED, 1e-6))
     tl.no_popups("the Untrim delete and its undo")
+    h.check("edited from the timeline", st.double_click_timeline("Untrim 1"))
+
+
+def edit_keep_copy_off():
+    st.settle()
+    p = st.panel()
+    h.check("Untrim dialog for editing", p is not None and p.kind == "untrim" and p.editing)
+    if p is None:
+        return
+    h.check("Keep Copy read back after the reopen", p.rows["keep_copy"][0].isChecked())
+    st.toggle_check("keep_copy")
+
+
+def copy_gone_in_preview():
+    st.settle()
+    h.check("Keep Copy off: the copy goes", by_label(s.get("copy_label", "?")) is None)
+    st.cancel()
+
+
+def cancel_brings_copy_back():
+    st.settle()
+    h.check("dialog closed", st.panel() is None)
+    copy = by_label(s.get("copy_label", "?"))
+    h.check("Cancel: the copy is back", copy is not None and st.near(st.area(copy), HOLED, 1e-6))
+    patch = by_label(s["patch_label"])
+    h.check("and the patch still closed", st.near(st.area(patch), 900.0, 1e-6), st.area(patch))
 
 
 h.run(
@@ -470,5 +514,8 @@ h.run(
         iso_follows,
         untrim_deleted,
         delete_undone,
+        edit_keep_copy_off,
+        copy_gone_in_preview,
+        cancel_brings_copy_back,
     ],
 )
