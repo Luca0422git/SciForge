@@ -118,12 +118,16 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   30, its partial flange with straight reliefs, its contour L, its mitred tray (bbox), the
   same edge flange with a K 0.33 rule (59.08916); sm-more's Bend (the flat is the 100 x 40
   plate it was bent from), its open hem (BA = pi (0.25 + 0.44)) and flat hem (R 0.005);
-  two with a hand-derived box and a measured volume: sm-more's Corner Closure (Tear) laid
+  three with a hand-derived box and a measured volume: sm-more's Corner Closure (Tear) laid
   flat, 119.26195 x 79.26195 (walls 21 - (R + T) = 19), no rule relief at the closed
-  corner; the tray with the Flange's Square 3 mm corner relief override.
+  corner; the same with its Round Tangent relief (sliver edges and a slit left by that
+  boolean); the tray with the Flange's Square 3 mm corner relief override.
 - Every sm-forming / sm-more golden part was also laid flat in a probe: all flatten
-  (rolled, teardrop, rope and double hems, Join by Bend, Corner Closure, mitres) except the
-  lofted flanges (curved two ways: refused) and parts whose "lowest +Z face" is an edge face.
+  (rolled, teardrop, rope and double hems, Join by Bend, every Corner Closure, mitres,
+  sm-more's tab bends) except the lofted flanges (sharp folds or curved two ways: refused),
+  sm-forming's flanges at an inside corner of an L-shaped plate (the two flanges lie over
+  each other when laid flat: refused as an overlap) and parts whose largest +Z face is an
+  edge face.
 - Scenarios (real clicks): `flatpattern_l_bracket`, `flatpattern_u_channel_dxf`,
   `flatpattern_unfold_refold`, `flatpattern_rip_convert`, `flatpattern_component_rip`,
   `flatpattern_refusals`, `flatpattern_environment`, `flatpattern_flange`,
@@ -160,6 +164,10 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   by a Corner Closure when both its picked flange ends lie within 2 (R + T) + 2 mm of where
   the two bend axes meet. Bend reliefs are whatever the folded part has (sm-forming's
   flanges cut them).
+- **Flanges at an inside corner** (sm-forming's L-shaped plate with flanges on both edges
+  of the inside corner) lie over each other when laid flat: the flat pattern is refused
+  ("the flat shape overlaps itself"); Fusion's handling is not documented. No single flat
+  sheet makes that part: both flanges need the same square of sheet next to the corner.
 - **sm-more's Brake Form lofted flange** meets in sharp folds (no bend radius): the flat
   pattern refuses it naming a sharp edge; with bends of the rule's radius between its facets
   it would lay flat. Die Form (curved two ways) is refused as not developable.

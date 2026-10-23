@@ -54,7 +54,7 @@ Rip (a face, along an edge, or between two points).
   closure's own relief is in the folded part already). Corners are matched in the folded
   part, where the two bend axes meet.
 - Golden ops `sf_sm_convert`, `sf_flat_pattern` (measures the flat), `sf_unfold`, `sf_refold`,
-  `sf_rip`; 16 golden models `sm_flat_*` (6 on sm-forming's Flange, 4 on sm-more's Bend,
+  `sf_rip`; 17 golden models `sm_flat_*` (6 on sm-forming's Flange, 5 on sm-more's Bend,
   Hem and Corner Closure); unit tests `test_flatpattern_core.py`; 11 scenarios
   `flatpattern_*`.
 
@@ -90,6 +90,12 @@ Rip (a face, along an edge, or between two points).
 - A TechDraw balloon's OriginX / OriginY are offsets in the view's own (unscaled) units, and
   `getVisibleEdges(True)` is in another frame (y differs): compute anchors from the model with
   `drawing_core.to_view`.
+- A boolean (sm-more's Corner Closure with a Tangent relief) can leave a face with an open
+  "slit" wire (and `face.OuterWire` may be that slit), edges 0.0002 mm long, and curve ends a
+  tolerance away from their vertices. Rebuilding such a face from mapped wires failed with
+  "Wire is not closed" / "Wires are not coplanar": the unfolder now starts and ends every
+  mapped edge at the vertices, maps slivers as lines, leaves open wires out and projects a
+  developed bend onto its plane.
 - A FeaturePython's `PropertyLength` reads back as a Quantity: `radius + fp.Thickness` fails
   (`float()` it first).
 - The scratchpad folder is shared with other sessions: another builder overwrote probe files
@@ -106,4 +112,5 @@ laid flat); material added across a bend in the flat state is refused at the Ref
 FLAT PATTERN tab has no sketch / construction tools; no STEP export of the flat; corner
 reliefs are on the flat only (Round / Square; no weld shapes); bevelled mitres are
 laid flat by the stationary side's outline; sm-more's Brake Form lofted flange has sharp
-folds (no bend radius) and is refused naming the sharp edge.
+folds (no bend radius) and is refused naming the sharp edge; flanges at an inside corner
+overlap when laid flat and are refused.
