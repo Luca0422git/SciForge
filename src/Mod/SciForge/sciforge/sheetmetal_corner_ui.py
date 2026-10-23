@@ -19,6 +19,17 @@ ALIGN_ITEMS = [
     ("Symmetric Gap", "symmetric", True, "Both flanges close to the corner, the gap between"),
     ("Overlap", "overlap", True, "One flange runs over the other's end"),
 ]
+NOT_YET = "Not available yet in SciForge (docs/sciforge/parity/sheet-metal-more.md)"
+PLACEMENT_ITEMS = [
+    ("Intersection", "intersection", True, "Centred where the two bends' centre lines cross"),
+    ("Tangent", "tangent", False, NOT_YET),
+    ("Vertex", "vertex", False, NOT_YET),
+]
+TRANSITION_ITEMS = [
+    ("Trim To Bend", "trim_to_bend", True, "The bends end where they are at the corner"),
+    ("Smooth", "smooth", False, NOT_YET),
+    ("Straight Line", "straight_line", False, NOT_YET),
+]
 RELIEF_ITEMS = [
     ("Trim To Bend", "trim_to_bend", True, "The bends end where they are; the corner stays open"),
     ("Round", "round", True, "A round hole where the two bends meet (Size: its diameter)"),
@@ -60,7 +71,14 @@ class CornerPanel(smp.SmPanel):
             "Close in line with the flanges (off: not available yet)",
         )
         self.fields["extend_aligned"].setEnabled(False)
+        self.add_combo(
+            "transition",
+            "Bend Transition",
+            TRANSITION_ITEMS,
+            "How the bend zones end at the corner",
+        )
         self.add_combo("relief", "Relief Shape", RELIEF_ITEMS, "Corner relief")
+        self.add_combo("placement", "Relief Placement", PLACEMENT_ITEMS, "Where the relief sits")
         self.add_check("use_rule_relief", "Rule Relief Size", "Use the rule's 2-bend relief size")
         self.add_length("relief_value", "Relief Size", "Round: diameter, Square: side")
         self.fields_changed("alignment")
@@ -71,6 +89,7 @@ class CornerPanel(smp.SmPanel):
         self.show_row("flip_overlap", overlap)
         self.show_row("gap_value", not self.value("use_rule_gap"))
         cut = self.value("relief") in ("round", "square")
+        self.show_row("placement", cut)
         self.show_row("use_rule_relief", cut)
         self.show_row("relief_value", cut and not self.value("use_rule_relief"))
 
