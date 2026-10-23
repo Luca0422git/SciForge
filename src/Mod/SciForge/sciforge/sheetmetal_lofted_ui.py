@@ -138,7 +138,13 @@ class LoftedPanel(smp.SmPanel):
         grouped = []
         for box in self.picks:
             for obj, short, _p in self.picks[box]:
-                grouped.append((obj, chain(obj, short)))
+                names = chain(obj, short)
+                root, path = smp.rooted(obj, names[0])
+                if root is obj:
+                    grouped.append((obj, names))
+                else:
+                    prefix = path[: -len(names[0])]
+                    grouped.append((root, [prefix + n for n in names]))
         return grouped
 
     def _profile(self, box):

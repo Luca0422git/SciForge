@@ -58,6 +58,24 @@ def solid_tip(body):
     return tip
 
 
+def rooted(obj, short):
+    """(top object, "Body.Feature.Edge3") for an element of a body inside a component: FreeCAD
+    keeps a selection made with the component's path apart from one made on the feature
+    alone, and a click in the 3D view always carries the path (the picks then looked
+    dropped). Outside components: (obj, short) as they are."""
+    try:
+        chain = [obj]
+        parent = obj.getParentGeoFeatureGroup()
+        while parent is not None and len(chain) < 16:
+            chain.insert(0, parent)
+            parent = parent.getParentGeoFeatureGroup()
+    except Exception:
+        return obj, short
+    if len(chain) <= 2:
+        return obj, short
+    return chain[0], ".".join(o.Name for o in chain[1:]) + "." + short
+
+
 class SmPanel(pickpanel.PickPanel):
     title = "Sheet Metal"
     icon = None
@@ -272,6 +290,11 @@ class SmPanel(pickpanel.PickPanel):
 
     def picks_changed(self, added, dropped):
         changed = False
+        if added and dropped:
+            # one click either adds a pick or drops one; both at once is FreeCAD replacing
+            # the selection (a click inside a component after a pick made on its feature):
+            # the old picks stay
+            dropped = []
         for obj, short, _point in dropped:
             for box in self.picks:
                 before = len(self.picks[box])
@@ -309,6 +332,7 @@ class SmPanel(pickpanel.PickPanel):
         grouped = []
         for box in self.picks:
             for obj, short, _p in self.picks[box]:
+                obj, short = rooted(obj, short)
                 for entry in grouped:
                     if entry[0] is obj:
                         if short not in entry[1]:
