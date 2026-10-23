@@ -35,7 +35,7 @@ import FreeCADGui as Gui
 
 from . import commands, cut_preview, drag_guard, extrude, log, preview, profile_pick, taskui
 from . import bodies, extrude_bodies, extrude_to_face, protractor, text, ui_icon_path, warn
-from . import value_limits
+from . import live_shapes, value_limits
 from . import extrude_bodies_core as bodies_core
 from . import extrude_to_face_core as to_face
 from .compat import QtCore, QtWidgets
@@ -582,10 +582,14 @@ def newest_single_region(body):
 
 
 # -- the dialog -------------------------------------------------------------------------------
-class ExtrudePanel(Panel, value_limits.LimitedValues):
+class ExtrudePanel(Panel, value_limits.LimitedValues, live_shapes.LivePanel):
     title = "Extrude"
     icon = "extrude"
     last = None
+    # While a distance arrow or the taper disc is dragged the extrusion follows it as a
+    # picture (live_shapes.ExtrudePicture) and the exact one is built once the mouse rests or
+    # is let go (taskui.Panel.schedule(settle))
+    LIVE_NAME = "Extrude live picture"
     auto_pick = True  # take the single area of a sketch just finished, like Fusion
 
     def __init__(self, doc, feature=None, profiles=None, sketch=None):
@@ -1941,7 +1945,7 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
                 if self.measurement.currentData() == "whole":
                     value *= 2.0
         if self._snapped("distance", self.distance, value, snap) and not again:
-            self._changed()
+            self._changed(live=True)
         elif again and not self._timer.isActive():
             self.show_status()  # let go: what is said once the arrow is let go (a limit)
         self._show_note()
@@ -1952,7 +1956,7 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
         snap = self._drag_snap("distance2")
         value = snap[0] if snap is not None else round(max(value, 0.0), 2)
         if self._snapped("distance2", self.distance2, value, snap) and not again:
-            self._changed()
+            self._changed(live=True)
         elif again and not self._timer.isActive():
             self.show_status()  # let go: what is said once the arrow is let go (a limit)
         self._show_note()
@@ -2004,7 +2008,7 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
             self.taper.set_value(value)
         finally:
             self._quiet = False
-        self._changed()
+        self._changed(live=True)
 
     def _auto_operation(self):
         """Fusion: extruding into material (of any body) becomes a cut; touching a body, a
@@ -2034,8 +2038,10 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
             _set_combo(self.operation, wanted)
             self._quiet = False
 
-    def _changed(self, new_geometry=False):
-        """Something changed: rebuild the preview shortly (coalesces drags)."""
+    def _changed(self, new_geometry=False, live=False):
+        """Something changed: rebuild the preview shortly (coalesces drags). `live`: a handle
+        dragged: the live picture shows it at once and the exact extrusion waits for the
+        mouse to rest (when there is a picture for these options)."""
         self._update_visibility()
         self._collect()
         # Fusion: choosing "To Object" or "Start: Object" makes that selection box active.
@@ -2056,10 +2062,98 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
         self.dirty = True
         if new_geometry:
             self._geometry_changed = True
+        if live and not new_geometry and self.live_show():
+            self._hide_cut_view()
+            self.schedule(settle=True)
+            return
         self.schedule()
 
+    # -- the live picture (live_shapes.ExtrudePicture) --------------------------------------------
+    def _live_options(self):
+        """The options the preview is built with, when the picture can show them (distances,
+        no taper widening the extrusion, no taper on a thin wall), else None."""
+        if not self.profiles or self._closed:
+            return None
+        if self.formula_error:
+            return None
+        built = self._build_options()
+        if built is None:
+            return None
+        o = extrude.options_with_defaults(built)
+        two = o["direction"] == "two_sides"
+        if o["extent"] != "distance" or (two and o["extent2"] != "distance"):
+            return None
+        tapers = [float(o["taper"])] + ([float(o["taper2"])] if two else [])
+        if any(t < 0.0 for t in tapers) or (o["thin"] and any(abs(t) > 1e-12 for t in tapers)):
+            return None  # FreeCAD's widening taper is not the offset outline the picture draws
+        if o["start"] == "object" and not o.get("start_object"):
+            return None
+        return o
+
+    def live_key(self):
+        o = self._live_options()
+        if o is None:
+            return None
+        profiles = extrude.normalize(self.profiles)
+        sign = extrude._sign1(profiles, o)
+        return value_limits.make_key(
+            "extrude-live",
+            [(obj.Name, sub, obj.Shape) for obj, sub in profiles],
+            o["direction"],
+            sign,
+            bool(o["thin"]),
+            [o.get(k) for k in ("wall_location", "wall_thickness")],
+            o["operation"] == "cut",
+        )
+
+    def live_make(self):
+        o = self._live_options()
+        profiles = extrude.normalize(self.profiles)
+        sign = extrude._sign1(profiles, o)
+        faces = extrude.section_faces(profiles, o)
+        return [live_shapes.ExtrudePicture(faces, extrude.profile_normal(profiles) * sign)]
+
+    def live_values(self):
+        o = self._live_options()
+        if o is None:
+            return {}
+        profiles = extrude.normalize(self.profiles)
+        sign = extrude._sign1(profiles, o)
+        start = extrude.start_offset_of(profiles, o) * sign
+        return {"ends": live_shapes.extrude_ends(o, start)}
+
+    def live_hide_objects(self):
+        return [self.target] if self.target is not None else []
+
+    def live_ghost_objects(self):
+        base = getattr(self.target, "BaseFeature", None) if self.target is not None else None
+        return [base] if base is not None else []
+
+    def live_colors(self):
+        if self.options.get("operation") == "cut":
+            return live_shapes.CUT_COLOR, (0.35, 0.05, 0.05)
+        if self.target is not None:
+            return live_shapes.colors(self.target)
+        return None, None
+
+    def _hide_cut_view(self):
+        if self.cut_view is not None:
+            try:
+                self.cut_view.clear()  # the red of the last exact value: back with the next
+            except Exception:
+                pass
+
     def _recompute(self):
-        """Apply the dialog's values to the document and rebuild the preview."""
+        """Apply the dialog's values to the document and rebuild the preview; the live
+        picture goes (the exact extrusion is there, or the value was refused)."""
+        try:
+            self._recompute_exact()
+        finally:
+            self.live_hide()
+            if not self._closed:
+                self.live_soon()
+
+    def _recompute_exact(self):
         if self._closed:
             return  # a change that arrived as the dialog closed
         if getattr(self, "_rebuilding", False):
@@ -2885,6 +2979,7 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
         super()._close()
 
     def cleanup(self):
+        self.live_drop()
         self._unwatch()
         self.escape.remove()
         self.undo_guard.remove()

@@ -22,7 +22,8 @@ do (hollow body, Both): see shelling.py. Double-click the step in the timeline t
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, commands, hole_common, log, modify_bodies, pickpanel, preview, shelling
+from . import bodies, commands, hole_common, live_shapes, log, modify_bodies, pickpanel, preview
+from . import shelling
 from . import ui_icon_path, value_limits, warn
 from .compat import QtWidgets
 from .taskui import DistanceField, ValueBoxes
@@ -92,9 +93,12 @@ def start_body(preferred=None):
     return (candidates[0] if candidates else None), None
 
 
-class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
+class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues, live_shapes.LivePanel):
     title = "Shell"
     icon = "shell"
+    # While a wall arrow is dragged the walls follow it as a picture (live_shapes) and the
+    # exact shell is built once the mouse rests or is let go (taskui.Panel.schedule(settle))
+    LIVE_NAME = "Shell live picture"
     last = None  # the most recent panel (tests and diagnostics)
 
     def __init__(self, doc, feature=None, picks=None, body=None):
@@ -491,9 +495,64 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             self._show_formulas()
             changed = True
         if changed:
-            self.schedule()
+            self.schedule(settle=self.live_show())  # with a picture: the shell at the rest
         elif self.limits.note and not self.error:
             self.show_status()  # held at the limit: nothing to rebuild
+
+    # -- the live picture (live_shapes.ShellPicture) ---------------------------------------------
+    def live_key(self):
+        if self.base is None or self.formula_errors or not self.has_picks():
+            return None
+        return value_limits.make_key(
+            "shell-live",
+            self.base.Shape,
+            list(self.names()),
+            bool(self.whole),
+            self.options.get("direction"),
+            [(m.body.Name, m.base.Shape, list(self.member_names(m))) for m in self.members],
+        )
+
+    def live_make(self):
+        direction = self.options.get("direction", "inside")
+        pictures = [
+            live_shapes.ShellPicture(
+                self.base.Shape, list(self.names()), direction, self._placement(self.body)
+            )
+        ]
+        for member in self.members:
+            if member.base is None:
+                continue
+            pictures.append(
+                live_shapes.ShellPicture(
+                    member.base.Shape,
+                    list(self.member_names(member)),
+                    direction,
+                    self._placement(member.body),
+                )
+            )
+        return pictures
+
+    @staticmethod
+    def _placement(body):
+        return body.getGlobalPlacement() if body is not None else None
+
+    def live_values(self):
+        return {
+            "inside": float(self.options.get("inside", 0.0)),
+            "outside": float(self.options.get("outside", 0.0)),
+        }
+
+    def live_hide_objects(self):
+        return [self.target] + [m.target for m in self.members]
+
+    def live_ghost_objects(self):
+        return [self.base] + [m.base for m in self.members]
+
+    def live_colors(self):
+        return live_shapes.colors(self.base)
+
+    def live_looks(self):
+        return self._looks  # the dialog's own: its preview ghosts the part the same way
 
     def _arrow_to(self, what, value):
         for dragger, spot, _origin, _direction in self.arrows:
@@ -648,8 +707,17 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
 
     # -- preview --------------------------------------------------------------------------
     def _preview(self):
+        """The exact shell; the live picture goes (the exact one is there, or refused)."""
         if self.limit_waits():
             return  # the search of the thickest wall that fits previews when it ends
+        try:
+            self._preview_exact()
+        finally:
+            self.live_hide()
+            if not self._closed:
+                self.live_soon()
+
+    def _preview_exact(self):
         if self._closed or self.base is None:
             return
         self._collect()
@@ -679,7 +747,7 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         except shelling.ShellError as exc:
             held = self.limit_refuse(str(exc))
             if held == "again":
-                self._preview()  # held at the thickest wall that fits: preview that
+                self._preview_exact()  # held at the thickest wall that fits: preview that
                 return
             if held == "later":
                 return  # looked for one trial per event-loop turn; previews when found
@@ -816,6 +884,7 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     def cleanup(self):
         self.limit_cancel()
         value_limits.busy(self, False)
+        self.live_drop()
         self._remove_arrows()
         self.value_boxes.discard()
         super().cleanup()

@@ -87,6 +87,11 @@ export LANG=C.UTF-8
 # No test goes online: the update check (sciforge/update_core.py) refuses every address but
 # this computer's own (the tests' fake GitHub), and does not even start by itself.
 export SCIFORGE_NO_INTERNET=1
+# The unit tests that check geometry against FreeCAD's exact solids run FreeCAD headless
+# themselves (SciForgeTests/unit/test_live_shapes_freecad.py); skipped without it.
+if [ ${#FC_CMD[@]} -gt 0 ]; then
+    export SCIFORGE_FC_CMD="$(printf '%q ' "${FC_CMD[@]}")"
+fi
 
 run_unit() {
     echo "== [SciForge] unit tests"
