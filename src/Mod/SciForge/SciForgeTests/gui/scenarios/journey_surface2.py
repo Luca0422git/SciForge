@@ -491,6 +491,13 @@ def red_with_reason():
 
     later = [o for o in doc().Objects if "Invalid" in o.State or "Error" in o.State]
     h.check("the later steps are red too, not built wrong", len(later) >= 1, later)
+    texts = {o.Label: o.getStatusString() for o in later}
+    raw = ("Standard_", "Traceback", "BRep", "TopoDS", "Py_")
+    h.check(
+        "each red step says why in words (no kernel jargon)",
+        all(t and t != "Valid" and not any(r in t for r in raw) for t in texts.values()),
+        texts,
+    )
     v = st.volume(s["plate"])
     h.check("no plate built from a wrong surface", not (v and not st.near(v, s["v"], 1e-9)), v)
     h.new_errors()
