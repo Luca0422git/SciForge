@@ -19,6 +19,10 @@ opens the other design (hidden) with it, so a project folder moved as a whole ke
 working. Bodies of the other design's components come in flat (as in a copy of a
 component). Break Link copies the other design's bodies with every feature
 (``Document.copyObject`` across documents) into the component in place of the copies.
+
+insert_copy (a design dragged from the Data Panel, Luca 2026-10-23: "make it a copy of the
+file") does Insert and Break Link in one go, and keeps the other design's components: its
+top-level components and bodies are copied with everything in them into one new component.
 """
 
 import os
@@ -197,6 +201,99 @@ def _same(a, b):
         )
     except Exception:
         return False
+
+
+# -- a copy (a design dragged from the Data Panel) ---------------------------------------------
+def top_level(other):
+    """What a copy of the design `other` brings in: its components and bodies at the top
+    (what is in them comes along), in the order they were made."""
+    found = []
+    for obj in other.Objects:
+        if obj.TypeId not in (components.PART, components.BODY):
+            continue
+        if components.container_of(obj) is None and _parent(obj) is None:
+            found.append(obj)
+    return sorted(found, key=lambda o: o.ID)
+
+
+def _parent(obj):
+    try:
+        return obj.getParentGeoFeatureGroup()
+    except Exception:
+        return None
+
+
+def insert_copy(doc, other, parent=None, label=None):
+    """The design `other` (an open document) copied into `doc` as one new component named
+    after it, in `parent` (None: the root): its components, bodies and every step, with no
+    link back to its file (Luca: a design dragged from the Data Panel comes in as a copy).
+    The copies keep their places inside the new component. No undo step of its own.
+    Returns the component."""
+    if other is doc:
+        raise ValueError("A design cannot be inserted into itself.")
+    sources = top_level(other)
+    if not any(bodies.has_solid(b) for s in sources for b in _bodies_of(s)):
+        raise ValueError("%s has no bodies to insert." % design_name(other.FileName or other.Label))
+    name = label or design_name(other.FileName) or other.Label
+    taken = {c.Label for c in components.list_components(doc)}
+    unique, n = name, 1
+    while unique in taken:  # a second copy of the same design: "Wheel (2)"
+        n += 1
+        unique = "%s (%d)" % (name, n)
+    comp = components.new_component(doc, unique, parent)
+    copies = doc.copyObject(sources, True)
+    if not isinstance(copies, (list, tuple)):
+        copies = [copies]
+    for source, copied in zip(sources, copies):
+        current = components.container_of(copied)
+        if current is not None and current is not comp:
+            current.removeObject(copied)
+        if components.container_of(copied) is not comp:
+            comp.addObject(copied)
+        if components.is_component(copied):
+            components.mark(copied)
+        _same_labels(source, copied)
+    _component_step_first(comp)
+    doc.recompute()
+    log(
+        "inserted a copy of %s (%d bodies, no link to its file)"
+        % (name, sum(len(_bodies_of(c)) for c in copies))
+    )
+    return comp
+
+
+def _bodies_of(obj):
+    if bodies.is_body(obj):
+        return [obj]
+    return components.bodies_in(obj.Document, obj, recursive=True)
+
+
+def _same_labels(source, copied):
+    """FreeCAD numbers the copies' labels when the name is taken (Body001): they keep the
+    names they have in their own design (Body1 in every component, like Fusion's)."""
+    pairs = [(source, copied)]
+    if components.is_component(source):
+        pairs += list(
+            zip(
+                components.bodies_in(source.Document, source, recursive=True),
+                components.bodies_in(copied.Document, copied, recursive=True),
+            )
+        )
+        pairs += list(zip(_components_inside(source), _components_inside(copied)))
+    for original, made in pairs:
+        try:
+            if made.Label != original.Label:
+                made.Label = original.Label
+        except Exception:
+            pass
+
+
+def _components_inside(component):
+    return [
+        c
+        for c in components.list_components(component.Document)
+        if c is not component and components.is_inside(c, component)
+    ]
 
 
 # -- Break Link --------------------------------------------------------------------------------

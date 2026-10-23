@@ -13,7 +13,7 @@ is combine.py.
 
 import FreeCAD as App
 
-from . import bodies, bodies_gui, combine, ui_icon_path, warn
+from . import bodies, bodies_gui, combine, opacity, ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 
 OPERATIONS = [("Join", "join"), ("Cut", "cut"), ("Intersect", "intersect")]
@@ -218,12 +218,14 @@ class CombinePanel(BodyPanel):
                 continue
             try:
                 self._looks[body.Name] = int(body.ViewObject.Transparency)
+                opacity.HOLD.add((self.doc.Name, body.Name))  # (its Opacity Control waits)
                 body.ViewObject.Transparency = SEE_THROUGH
             except Exception:
                 pass
 
     def _restore(self, name):
         before = self._looks.pop(name, None)
+        opacity.HOLD.discard((self.doc.Name, name))
         body = self.doc.getObject(name)
         if body is None or before is None or body.ViewObject is None:
             return

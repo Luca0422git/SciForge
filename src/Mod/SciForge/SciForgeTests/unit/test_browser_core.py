@@ -209,5 +209,55 @@ class BrowserTests(unittest.TestCase):
         self.assertNotIn("Delete", core.menu_for(plane))
 
 
+class HoverTests(unittest.TestCase):
+    """A hover in the 3D view lights the browser row of what is under the mouse."""
+
+    OBJECTS = [
+        obj("Part", "App::Part", label="Arm"),
+        obj("Body", "PartDesign::Body", component="Part"),
+        obj("Pad", "PartDesign::Pad", True, "Body", component="Part"),
+        obj("Sketch", "Sketcher::SketchObject", False, "Body", component="Part"),
+        obj("Body001", "PartDesign::Body"),
+    ]
+
+    def tree(self):
+        return core.build("Design", self.OBJECTS, active_body="Body001")
+
+    def test_the_body_wins_over_its_component(self):
+        # a face of Pad in Body in the component Part (browser_ui adds Pad's body after it)
+        key = core.hover_row(self.tree(), ["Part", "Body", "Pad", "Body"])
+        self.assertEqual(key, "body:Body")
+
+    def test_a_sketch_lights_its_own_row(self):
+        self.assertEqual(core.hover_row(self.tree(), ["Part", "Body", "Sketch"]), "sketch:Sketch")
+
+    def test_a_component_alone(self):
+        self.assertEqual(core.hover_row(self.tree(), ["Part"]), "component:Part")
+
+    def test_nothing_known(self):
+        self.assertIsNone(core.hover_row(self.tree(), []))
+        self.assertIsNone(core.hover_row(self.tree(), ["Pad"]))
+
+    def test_a_closed_folder_shows_it(self):
+        tree = self.tree()
+        everything_open = core.shown_row(tree, "body:Body", lambda key: True)
+        self.assertEqual(everything_open, "body:Body")
+        closed = {"bodies:Part"}
+        self.assertEqual(
+            core.shown_row(tree, "body:Body", lambda key: key not in closed), "bodies:Part"
+        )
+        closed = {"component:Part", "bodies:Part"}
+        self.assertEqual(
+            core.shown_row(tree, "body:Body", lambda key: key not in closed), "component:Part"
+        )
+        self.assertIsNone(core.shown_row(tree, "body:Nothing", lambda key: True))
+
+    def test_opacity_control_on_bodies_and_components(self):
+        tree = self.tree()
+        self.assertIn("Opacity Control", core.menu_for(core.find(tree, "body:Body")))
+        self.assertIn("Opacity Control", core.menu_for(core.find(tree, "component:Part")))
+        self.assertNotIn("Opacity Control", core.menu_for(core.find(tree, "sketch:Sketch")))
+
+
 if __name__ == "__main__":
     unittest.main()

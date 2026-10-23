@@ -13,7 +13,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import _remember, browser_core as core
-from . import commands, components, timeline_ops as ops, ui_icon, warn
+from . import commands, components, theme, timeline_ops as ops, ui_icon, warn
 from .compat import QtCore, QtGui, QtWidgets
 from .inline_edit import InlineEditor
 
@@ -505,6 +505,16 @@ class _RowDelegate(QtWidgets.QStyledItemDelegate):
             icon = ui_icon("eye" if node["visible"] else "eye_off")
             mode = QtGui.QIcon.Normal if node["visible"] else QtGui.QIcon.Disabled
             icon.paint(painter, self.eye_rect(option.rect), QtCore.Qt.AlignCenter, mode)
+        if node["key"] == self.tree._view_hover:
+            # The mouse is over this body (or what it holds) in the 3D view (Fusion lights
+            # the browser row of what the mouse is over).
+            painter.save()
+            try:
+                color = QtGui.QColor(theme.ACCENT or "#3fa9f5")
+                color.setAlpha(70)
+                painter.fillRect(option.rect, color)
+            finally:
+                painter.restore()
         radio = self.has_radio(node)
         shifted = QtWidgets.QStyleOptionViewItem(option)
         shifted.rect = option.rect.adjusted(EYE + 2, 0, -(RADIO + 10) if radio else 0, 0)
@@ -588,6 +598,11 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self.setSelectionMode(QtWidgets.QAbstractItemView.ExtendedSelection)
         self.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        # A design dragged from the Data Panel can be dropped here (onto a component row:
+        # into that component); data_panel_ui's drag watch takes those drops, the tree's own
+        # drop handling never runs (its rows move by the mouse handling below).
+        self.setAcceptDrops(True)
+        self.viewport().setAcceptDrops(True)
         self.header().setStretchLastSection(True)
         self.delegate = _RowDelegate(self)
         self.setItemDelegateForColumn(1, self.delegate)
@@ -615,6 +630,9 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         self._doc = None
         self._renaming = None
         self._hover = None
+        self._view_hover = None  # row lit by a hover in the 3D view (its key)
+        self._hover_due = False
+        self._rows = {}  # key -> item, rebuilt with the tree
         self._handlers = {}
         self._busy = 0
         self._press = None  # (row key, pos) of a left press on a draggable row
@@ -645,7 +663,11 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 def _later(self, *args):
                     QtCore.QTimer.singleShot(30, widget._sync_selection)
 
+                def _hover(self, *args):
+                    widget._hover_soon()
+
                 addSelection = removeSelection = setSelection = clearSelection = _later
+                setPreselection = removePreselection = _hover
 
             self._observer = Observer()
             try:
@@ -716,16 +738,19 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         selected = {i.data(1, ROLE_NODE)["key"] for i in self.selectedItems()}
         try:
             self.clear()
+            self._rows = {}
             self._add(None, tree)
             for item in self._items():
                 if item.data(1, ROLE_NODE)["key"] in selected:
                     item.setSelected(True)
         finally:
             self._building = False
+        self._hover_soon()  # a row the hover lit may be under another folder now
 
     def _add(self, parent, node):
         item = QtWidgets.QTreeWidgetItem(parent if parent is not None else self)
         item.setData(1, ROLE_NODE, node)
+        self._rows[node["key"]] = item
         item.setIcon(1, ui_icon(node["icon"]))
         item.setText(1, node["label"])
         if node["active"]:
@@ -911,6 +936,62 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 Gui.Selection.setPreselection(obj, "")
         except Exception:
             pass
+
+    # -- hover in the 3D view -> the row lights up ----------------------------------------
+    def _hover_soon(self):
+        """FreeCAD's preselection changed: look at it a moment later (never inside its
+        handling; a quick mouse sweep over many faces is looked at once)."""
+        if self._hover_due:
+            return
+        self._hover_due = True
+        QtCore.QTimer.singleShot(30, self._sync_hover)
+
+    def hover_chain(self):
+        """Names of what the mouse is over in the 3D view, outermost first, a step's body
+        after the step (browser_core.hover_row)."""
+        pre = Gui.Selection.getPreselection()
+        root = getattr(pre, "Object", None)
+        if root is None or self._doc is None or root.Document.Name != self._doc.Name:
+            return []
+        names = list(getattr(pre, "SubElementNames", []) or [])
+        sub = names[0] if names else ""
+        objects = [root]
+        if sub:
+            try:
+                objects = list(root.getSubObjectList(sub)) or [root]
+            except Exception:
+                objects = [root]
+        from . import bodies
+
+        chain = []
+        for obj in objects:
+            chain.append(obj.Name)
+            body = bodies.body_of(obj)
+            if body is not None and body is not obj:
+                chain.append(body.Name)
+        return chain
+
+    def _sync_hover(self):
+        self._hover_due = False
+        try:
+            key = None
+            if self._tree is not None and self.isVisible():
+                key = core.hover_row(self._tree, self.hover_chain())
+                if key is not None:
+                    key = core.shown_row(self._tree, key, self._row_open)
+        except Exception:
+            key = None  # the object went (deleted, undone) between the hover and now
+        if key != self._view_hover:
+            self._view_hover = key
+            self.viewport().update()
+
+    def _row_open(self, key):
+        item = self._rows.get(key)
+        return item is None or item.isExpanded()
+
+    def view_hover(self):
+        """Key of the row the 3D view's hover lights, or None (tests)."""
+        return self._view_hover
 
     def leaveEvent(self, event):
         if self._hover is not None:
@@ -1382,6 +1463,10 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 if self._move_menu(menu, node, obj):
                     added = True
                 continue
+            if entry == "Opacity Control":
+                if self._opacity_menu(menu, node, obj, selected_nodes):
+                    added = True
+                continue
             action = (
                 menu.addAction(ui_icon("delete"), text)
                 if entry == "Delete"
@@ -1434,6 +1519,20 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             action = sub.addAction(label)
             self._handlers[action] = lambda t=target, m=list(moving): self._move_objects(m, t)
         return True
+
+    def _opacity_menu(self, menu, node, obj, selected_nodes):
+        """Fusion's Opacity Control: the row's object, or every selected body / mesh body /
+        component when the row is one of them (opacity_ui builds the submenu)."""
+        if obj is None:
+            return False
+        from . import opacity_ui
+
+        kinds = ("body", "mesh_body", "component")
+        targets = [self._object(n) for n in selected_nodes if n["kind"] in kinds]
+        targets = [t for t in targets if t is not None]
+        if obj not in targets:
+            targets = [obj]
+        return opacity_ui.add_menu(menu, targets, self._handlers) is not None
 
     def _selected_draggable(self):
         return [

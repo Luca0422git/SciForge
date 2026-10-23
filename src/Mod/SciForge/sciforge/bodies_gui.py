@@ -174,6 +174,9 @@ class Watch:
 
             components.forget(doc.Name)  # the body last active in each component
             components_ui.ISOLATED.pop(doc.Name, None)
+            from . import opacity
+
+            opacity.forget(doc.Name)
         except Exception:
             pass
 
@@ -289,7 +292,7 @@ def remove_orphans(doc):
 
 def sync(doc):
     """Bring the view in line with the design: used-up bodies hidden (and shown again when
-    free), appearances on every step."""
+    free), appearances on every step, opacities."""
     bodies.sync_consumed(doc)
     try:
         from . import appearance
@@ -297,6 +300,12 @@ def sync(doc):
         appearance.sync(doc)
     except Exception as exc:
         warn("appearance: %s" % exc)
+    try:  # after the looks: Opacity Control makes them see-through
+        from . import opacity
+
+        opacity.apply(doc)
+    except Exception as exc:
+        warn("opacity: %s" % exc)
 
 
 _WATCH = {"observer": None}

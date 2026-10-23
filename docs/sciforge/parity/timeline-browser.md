@@ -56,7 +56,8 @@ Suppressed sketches and planes are greyed and struck through, not shown as warni
 - Selection both ways: a row click selects the object in the 3D view; selecting it in the 3D
   view or the timeline selects the row; clicking empty space clears it. Hover lights the object
   up in the 3D view. Faces and edges picked in the 3D view do not select a row (as in Fusion).
-- Right-click menus per kind (`browser_core.MENUS`): body (Activate Body, Show/Hide, Isolate,
+- Right-click menus per kind (`browser_core.MENUS`): body (Activate Body, Show/Hide, Opacity
+  Control (parity/bodies.md), Isolate,
   Find in Window, Find in Timeline, Rename, Delete), sketch (Edit Sketch, Show/Hide, Look At,
   Find in Window, Find in Timeline, Rename, Delete), construction (Edit Feature, ...), origin
   (Show/Hide, Create Sketch), Named Views (New Named View), saved view (Go to View, Rename,
@@ -66,6 +67,27 @@ Suppressed sketches and planes are greyed and struck through, not shown as warni
   Set as Default) in the task panel. FreeCAD keeps units per document (`Document.UnitSystem`).
 - Named Views: TOP, FRONT, RIGHT, HOME, plus saved views (stored in the document's `Meta`).
 - F2 renames, Delete deletes (one undo step, same rules as the timeline).
+
+### The 3D view's hover lights the browser row (Luca's request, 2026-10-23)
+
+Luca: "if i hover over a body in the work area, it should get highlighted in the browser".
+Fusion's browser and canvas light each other up (forum "Turn off part highlighting when
+mousing over": hovering a browser row lights the body in the canvas, the same effect as
+hovering the body); SciForge had the browser > 3D view direction only.
+
+- The mouse over a body in the 3D view (any of its faces, edges, a step's shape) lights that
+  body's row with a light accent-blue band; over a sketch or a plane, its row; over a
+  component's body, the body's row (the innermost row wins). With the folder or component
+  that holds the row closed, the closed row lights instead. Off the part: nothing lit.
+- How: the browser's selection observer gets FreeCAD's preselection changes
+  (`setPreselection` / `removePreselection`) and looks a moment later (30 ms, so a sweep over
+  many faces is one look): `Gui.Selection.getPreselection()` -> the objects along the
+  sub-element path (`getSubObjectList`), a step followed by its body ->
+  `browser_core.hover_row` -> `shown_row` (a closed parent) -> the delegate paints it.
+  The browser does not scroll or open folders for a hover (a sweep over the part would make
+  it jump).
+- Scenario `browser_opacity_hover` P4 (real mouse moves over the 3D view); unit tests
+  `test_browser_core.HoverTests`.
 
 ## Known gaps
 

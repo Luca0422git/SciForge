@@ -59,9 +59,14 @@ Sketch keys (the SKETCH tab is open):
   groups in Fusion's order. Greyed entries say "Not available in SciForge yet".
 - **SKETCH** tab appears while a sketch is open; **Finish Sketch** is in the ribbon, the palette
   and the right-click menu.
-- **Browser** (left): bodies, sketches, construction, with eye toggles. **Timeline** (bottom):
+- **Browser** (left): bodies, sketches, construction, with eye toggles; right-click a body or
+  component > **Opacity Control** to make it see-through; the row of the body under the mouse
+  in the 3D view lights up. **Timeline** (bottom):
   every step; drag the marker, double-click a step to edit it, right-click for Delete /
   Suppress. **Navigation bar** (bottom centre): orbit mode, look at, pan, zoom, fit, display.
+- **Data Panel** (`Ctrl` + `Alt` + `P`): your project folder's designs with pictures and
+  versions; search, sort, click a design for its versions and what uses it; **drag a design
+  into the 3D view of an open design to insert a copy of it**.
 - **SciForge menu** (top left): FreeCAD's own menus, Change Parameters, Diagnostics (the text
   to send when something misbehaves).
 

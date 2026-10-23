@@ -419,6 +419,33 @@ def node_for_object(tree, name, body_of=None):
     return None
 
 
+def hover_row(tree, chain):
+    """Key of the row a hover in the 3D view lights up: `chain` holds the names of what is
+    under the mouse, outermost first (a component, the body in it, the step whose face it
+    is); the innermost one with a row of its own wins (the body over its component). A
+    step has no row: browser_ui puts its body's name after it. None when nothing has one."""
+    rows = {}
+    for node in walk(tree):
+        if node["object"] and node["kind"] not in ("view", "saved_view", "folder"):
+            rows.setdefault(node["object"], node["key"])
+    for name in reversed(list(chain)):
+        if name in rows:
+            return rows[name]
+    return None
+
+
+def shown_row(tree, key, is_open):
+    """The row that shows `key`: itself, or the outermost closed folder / component above
+    it (its row is hidden inside). `is_open(key)` says whether a row is expanded."""
+    above = path_to(tree, key)
+    if above is None:
+        return None
+    for parent in above:
+        if not is_open(parent):
+            return parent
+    return key
+
+
 def path_to(tree, key, _path=None):
     """Keys of the folders above ``key`` (to expand them), or None if not found."""
     _path = _path or []
@@ -468,6 +495,7 @@ MENUS = {
         "Paste New",
         "-",
         "Show/Hide",
+        "Opacity Control",
         "Isolate",
         "Find in Window",
         "Find in Timeline",
@@ -490,6 +518,7 @@ MENUS = {
         "Paste",
         "-",
         "Show/Hide",
+        "Opacity Control",
         "Isolate",
         "Find in Window",
         "Find in Timeline",
@@ -585,6 +614,7 @@ MENUS = {
         "Edit Feature",
         "-",
         "Show/Hide",
+        "Opacity Control",
         "Find in Window",
         "Find in Timeline",
         "-",

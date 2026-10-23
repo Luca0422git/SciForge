@@ -11,9 +11,11 @@ Behaviour copied from Fusion (sources in docs/sciforge/parity/versions.md):
     older version the newest, as a new version, the later ones stay in the list.
   * A recovery copy of every changed design every few minutes (not while a command runs;
     Ctrl+Shift+S writes one now); at the next start after a crash: "Recover unsaved work?".
-  * The Data Panel: the project folder's folders and designs with thumbnails, double-click
-    opens, New Folder, right-click for Open / Version History / Insert / Rename / Move /
-    Copy / Delete.
+  * The Data Panel (data_panel_ui.py): the project folder's folders and designs with
+    thumbnails and version badges, search, sort, details (versions, Uses, Used In),
+    double-click opens, New Folder, right-click for Open / Version History / Insert /
+    Rename / Move / Copy / Delete; a design dragged into an open design comes in as a copy
+    (insert_copy).
   * Milestones: a version marked as one (the Save dialog's Milestone box, or Version
     History > Mark as Milestone); Version History lists them (Milestones only) and opens one.
   * Closing a changed design: Automatic version on close (Fusion's default) saves the changes
@@ -45,7 +47,6 @@ BACKUP = "User parameter:BaseApp/Preferences/Mod/SciForge/FilesBackup"
 # crash). The user's own value comes back when SciForge is off (theme.keep_and_set).
 FREECAD_SETTINGS = [(FREECAD_DOC_PREFS, "Bool", "AutoSaveEnabled", False)]
 RECOVERED_DESCRIPTION = "Recovered after a crash"
-THUMB = 96  # Data Panel thumbnail size (px)
 
 _state = {
     "on": False,
@@ -1618,480 +1619,7 @@ def recover_documents():
     return _show(RecoverDialog(entries), "recover")
 
 
-# -- the Data Panel ----
-class DataPanel(QtWidgets.QWidget):
-    """Fusion's Data Panel on local files: the project folder's folders first, then its
-    designs as cards with FreeCAD's thumbnail, name and version badge. Double-click opens a
-    folder or a design; New Folder; right-click for more."""
-
-    def __init__(self):
-        super().__init__()
-        self.setObjectName("SciForgeDataPanel")
-        self.folder = project_folder()
-        self.root = None  # the place shown (None: This computer, the project folder)
-        self.conflicts = {}  # file name -> its original's name (sync apps' copies here)
-        self._thumbs = {}  # path -> (mtime, QIcon)
-        outer = QtWidgets.QVBoxLayout(self)
-        outer.setContentsMargins(4, 4, 4, 4)
-        outer.setSpacing(4)
-        # SCIFORGE places (M2): This computer, the clouds and NAS connected
-        self.places = QtWidgets.QComboBox()
-        self.places.setObjectName("SciForgeDataPanelPlace")
-        self.places.setToolTip("Which place to show: this computer, a cloud or a NAS")
-        self.places.activated.connect(self._place_chosen)
-        outer.addWidget(self.places)
-        bar = QtWidgets.QHBoxLayout()
-        bar.setSpacing(2)
-        self.up = self._tool("Up", "Up one folder", self.go_up, "SciForgeDataPanelUp")
-        bar.addWidget(self.up)
-        self.crumbs = QtWidgets.QLabel("")
-        self.crumbs.setTextFormat(QtCore.Qt.RichText)
-        self.crumbs.linkActivated.connect(self.set_folder)
-        bar.addWidget(self.crumbs, 1)
-        self.new_folder = self._tool(
-            "New Folder", "New Folder", self.make_folder, "SciForgeDataPanelNewFolder"
-        )
-        self.new_folder.setIcon(ui_icon("folder"))
-        self.new_folder.setToolButtonStyle(QtCore.Qt.ToolButtonTextBesideIcon)
-        bar.addWidget(self.new_folder)
-        self.upload = self._tool(
-            "Upload",
-            "Copy a STEP or IGES file into this folder (double-click it to open it)",
-            lambda *_: self.upload_file(),
-            "SciForgeDataPanelUpload",
-        )
-        bar.addWidget(self.upload)
-        self.choose = self._tool(
-            "...",
-            "Choose the project folder (your NAS folder)",
-            self.choose_project_folder,
-            "SciForgeDataPanelFolder",
-        )
-        bar.addWidget(self.choose)
-        self.reload = self._tool("Refresh", "Refresh", self.refresh, "SciForgeDataPanelRefresh")
-        bar.addWidget(self.reload)
-        self.view_toggle = self._tool(
-            "List", "List view / grid view", None, "SciForgeDataPanelView", checkable=True
-        )
-        self.view_toggle.toggled.connect(self._view_mode)
-        bar.addWidget(self.view_toggle)
-        outer.addLayout(bar)
-        self.list = QtWidgets.QListWidget()
-        self.list.setObjectName("SciForgeDataPanelList")
-        self.list.setMinimumHeight(220)
-        self.list.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.list.customContextMenuRequested.connect(self._menu)
-        self.list.itemDoubleClicked.connect(self.open_item)
-        self.list.setWordWrap(True)
-        self._view_mode(False)
-        outer.addWidget(self.list, 1)
-        self.status = QtWidgets.QLabel("")
-        self.status.setWordWrap(True)
-        outer.addWidget(self.status)
-        self.refresh()
-
-    @staticmethod
-    def _tool(text, tip, slot, object_name, checkable=False):
-        """A flat text button of the panel's toolbar (readable on the dark panels)."""
-        button = QtWidgets.QToolButton()
-        button.setObjectName(object_name)
-        button.setText(text)
-        button.setToolTip(tip)
-        button.setAutoRaise(True)
-        button.setCheckable(checkable)
-        if slot is not None:
-            button.clicked.connect(slot)
-        return button
-
-    def _view_mode(self, as_list):
-        if as_list:
-            self.list.setViewMode(QtWidgets.QListView.ListMode)
-            self.list.setIconSize(QtCore.QSize(24, 24))
-            self.list.setGridSize(QtCore.QSize())
-            self.list.setSpacing(1)
-        else:
-            self.list.setViewMode(QtWidgets.QListView.IconMode)
-            self.list.setIconSize(QtCore.QSize(THUMB, THUMB))
-            self.list.setGridSize(QtCore.QSize(THUMB + 24, THUMB + 44))
-            self.list.setResizeMode(QtWidgets.QListView.Adjust)
-            self.list.setMovement(QtWidgets.QListView.Static)
-            self.list.setSpacing(6)
-
-    # -- what is shown
-    def place_root(self):
-        return self.root or project_folder()
-
-    def _fill_places(self):
-        try:
-            from . import locations_core, locations_ui
-
-            self.places.blockSignals(True)
-            self.places.clear()
-            current = 0
-            for i, place in enumerate(locations_ui.all_places()):
-                offline = place["kind"] != "local" and (
-                    locations_core.status(place) != locations_core.OK
-                )
-                self.places.addItem(
-                    place["name"] + (" (offline)" if offline else ""), place["root"]
-                )
-                if self.root and core.same_path(place["root"], self.root):
-                    current = i
-            self.places.setCurrentIndex(current)
-            self.places.setVisible(self.places.count() > 1)
-        except Exception as exc:
-            warn("data panel: places: %s" % exc)
-        finally:
-            self.places.blockSignals(False)
-
-    def _place_chosen(self, index):
-        try:
-            root = self.places.itemData(index)
-            self.root = None if core.same_path(root, project_folder()) else root
-            self.folder = self.place_root()
-            self.refresh()
-        except Exception as exc:
-            warn("data panel: %s" % exc)
-
-    def set_folder(self, folder):
-        project = self.place_root()
-        if not core.inside(project, folder):
-            folder = project
-        self.folder = folder
-        self.refresh()
-
-    def go_up(self):
-        if core.same_path(self.folder, self.place_root()):
-            return
-        self.set_folder(os.path.dirname(self.folder))
-
-    def refresh(self):
-        try:
-            self._fill_places()
-            project = self.place_root()
-            if self.root is None and not os.path.isdir(project):
-                try:
-                    os.makedirs(project, exist_ok=True)
-                    log("made the project folder %s" % project)
-                except OSError:
-                    pass
-            if not core.inside(project, self.folder) or not os.path.isdir(self.folder):
-                self.folder = project
-            self.list.clear()
-            if not os.path.isdir(project):
-                self.crumbs.setText("")
-                self.status.setText(
-                    "The project folder %s is not there. Choose one with the ... button." % project
-                    if self.root is None
-                    else "This place is offline: %s is not reachable now (is the cloud app "
-                    "running, the NAS on?)." % project
-                )
-                self.up.setEnabled(False)
-                return
-            crumbs = core.breadcrumbs(project, self.folder)
-            self.crumbs.setText(
-                " / ".join(
-                    '<a href="%s" style="color:#f5f5f5;text-decoration:none">%s</a>' % (path, label)
-                    for label, path in crumbs
-                )
-            )
-            self.crumbs.setToolTip(self.folder)
-            self.up.setEnabled(len(crumbs) > 1)
-            folders, designs = core.list_folder(self.folder)
-            from . import locations_ui
-
-            self.conflicts = locations_ui.conflicts(
-                self.folder, [os.path.basename(d["path"]) for d in designs]
-            )
-            counts = None
-            if self.root is None and use_git() and core.git_available():
-                root = core.repo_root(project)
-                if root is not None:
-                    counts = core.repo_counts(root)
-                    if not core.same_path(root, project):
-                        counts = {
-                            os.path.relpath(os.path.join(root, k), project).replace(os.sep, "/"): n
-                            for k, n in counts.items()
-                        }
-            for folder in folders:
-                item = QtWidgets.QListWidgetItem(ui_icon("folder"), folder["name"])
-                item.setData(QtCore.Qt.UserRole, ("folder", folder["path"]))
-                item.setToolTip(folder["path"])
-                self.list.addItem(item)
-            for design in designs:
-                n = core.version_count(design["path"], project, use_git(), counts)
-                badge = ("  v%d" % n) if n else ""
-                original = self.conflicts.get(os.path.basename(design["path"]))
-                if original:  # a sync app's copy (two computers changed the design)
-                    badge += "  (conflict)"
-                item = QtWidgets.QListWidgetItem(
-                    self._thumbnail(design["path"]), design["name"] + badge
-                )
-                item.setData(QtCore.Qt.UserRole, ("design", design["path"]))
-                item.setToolTip(
-                    "%s\n%s, last saved %s%s"
-                    % (
-                        design["path"],
-                        core.human_size(design["size"]),
-                        core.pretty_time(design["modified"]),
-                        (", %d version%s" % (n, "" if n == 1 else "s")) if n else "",
-                    )
-                )
-                self.list.addItem(item)
-            self.status.setText(
-                "%d folder%s, %d design%s"
-                % (
-                    len(folders),
-                    "" if len(folders) == 1 else "s",
-                    len(designs),
-                    "" if len(designs) == 1 else "s",
-                )
-            )
-        except Exception as exc:
-            warn("data panel: %s" % exc)
-            self.status.setText("The folder could not be read: %s" % exc)
-
-    def _thumbnail(self, path):
-        try:
-            mtime = os.path.getmtime(path)
-        except OSError:
-            mtime = 0
-        cached = self._thumbs.get(path)
-        if cached is not None and cached[0] == mtime:
-            return cached[1]
-        icon = ui_icon("document")
-        data = core.thumbnail_bytes(path)
-        if data:
-            pixmap = QtGui.QPixmap()
-            if pixmap.loadFromData(QtCore.QByteArray(data), "PNG") and not pixmap.isNull():
-                icon = QtGui.QIcon(
-                    pixmap.scaled(
-                        THUMB, THUMB, QtCore.Qt.KeepAspectRatio, QtCore.Qt.SmoothTransformation
-                    )
-                )
-        self._thumbs[path] = (mtime, icon)
-        return icon
-
-    def has_thumbnail(self, path):
-        """Whether the card of `path` shows the design's own picture (tests)."""
-        cached = self._thumbs.get(path)
-        return bool(cached and core.thumbnail_bytes(path))
-
-    def items(self):
-        """[(kind, path, text)] as listed (tests)."""
-        found = []
-        for i in range(self.list.count()):
-            item = self.list.item(i)
-            kind, path = item.data(QtCore.Qt.UserRole)
-            found.append((kind, path, item.text()))
-        return found
-
-    def item_for(self, path):
-        for i in range(self.list.count()):
-            item = self.list.item(i)
-            if core.same_path(item.data(QtCore.Qt.UserRole)[1], path):
-                return item
-        return None
-
-    # -- actions
-    def open_item(self, item):
-        """Double-click: into a folder, or open the design. The item's data is read now
-        and the work done a moment later: entering a folder rebuilds the list, and the
-        item would be gone under the signal."""
-        try:
-            if item is None:
-                return
-            kind, path = item.data(QtCore.Qt.UserRole)
-        except Exception as exc:
-            warn("data panel: %s" % exc)
-            return
-        QtCore.QTimer.singleShot(0, lambda: self._open(kind, path))
-
-    def _open(self, kind, path):
-        try:
-            if kind == "folder":
-                self.set_folder(path)
-            else:
-                open_design(path)
-        except Exception as exc:
-            warn("data panel: %s" % exc)
-
-    def upload_file(self, path=None):
-        """Fusion's Upload: a STEP / IGES file is copied into the folder shown, listed with
-        the designs; double-click opens it as a design with its components."""
-        try:
-            if path is None:
-                path = UPLOAD_PICKER() if UPLOAD_PICKER is not None else None
-            if path is None:
-                path, _filter = QtWidgets.QFileDialog.getOpenFileName(
-                    self,
-                    "Upload",
-                    os.path.expanduser("~"),
-                    "STEP and IGES files (*.step *.stp *.STEP *.STP *.iges *.igs *.IGES *.IGS)",
-                )
-            if not path:
-                return None
-            if not core.is_cad_file(path):
-                commands.tell("Upload takes STEP (.step, .stp) and IGES (.iges, .igs) files.")
-                return None
-            import shutil
-
-            base, ext = os.path.splitext(os.path.basename(path))
-            target = os.path.join(self.folder, base + ext)
-            n = 1
-            while os.path.exists(target):
-                n += 1
-                target = os.path.join(self.folder, "%s %d%s" % (base, n, ext))
-            shutil.copy2(path, target)
-            log("uploaded %s to %s" % (path, target))
-            self.refresh()
-            item = self.item_for(target)
-            if item is not None:
-                self.list.setCurrentItem(item)
-            commands.tell(
-                "%s is in the project: double-click it to open it." % os.path.basename(target)
-            )
-            return target
-        except Exception as exc:
-            warn("upload: %s" % exc)
-            commands.tell("The file could not be uploaded: %s" % exc)
-            return None
-
-    def make_folder(self):
-        try:
-            path = core.new_folder(self.folder)
-            log("made the folder %s" % path)
-            self.refresh()
-            item = self.item_for(path)
-            if item is not None:
-                self.list.setCurrentItem(item)
-        except Exception as exc:
-            warn("new folder: %s" % exc)
-            commands.tell("The folder could not be made: %s" % exc)
-
-    def choose_project_folder(self):
-        try:
-            path = QtWidgets.QFileDialog.getExistingDirectory(
-                self, "Project folder (where your designs live)", project_folder()
-            )
-            if path:
-                set_project_folder(path)
-                self.set_folder(path)
-                log("project folder: %s" % path)
-        except Exception as exc:
-            warn("choosing the project folder: %s" % exc)
-
-    def _menu(self, pos):
-        try:
-            item = self.list.itemAt(pos)
-            menu = QtWidgets.QMenu(self)
-            if item is None:
-                menu.addAction("New Folder", self.make_folder)
-                menu.addAction("Refresh", self.refresh)
-            else:
-                kind, path = item.data(QtCore.Qt.UserRole)
-                if kind == "folder":
-                    menu.addAction("Open", lambda: self.set_folder(path))
-                    menu.addAction("Rename", lambda: self._rename(path, True))
-                elif core.is_cad_file(path):  # an uploaded STEP / IGES file
-                    menu.addAction("Open", lambda: open_design(path))
-                    menu.addAction(
-                        "Insert into Current Design", lambda: _insert_cad(path)
-                    ).setEnabled(App.ActiveDocument is not None)
-                    menu.addSeparator()
-                    menu.addAction("Delete", lambda: self._trash(path))
-                else:
-                    menu.addAction("Open", lambda: open_design(path))
-                    original = self.conflicts.get(os.path.basename(path))
-                    if original:
-                        twin = os.path.join(os.path.dirname(path), original)
-                        menu.addAction(
-                            "Compare with %s" % core.design_name(original),
-                            lambda: compare_files(path, twin),
-                        )
-                        menu.addAction("Keep This One", lambda: self.keep_copy(path, twin))
-                        menu.addSeparator()
-                    menu.addAction("Version History", lambda: show_history(path))
-                    menu.addAction("Milestones", lambda: show_history(path, True))
-                    menu.addAction(
-                        "Insert into Current Design", lambda: insert_design(path)
-                    ).setEnabled(App.ActiveDocument is not None)
-                    menu.addSeparator()
-                    menu.addAction("Rename", lambda: self._rename(path, False))
-                    menu.addAction("Move...", lambda: self.move_or_copy(path, "move"))
-                    menu.addAction("Copy...", lambda: self.move_or_copy(path, "copy"))
-                    menu.addAction("Delete", lambda: self._trash(path))
-                menu.addSeparator()
-                menu.addAction("Show in Folder", lambda: _show_in_folder(path))
-            menu.exec_(self.list.mapToGlobal(pos))
-        except Exception as exc:
-            warn("data panel menu: %s" % exc)
-
-    def keep_copy(self, copy, original):
-        kept = keep_conflict_copy(copy, original, self.place_root())
-        self.refresh()
-        return kept
-
-    def _rename(self, path, is_folder):
-        try:
-            old = os.path.basename(path) if is_folder else core.design_name(path)
-            new, ok = QtWidgets.QInputDialog.getText(self, "Rename", "New name", text=old)
-            if not ok or not new.strip() or new.strip() == old:
-                return
-            if is_folder:
-                target = os.path.join(os.path.dirname(path), core.clean_name(new))
-                if os.path.exists(target):
-                    raise core.StoreError("A folder called %s is already there." % new)
-                os.replace(path, target)
-            else:
-                if doc_for_file(path) is not None and _has_views(doc_for_file(path)):
-                    raise core.StoreError("Close the design before renaming it.")
-                users = _open_referrers(path)
-                if users:
-                    raise core.StoreError("Close %s first: it uses %s." % (", ".join(users), old))
-                core.rename_design(path, new, project_folder(), use_git())
-            self.refresh()
-        except Exception as exc:
-            warn("rename: %s" % exc)
-            commands.tell("Could not rename: %s" % exc)
-
-    def move_or_copy(self, path, kind):
-        """Right-click > Move... / Copy...: pick the folder (Fusion's Move / Copy To)."""
-        try:
-            dialog = MoveCopyDialog(path, kind, self.folder)
-            dialog.accepted.connect(lambda: self._moved_or_copied(path, kind, dialog.target()))
-            _show(dialog, "%s:%s" % (kind, path))
-        except Exception as exc:
-            warn("%s: %s" % (kind, exc))
-
-    def _moved_or_copied(self, path, kind, folder):
-        if not folder:
-            return
-        done = move_design(path, folder) if kind == "move" else copy_design(path, folder)
-        if done:
-            self.refresh()
-
-    def _trash(self, path):
-        try:
-            if doc_for_file(path) is not None:
-                commands.tell("Close the design before deleting it.")
-                return
-            answer = QtWidgets.QMessageBox.question(
-                self,
-                "Delete design",
-                "Move %s to the project's trash folder (%s)?\nIt can be taken back from there."
-                % (core.design_name(path), core.TRASH_FOLDER),
-            )
-            if answer != QtWidgets.QMessageBox.Yes:
-                return
-            target = core.trash_design(path, project_folder())
-            log("moved %s to %s" % (path, target))
-            self.refresh()
-        except Exception as exc:
-            warn("delete: %s" % exc)
-            commands.tell("Could not delete: %s" % exc)
-
-
+# -- the Data Panel (data_panel_ui.py) ----
 class MoveCopyDialog(QtWidgets.QDialog):
     """Fusion's Move / Copy To: the project's folders (New Folder makes one in the folder
     picked), OK moves or copies the design there."""
@@ -2404,7 +1932,9 @@ def _ensure_dock():
     dock = QtWidgets.QDockWidget("DATA PANEL", main)
     dock.setObjectName("SciForgeDataPanelDock")
     dock.toggleViewAction().setVisible(False)
-    panel = DataPanel()
+    from . import data_panel_ui
+
+    panel = data_panel_ui.DataPanel()
     dock.setWidget(panel)
     main.addDockWidget(QtCore.Qt.LeftDockWidgetArea, dock)
     _state["dock"], _state["panel"] = dock, panel
@@ -2514,6 +2044,101 @@ def insert_design(path=None):
         warn("insert design failed: %s" % exc)
         commands.tell("The design could not be inserted: %s" % exc)
         return None
+
+
+# -- a copy of another design (a card dragged from the Data Panel) ----
+ACTIVE = object()  # insert_copy's `parent`: the design's active component
+
+
+def insert_copy(path, doc=None, parent=ACTIVE, place=True):
+    """Copy the design `path` into `doc` (default: the active design; none open: a new one)
+    as one component holding its components, bodies and every step, with no link back to
+    the file (Luca's wish: a design dragged from the Data Panel comes in as a copy; Fusion's
+    Insert + Break Link in one go). It goes into the component `parent` (ACTIVE: the active
+    one; None: the top of the design), one undo step, then the Move dialog places it like
+    Insert into Current Design does (place=False: it stays where it came in).
+    An unsaved design takes a copy too: nothing is stored relative to its file."""
+    if doc is None:
+        doc = _active_doc()
+    if doc is None:
+        doc = App.newDocument("Untitled")
+    if version_of(doc):
+        commands.tell("This is an older version opened read-only: nothing can be inserted here.")
+        return None
+    if not path or not os.path.isfile(path):
+        commands.tell("The design %s was not found." % (path or ""))
+        return None
+    if not core.is_design(path):
+        commands.tell("Only designs (.FCStd) can be dragged into a design.")
+        return None
+    if doc.FileName and core.same_path(path, doc.FileName):
+        commands.tell("A design cannot be inserted into itself.")
+        return None
+    if not commands.finish_open_dialog():
+        return None
+    other = doc_for_file(path)
+    opened = other is None
+    if other is not None and is_modified(other):
+        commands.tell(
+            "%s is open with unsaved changes: the copy is of what is open now."
+            % core.design_name(path)
+        )
+    try:
+        if opened:
+            for name in App.listDocuments():  # read already for a link of another design
+                if core.same_path(App.getDocument(name).FileName, path):
+                    other = App.getDocument(name)
+                    opened = False
+                    break
+        if other is None:
+            other = App.openDocument(path, True)  # hidden: no tab of its own
+            _restore_active(doc.Name)
+        from . import components, design_insert, exchange_ui
+
+        if parent is ACTIVE:
+            parent = components.active_component(doc)
+        doc.openTransaction("Insert Copy")
+        try:
+            comp = design_insert.insert_copy(doc, other, parent)
+        except ValueError as exc:
+            doc.abortTransaction()
+            commands.tell(str(exc))
+            return None
+        doc.commitTransaction()
+        doc.recompute()
+        log("inserted a copy of %s into %s" % (core.design_name(path), doc.Label))
+        if place:
+            commands.tell(
+                "Inserted a copy of %s (not linked to its file): place it, then OK."
+                % core.design_name(path)
+            )
+            exchange_ui.place_after(doc.Name, comp.Name)
+        return comp
+    except Exception as exc:
+        try:
+            doc.abortTransaction()
+        except Exception:
+            pass
+        warn("insert copy failed: %s" % exc)
+        commands.tell("The design could not be inserted: %s" % exc)
+        return None
+    finally:
+        if opened and other is not None:
+            _close_hidden(other.Name, doc.Name)
+
+
+def _close_hidden(name, keep_active):
+    """Close a design read only to copy from it (it has no tab; the copy needs nothing of
+    it: every step it uses was copied)."""
+    try:
+        if name not in App.listDocuments():
+            return
+        if _has_views(App.getDocument(name)):
+            return
+        App.closeDocument(name)
+        _restore_active(keep_active)
+    except Exception as exc:
+        warn("closing %s: %s" % (name, exc))
 
 
 # -- closing a changed design (Fusion's Automatic version on close) ----

@@ -7,6 +7,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 **Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
 R0-R4 are built and merged on `develop` (2026-10-20, three parallel agents). What is left is R5: Luca's tests (quick update, dry-run build, Update now), then his green light for the release. Also: Luca must switch on GitHub Discussions and create the labels `idea` and `beta`.
 
+**2026-10-23: Luca's four additions are on `develop`** (Fusion-style Data Panel, drag a design
+into an open design as a copy, Opacity Control in the browser, the 3D view's hover lighting the
+browser row): newest session log. Waiting for his test on Windows.
+
 **Sandbox limit found at release time (2026-10-21): a Claude Code cloud session can only push to
 `develop`.** A tag push (`git push origin sciforge-v...`) and a push to `Release` get HTTP 403 from
 the session's git proxy, and having a workflow create the tag instead was refused as a bypass. So
@@ -409,6 +413,14 @@ Quick updates come from green "SciForge tests" runs on `develop`.
       work?" at the next start + Recover Documents, the Data Panel (Ctrl+Alt+P) with
       thumbnails and version badges, Insert Design by relative path, Project and Recovery
       Settings. 4 scenarios (`versions_*.py`, 176 checks), unit `test_versions_core.py`.
+- [x] Luca's four additions of 2026-10-23 (`develop`; **not yet checked by Luca**): a
+      Fusion-style Data Panel (`data_panel_ui.py`: cards with V-badges, search, sort,
+      list/grid, details with Versions / Uses / Used In, drag a card onto a folder, files
+      dropped from outside, keys), drag a design into an open design = an independent copy
+      (`versions_ui.insert_copy`), Opacity Control in the browser (`opacity*.py`), the 3D
+      view's hover lights the browser row. Scenarios `data_panel_fusion` (59),
+      `browser_opacity_hover` (46); unit `test_data_panel_core`, `test_opacity_core`,
+      `test_browser_core.HoverTests`. See the session log.
 
 ## Known issues / findings
 
@@ -1396,6 +1408,86 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   Scale's default for profiles.
 
 ## Session log
+
+### Session log: Data Panel part 2, drag-in copies, Opacity Control, hover lights the browser (`develop`, 2026-10-23)
+
+Luca: "a more robust data panel. Something similar to how Fusion does it", "drag files from
+the data panel into open files. Make it a copy of the file", "control an objects opacity.
+right clicking on the object in the browser should have the option for opacity", "if i hover
+over a body in the work area, it should get highlighted in the browser". All four built;
+specs and sources: `parity/versions.md` "Data Panel, part 2", `parity/bodies.md` "Opacity
+Control", `parity/timeline-browser.md` "The 3D view's hover lights the browser row".
+
+#### Built
+- **Data Panel** moved out of `versions_ui.py` into `data_panel_ui.py` (+ pure
+  `data_panel_core.py`). Kept for the old tests: `panel.list` is a QListWidget, item text
+  "Arm  v2", `UserRole` = (kind, path), the object names, the right-click entries. New: cards
+  painted by `_CardDelegate` (picture, V-badge top right, name, age; list rows with size),
+  Search this place (whole place, 200 max, "in Parts"), Name / Last saved / Size sort
+  (pref `DataPanelSort`), list/grid (pref `DataPanelList`), details under the cards (Open,
+  Insert menu, tabs Versions / Uses (n) / Used In; Used In read only when its tab shows),
+  drag a card onto a folder card = Move, files dropped from the file manager = Upload
+  (Upload now takes .FCStd too, via `copy_design`), a 4 s look for changes (a folder slower
+  than 0.5 s to list is left alone), Enter / F2 / Delete / Backspace.
+- **Drag into a design = copy**: `DataPanelList` starts its own QDrag (press on a design
+  card + startDragDistance; Qt's item dragging is off) carrying file URLs + MIME
+  `application/x-sciforge-design`, CopyAction only (a file manager must never *move* a
+  design out). `DropSession` installs an application-wide event filter for the drag: a 3D
+  view (`view_document`) or the browser (`drop_target`; a component row = into it) accepts,
+  everything else refuses, so **FreeCAD's own drop handling (it merges a dropped .FCStd into
+  the design) never runs**. The work runs after the drag ends (`finish` -> `drop_designs`).
+  `versions_ui.insert_copy(path, doc, parent=ACTIVE)`: open hidden if needed (closed again),
+  one transaction "Insert Copy", `design_insert.insert_copy` (top-level components + bodies
+  `copyObject(list, True)` into one new component "Robot" / "Robot (2)", labels restored,
+  component step first), then the Move dialog. Unsaved target designs are fine. Also on the
+  card menu ("Insert a Copy into Current Design") and the details' Insert.
+- **Opacity Control**: browser menu entry after Show/Hide for body / mesh_body / component
+  (`browser_core.MENUS`), submenu 100..20 % + Custom Opacity... (`opacity_ui`, slider with
+  live preview, OK = one undo step, Cancel = old look). Stored as `SciForgeOpacity` on the
+  object (added *before* the transaction, so undo gives 100 % back instead of removing the
+  property); shown body x components (multiplied), over an appearance's own transparency;
+  `opacity.apply` sets Transparency on the body's VP and every PartDesign step's VP, run from
+  `bodies_gui.sync` (after appearances) on recompute / undo / redo. Combine's see-through
+  tool preview holds its bodies (`opacity.HOLD`).
+- **Hover lights the browser row**: the browser's selection observer now also gets
+  setPreselection / removePreselection -> 30 ms later `getPreselection()` ->
+  `getSubObjectList(sub)` (a step followed by its body) -> `browser_core.hover_row` (innermost
+  row wins) -> `shown_row` (a closed folder/component lights instead) -> the delegate paints
+  an accent band. No scrolling / expanding on hover.
+- Browser accepts drops now (`setAcceptDrops`); drops from the file manager still reach
+  FreeCAD's main window (Qt passes an ignored DragEnter up to the parent).
+
+#### FreeCAD / PySide facts found
+- **PySide6 `QAction.menu()`** can return a wrapper that deletes the submenu when the
+  temporary is dropped ("Internal C++ object (QMenu) already deleted", and the open menu then
+  hung the scenario until the timeout). Find a submenu by `menu.findChildren(QMenu)` + title.
+  New test helper `widget_input.right_click_sub(widget, pos, "Opacity Control", "40%")`.
+- In a QStyledItemDelegate, `opt.icon` after `initStyleOption` is the option's own member:
+  read the icon from `index.data(DecorationRole)` before clearing it (the cards first came
+  out without pictures).
+- The card drag is started by `DataPanelList` itself, not by QAbstractItemView (simpler and
+  predictable; an early test failure turned out to be the test's own card lookup: "Robot"
+  matched the "Robots" folder first).
+- Synthetic drags in tests: build `QDragEnterEvent` / `QDragMoveEvent` / `QDropEvent` and
+  `QApplication.sendEvent` them to the GL widget / browser viewport while a `DropSession`
+  runs (application event filters see `sendEvent`); `data_panel_ui.DRAG_HOOK` replaces
+  `QDrag.exec` (which needs a real mouse) to check what a real mouse drag carries.
+- FreeCAD under xvfb writes small grey design thumbnails: the screenshots' card pictures are
+  not what Windows shows.
+
+#### Tests
+- Unit: all 1830 OK (new in it: `test_data_panel_core` 20, `test_opacity_core` 8,
+  `test_browser_core.HoverTests` 6). `check_install.sh`: all 1607 files installed.
+- Scenarios (real FreeCAD 1.1.4 under xvfb): `data_panel_fusion` PASS (59, +1 check added after),
+  `browser_opacity_hover` PASS (46); on the new panel the old `versions_data_panel`,
+  `polish2_data_panel`, `exchange2_link`, `exchange2_step_open` PASS; also `bodies_combine`,
+  `components_basic`, `components2_move`, `components2_copy` PASS. The full sweep runs on
+  GitHub (CI on develop).
+
+#### Open
+- Not checked by Luca on Windows. Not built: Fusion's Active Component Visibility, People /
+  sharing / locking (out of scope), a Drawings tab (drawings live inside the design), moving
+  a whole folder. The CHANGELOG gets these in the next release's section.
 
 ### Session log: 0.1.0-beta, R1-R4 built by three parallel agents, merged (`develop`, 2026-10-20)
 
