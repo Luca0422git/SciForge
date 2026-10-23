@@ -81,7 +81,7 @@ doc (`parity/surface.md`, section "Part 3") has the behaviour table with sources
   surface3_isocurve 26. Existing ones re-run and passing: every `surface*` and `surface2*`
   scenario, gaps_sweep_guide_surface, inspect_analysis_components / curvature / zebra,
   ribbon_sweep (221).
-- Golden: the full run 449 pass, 2 known xfail; the surface set (39, the 10 `surface3_*`
+- Golden: the full run 449 pass, 2 known xfail; the surface set (30, the 10 `surface3_*`
   among them) re-run after the last change: all pass. Unit: 1862 OK; base smoke and journey pass.
 
 ## Shared files touched
