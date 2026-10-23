@@ -610,10 +610,11 @@ SHEET_METAL_CREATE = group(
         _same(SOLID_CREATE, "Create Sketch"),
         SEP,
         item("Flange", None, None),  # owner: sm-forming
-        item("Lofted Flange", None, None),  # owner: sm-more
+        # owner: sm-more
+        item("Lofted Flange", "SciForge_SheetMetalLoftedFlange", "sm_lofted_flange"),
         item("Bend", "SciForge_SheetMetalBend", "sm_bend"),  # owner: sm-more
         item("Hem", "SciForge_SheetMetalHem", "sm_hem"),  # owner: sm-more
-        item("Join by Bend", None, None),  # owner: sm-more
+        item("Join by Bend", "SciForge_SheetMetalJoinBend", "sm_join_bend"),  # owner: sm-more
         SEP,
         item("Create Flat Pattern", None, None),  # owner: sm-flat
         SEP,
@@ -630,13 +631,14 @@ SHEET_METAL_MODIFY = group(
     ["Press Pull", "Unfold", "Refold", "Rip", "Sheet Metal Rules"],
     [
         _same(SOLID_MODIFY, "Press Pull"),
-        _same(SOLID_MODIFY, "Fillet"),  # owner: sm-more (its sheet metal Fillet, if built)
-        _same(SOLID_MODIFY, "Chamfer"),  # owner: sm-more (its sheet metal Chamfer, if built)
+        item("Fillet", "SciForge_SheetMetalFillet", "sm_fillet"),  # owner: sm-more (solid too)
+        item("Chamfer", "SciForge_SheetMetalChamfer", "sm_chamfer"),  # owner: sm-more (solid too)
         SEP,
         item("Unfold", None, None),  # owner: sm-flat
         item("Refold", None, None),  # owner: sm-flat
         item("Rip", None, None),  # owner: sm-flat
-        item("Corner Closure", None, None),  # owner: sm-more
+        # owner: sm-more
+        item("Corner Closure", "SciForge_SheetMetalCornerClosure", "sm_corner_closure"),
         item("Convert to Sheet Metal", None, None),  # owner: sm-flat
         SEP,
         _same(SOLID_MODIFY, "Combine"),
