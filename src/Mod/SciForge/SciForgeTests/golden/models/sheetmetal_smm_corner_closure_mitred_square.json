@@ -1,0 +1,86 @@
+{
+  "id": "sheetmetal_smm_corner_closure_mitred_square",
+  "title": "Corner Closure with Extend Aligned off on two flanges mitred by Flange, rule gap, Trim To Bend (once refused as 'already closed'; on a 90 degree corner it matches Extend Aligned on)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            60
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          100,
+          30,
+          1
+        ],
+        [
+          50,
+          60,
+          1
+        ]
+      ],
+      "options": {
+        "height": 20
+      }
+    },
+    {
+      "op": "sf_sm_corner_closure",
+      "id": "c0",
+      "dominant": [
+        99.2928932,
+        60,
+        11.5
+      ],
+      "submissive": [
+        100,
+        59.2928932,
+        11.5
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 9045.184784,
+        "solids": 1,
+        "source": "baseline-freecad-1.1.4"
+      }
+    },
+    {
+      "op": "sf_sm_more_edit",
+      "target": "c0",
+      "set": {
+        "extend_aligned": false
+      }
+    }
+  ],
+  "expect": {
+    "volume": 9045.184784,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: the same volume with Extend Aligned on (the check) and off (the edit)"
+  }
+}

@@ -255,7 +255,9 @@ def closure_shape(
     else:
         raise sb.SheetMetalError("Alignment must be Symmetric Gap or Overlap.")
     pieces = [p for p in pieces if not p.isNull() and p.Volume > 1e-9]
-    if not pieces:
+    if not pieces and relief not in ("trim_to_bend",) + CUT_RELIEFS:
+        # a corner already closed to this gap (two flanges mitred by Flange) can still get
+        # its relief: only a Tear there changes nothing
         raise sb.SheetMetalError("The corner is already closed this far; nothing to add.")
     size = relief_size if relief_size is not None else options.get("relief_size")
     size = float(size or 4 * thickness)
