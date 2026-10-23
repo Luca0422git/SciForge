@@ -1,0 +1,114 @@
+{
+  "id": "surface4_press_pull_shade",
+  "title": "Press Pull of the flat lid of a lampshade of surfaces (a cone frustum, radius 10 to 6, 10 high): the cone wall is carried on to the moved lid, the lid shrinks with it",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10,
+        "taper": -21.80140948635181
+      },
+      "comment": "the wall leans in atan(0.4): radius 10 at the floor, 6 at the top"
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "step": "w1",
+          "edges": {
+            "at": {
+              "axis": "z",
+              "value": "max"
+            },
+            "count": 1
+          }
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 654.4731498160821,
+        "faces": 2,
+        "solids": 0,
+        "rel_tol": 1e-06,
+        "source": "analytic",
+        "note": "the frustum's side pi (10 + 6) sqrt(10^2 + 4^2) and the lid pi 6^2"
+      }
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "pp",
+      "kind": "surface_press_pull",
+      "faces": {
+        "type": "plane",
+        "count": 1
+      },
+      "options": {
+        "distance": 2.0
+      },
+      "comment": "the lid's normal points up: +2 moves it to z = 12"
+    }
+  ],
+  "expect": {
+    "area": 702.1170936400767,
+    "faces": 2,
+    "solids": 0,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      12.0
+    ],
+    "rel_tol": 1e-06,
+    "source": "analytic",
+    "note": "the cone carried on to z = 12, where its radius is 10 - 0.4 x 12 = 5.2: pi (10 + 5.2) sqrt(12^2 + 4.8^2) + pi 5.2^2"
+  }
+}

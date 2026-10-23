@@ -44,7 +44,7 @@ keys in `docs/sciforge/dev/research/fusion-surface.md`), **F** = Autodesk Commun
 | **Fillet / Chamfer** of edges of a surface body (Surface > Modify > Fillet / Chamfer; the SOLID dialog) | A step of its own (`SurfaceFillet` / `SurfaceChamfer`): FreeCAD's PartDesign::Fillet refuses a body that is not a solid ("Base feature's shape is not a solid", probed), OpenCASCADE's `makeFillet` / `makeChamfer` on the shell work. Radius Type Constant or Variable (Start Radius at the edge's start, End Radius at its end; `makeFillet(r1, r2)`), Chord Length greyed with the reason (fillet); Equal Distance / Two Distances / Distance and Angle with Flip (chamfer); Tangent Chain; a drag arrow with its value box | A |
 | Fusion cannot fillet between two separate surface bodies: trim, Stitch, then fillet the shared edge | Same: an edge on the outside of a surface (one face) is refused: "...two separate surface bodies are stitched first (Stitch), as in Fusion" | F |
 | Which command opens it | F / SOLID's Fillet or Chamfer hand over (`fillet_ui.start` -> `surfmod_ui.take_blend`) when the picked edges are on a surface body, or when nothing is picked and the SURFACE tab shows a surface body (or no solid exists at all). In that dialog a first click on a solid's edge hands it back to the SOLID Fillet / Chamfer (Fusion's Fillet rounds solids on the SURFACE tab too) | G |
-| **Press Pull** (Q) on a face of a surface body: an Offset Face / Press Pull feature; the faces around follow | Press Pull hands over at the first pick on a surface body (`presspull_ui._take`). A flat face moves along its normal (+ along it). Among flat polygons (a box, a tray with slanted walls) each corner of the face slides along the edge that leaves it to the moved plane and the faces around are rebuilt with it (exact, like Fusion's offset of a face of a solid); otherwise a neighbour that runs along the move (a round or flat extruded wall) grows by a band or is cut back to the moved face. Several parallel flat faces move together. Flat faces that face different ways (two walls of a box, of a tray) move together among flat polygons, each along its own normal: every corner goes where its faces' planes meet again, a corner on the open edge of a face that stays slides along that edge, the rim between two moved walls stays flat. One curved face is offset (a cup's round wall: the floor grows or is cut back with it). A "Press Pull" step (`SurfacePressPull`) | A (presence, several faces: `OffsetFacesFeatures`), G (the neighbour rule, the rim) |
+| **Press Pull** (Q) on a face of a surface body: an Offset Face / Press Pull feature; the faces around follow | Press Pull hands over at the first pick on a surface body (`presspull_ui._take`). A flat face moves along its normal (+ along it). Among flat polygons (a box, a tray with slanted walls) each corner of the face slides along the edge that leaves it to the moved plane and the faces around are rebuilt with it (exact, like Fusion's offset of a face of a solid); otherwise a neighbour that runs along the move (a round or flat extruded wall) grows by a band or is cut back to the moved face. A face whose neighbours meet it at an angle (the flat lid of a cone, a lampshade) is moved with its neighbours carried on along their own surfaces (exactly for a cone, cylinder or plane; else `surface_geom.extend`) or cut back to the moved plane, and the moved face is the piece of that plane they close round; a neighbour that meets it tangentially (a fillet) is refused with the reason. Several parallel flat faces move together. Flat faces that face different ways (two walls of a box, of a tray) move together among flat polygons, each along its own normal: every corner goes where its faces' planes meet again, a corner on the open edge of a face that stays slides along that edge, the rim between two moved walls stays flat. One curved face is offset (a cup's round wall: the floor grows or is cut back with it). A "Press Pull" step (`SurfacePressPull`) | A (presence, several faces: `OffsetFacesFeatures`), G (the neighbour rule, the rim) |
 | Press Pull on a fillet's face changes the fillet | The face of a surface Fillet / Chamfer step opens that step's dialog (its size) | A (H-MOD: Press Pull resizes fillets) |
 | Press Pull on an edge: Fillet | An edge of a surface body opens the surface Fillet | A |
 | **Move/Copy** (M), **Align** of surface bodies | Same dialogs; the steps take a body with faces (`surfmod.body_has_faces`) instead of needing a solid. A copy of a surface body is a surface body | G (present in Fusion's menu) |
@@ -92,6 +92,8 @@ saved with the design.
   handed to the SOLID Fillet),
   `surface4_presspull_faces` (two walls facing different ways pushed out together, edit,
   undo / redo, a too-far refusal),
+  `surface4_presspull_shade` (the lid of a cone frustum pulled up and pushed down: the cone
+  carried on / cut back, edit, undo / redo, a refusal past the cone's tip),
   `surface4_presspull` (Q hand-over, -5, edit to +3, undo / redo, Q on an edge, Q on the
   fillet's face edits the fillet, a curved face offset, a too-far refusal, save with Ctrl+S,
   reopen, edit after the reopen), `surface4_move_mirror` (Mirror Join
@@ -104,22 +106,25 @@ saved with the design.
   Ctrl+Y, SURFACE Delete, Fillet, history turned on again),
   `surface4_step_part` (SURFACE Delete of a face of a STEP part without history: it is taken
   into a body and becomes a surface body; Ctrl+Z / Ctrl+Y; Fillet on it).
-- Golden models `surface4_*.json` (15): fillet + edit + reopen, variable fillet, chamfer +
+- Golden models `surface4_*.json` (16): fillet + edit + reopen, variable fillet, chamfer +
   SURFACE delete, press pull + edit + reopen, press pull of a tray with slanted walls (its
-  floor; two of its walls at once), press pull of a cup's round wall, merge, merge of
+  floor; two of its walls at once), press pull of a cup's round wall and of a lampshade's
+  lid, merge, merge of
   tangent faces (refit), split of a solid by a surface and by a lofted surface, split of a
   surface, rectangular pattern and pattern on path of a surface body, mirror join + scale.
 - Unit tests: `SciForgeTests/unit/test_surfmod_core.py`.
 
 ## Known gaps
 
-- **Press Pull** is refused with the reason when a face next to the moved one does not run
-  along the move: a flat face whose curved neighbours meet it at an angle, a curved face with
-  a tangent neighbour (a D-shaped wall), several curved faces at once, faces facing
-  different ways among faces that are not flat polygons. OpenCASCADE has no
+- **Press Pull** is refused with the reason for: a flat face with an open edge whose
+  neighbours meet it at an angle, a flat face next to a tangent face (a floor next to a
+  fillet: Fusion lets the fillet follow), a curved face with a tangent neighbour (a D-shaped
+  wall), several curved faces at once, several faces at an angle to their neighbours, faces
+  facing different ways among faces that are not flat polygons. OpenCASCADE has no
   per-face offset of an open shell bound to Python (`BRepOffset_MakeOffset::SetOffsetOnFace`
   is not exposed: `research/surface-gaps.md`): SciForge slides the corners among flat
-  polygons, offsets one curved face, and grows / trims the faces that run along the move.
+  polygons, offsets one curved face, grows / trims the faces that run along the move, and
+  carries on / cuts back the faces at an angle round one flat face.
 - **Merge of faces that meet at a sharp edge** is refused; faces that meet smoothly are
   refitted (OpenCASCADE's filling through their boundary and sample points), not tangent to
   the faces around them along the outer boundary (it passes through that boundary).

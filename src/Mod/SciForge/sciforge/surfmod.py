@@ -431,6 +431,9 @@ def press_pull(shape, names, distance):
         return _result(_slide_corners(shape, picked, planes, d), "Press Pull")
     except _NotPolygons:
         pass
+    if len(picked) == 1 and _meets_at_angle(shape, picked[0], planes[0][1]):
+        origin, n = planes[0]
+        return _result(_retrim(shape, picked[0], origin, n, d), "Press Pull")
     moved = []
     for face, (_origin, n) in zip(picked, planes):
         copy = face.copy()
@@ -585,6 +588,175 @@ def _slide_corners(shape, picked, planes, d):
             new.reverse()  # each face keeps its side (its normal)
         faces.append(new)
     return sew(faces)
+
+
+def _meets_at_angle(shape, face, n):
+    """True when a face next to `face` does not run along its normal `n` at their shared
+    edge (the band / trim way cannot be used)."""
+    for edge in face.Edges:
+        for other in faces_of_edge(shape, edge):
+            if other.isSame(face):
+                continue
+            for frac in (0.25, 0.5, 0.75):
+                p = edge.valueAt(
+                    edge.FirstParameter + frac * (edge.LastParameter - edge.FirstParameter)
+                )
+                try:
+                    uv = other.Surface.parameter(p)
+                    if abs(App.Vector(other.normalAt(*uv)).dot(n)) > 1e-4:
+                        return True
+                except Exception:
+                    return True
+    return False
+
+
+def _retrim(shape, face, origin, n, d):
+    """Press Pull of one flat face whose neighbours meet it at an angle (the flat top of a
+    cone, of a drafted wall): each neighbour is carried on past their shared edge (its own
+    surface, `surface_geom.extend`) or cut back, to the moved plane; the moved face is the
+    piece of that plane they close round. The face must be closed round by its neighbours
+    (no open edge); a neighbour that meets it tangentially is refused (it would not follow)."""
+    import BOPTools.SplitAPI as split_api
+
+    from . import surface_geom
+
+    target = origin + n * d
+    size = max(shape.BoundBox.DiagonalLength, 1.0) * 4.0 + abs(d)
+    plane = Part.Plane(target, n)
+    u, v = plane.parameter(target)
+    cutter = plane.toShape(u - size, u + size, v - size, v + size)
+    neighbours = {}
+    for edge in face.Edges:
+        owners = [f for f in faces_of_edge(shape, edge) if not f.isSame(face)]
+        if len(owners) != 1:
+            raise SurfaceModifyError(
+                "That face has an open edge, and the faces next to it meet it at an angle: "
+                "SciForge cannot tell where its open edge should go. Use Offset (SURFACE > "
+                "CREATE) or Move instead."
+            )
+        key = _index(shape.Faces, owners[0])
+        neighbours.setdefault(key, (owners[0], []))[1].append(edge)
+    rebuilt = {}
+    rim = []
+    for key, (other, edges) in neighbours.items():
+        edge = edges[0]
+        mid = _edge_mid(edge)
+        into = _into(other, edge, mid)
+        if abs(into.dot(n)) < 1e-3:
+            raise SurfaceModifyError(
+                "A face next to it meets it smoothly (tangent), so it cannot follow the move. "
+                "Change that face itself (a fillet: its radius), or use Offset (SURFACE > "
+                "CREATE)."
+            )
+        grown = other
+        if core.press_pull_action(into.dot(n), d) == "extend":
+            reach = abs(d) / abs(into.dot(n)) * 1.5 + 1.0
+            try:
+                grown = _carry_on(other, edges, reach)
+            except Exception as exc:
+                raise SurfaceModifyError(
+                    "A face next to it cannot be carried on that far (%s)." % _text(exc)
+                )
+        try:
+            pieces = open_pieces(split_api.slice(grown, [cutter], "Split"))
+        except Exception as exc:
+            raise SurfaceModifyError("A face next to it cannot be cut (%s)." % _text(exc))
+        # the neighbour keeps what lies on its own side of the moved plane (it runs from the
+        # shared edge that way)
+        kept = _keep_side(pieces, target, n, -1.0 if into.dot(n) < 0 else 1.0)
+        if not kept:
+            raise SurfaceModifyError(
+                "That is further than the faces next to it reach: they would disappear. Use a "
+                "smaller distance."
+            )
+        rebuilt[key] = [f for p in kept for f in p.Faces]
+        for f in rebuilt[key]:
+            rim += [e for e in f.Edges if _on_plane(e, target, n)]
+    try:
+        groups = Part.sortEdges(rim, 1e-5)
+        wires = [Part.Wire(g) for g in groups]
+        top = Part.makeFace(wires, "Part::FaceMakerBullseye")
+        top = top.Faces[0]
+    except Exception as exc:
+        raise SurfaceModifyError(
+            "The faces next to it do not close round the moved face (%s). Try a smaller "
+            "distance." % _text(exc)
+        )
+    u0, u1, v0, v1 = top.ParameterRange
+    if top.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0).dot(n) < 0:
+        top.reverse()
+    faces = []
+    for i, f in enumerate(shape.Faces, start=1):
+        if f.isSame(face):
+            continue
+        faces += rebuilt.get(i, [f.copy()])
+    faces.append(top)
+    result = sew(faces)
+    try:
+        import ShapeUpgrade
+
+        unify = ShapeUpgrade.UnifySameDomain(result, True, True, False)
+        unify.build()
+        tidy = unify.shape()
+        if not tidy.isNull() and tidy.isValid() and tidy.Faces:
+            result = tidy  # a neighbour and the band carried on from it: one face again
+    except Exception:
+        pass
+    if len(surface_geom.free_edges(result)) > len(surface_geom.free_edges(shape)):
+        raise SurfaceModifyError(
+            "The moved face no longer meets the faces around it. Try a smaller distance."
+        )
+    return result
+
+
+def _carry_on(face, edges, reach):
+    """`face` carried on past its `edges` by `reach` along its own surface: exactly, as one
+    face, when the face is its surface's parameter rectangle and the edges lie across its
+    length (a cone's or a cylinder's circle, a flat rectangle's side); else
+    `surface_geom.extend` (Natural, else Tangent bands)."""
+    from . import surface_geom
+
+    surface = face.Surface
+    if surface.TypeId in (
+        "Part::GeomCone",
+        "Part::GeomCylinder",
+        "Part::GeomPlane",
+        "Part::GeomSurfaceOfExtrusion",
+    ):
+        try:
+            u0, u1, v0, v1 = face.ParameterRange
+            whole = surface.toShape(u0, u1, v0, v1)
+            if abs(whole.Area - face.Area) < 1e-7 * max(1.0, face.Area):
+                lo, hi = v0, v1
+                for edge in edges:
+                    _u, v = surface.parameter(_edge_mid(edge))
+                    if abs(v - v0) < 1e-7:
+                        lo = v0 - reach
+                    elif abs(v - v1) < 1e-7:
+                        hi = v1 + reach
+                    else:
+                        raise ValueError("not across")
+                if surface.TypeId == "Part::GeomCone":
+                    apex = -surface.Radius / math.sin(surface.SemiAngle)
+                    if v0 > apex:
+                        lo = max(lo, apex + 1e-6)
+                    else:
+                        hi = min(hi, apex - 1e-6)
+                grown = surface.toShape(u0, u1, lo, hi)
+                if face.Orientation == "Reversed":
+                    grown.reverse()
+                return grown
+        except Exception:
+            pass
+    return surface_geom.extend(face, edges, reach, "natural")
+
+
+def _on_plane(edge, origin, n):
+    try:
+        points = [v.Point for v in edge.Vertexes] + [_edge_mid(edge)]
+        return all(abs((p - origin).dot(n)) < 1e-6 for p in points)
+    except Exception:
+        return False
 
 
 def _move_planes(shape, picked, planes, d):
