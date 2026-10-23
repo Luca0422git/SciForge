@@ -105,6 +105,8 @@ Fixed (details in `docs/sciforge/parity/sheet-metal.md`, "QA pass"):
   body also counted as the Join target (Join enabled, then "pick or make one first").
 - A To Object / Two Offsets face clicked on the preview was taken by name on the step before
   it (another face there): now by plane.
+- Editing an earlier flange took an edge of a later step (linked to it, "Edge54 is gone"):
+  mapped to the part before the flange or refused with the reason now.
 - Close in the rule editor dropped the typed values silently (hidden while editing now); an
   edge flange's override fields started at the active rule instead of the body's.
 - Inserting a design with its own rule into one that already had sheet metal silently

@@ -434,6 +434,38 @@ def later_done():
     titles = sm.timeline_titles()
     h.check("Flange 3 in the timeline", "Flange 3" in titles, titles)
     h.shot("2-four-walls")
+    s["v_later"] = sm.volume(s["body"])
+
+
+# -- editing the earlier flange: an edge of the later one is not taken ---------------------------
+def edit_earlier():
+    sm.double_click_timeline("Flange 2")
+
+
+def click_later_edge():
+    sm.settle()
+    p = sm.panel()
+    h.check("editing Flange 2", p is not None and p.editing and len(p.refs) == 2, p and p.refs)
+    h.fit()
+    # the top of Flange 3's front wall (T = R = 2 now: the wall runs z 4 .. 12)
+    h.check("clicked the later wall's top edge", h.click_edge(V(25, 0, 12)))
+
+
+def later_edge_refused():
+    sm.settle()
+    p = sm.panel()
+    h.check("still its two edges", p is not None and len(p.refs) == 2, p and p.refs)
+    h.check("says why", "later step" in sm.message(), sm.message())
+
+
+def esc_earlier():
+    sm.esc()
+
+
+def earlier_unchanged():
+    h.check("Esc closed it", sm.panel() is None)
+    h.check("the part as it was", sm.near(sm.volume(s["body"]), s["v_later"], 1e-7))
+    h.check("one valid solid", s["body"].Shape.isValid() and len(s["body"].Shape.Solids) == 1)
 
 
 # -- a Sheet Metal component's rule cannot be deleted ----------------------------------------
@@ -810,6 +842,11 @@ h.run(
         later_flanges,
         ok_later,
         later_done,
+        edit_earlier,
+        click_later_edge,
+        later_edge_refused,
+        esc_earlier,
+        earlier_unchanged,
         new_component,
         component_sheet_metal,
         ok_component,

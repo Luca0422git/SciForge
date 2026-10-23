@@ -179,6 +179,11 @@ Fixed on `sf/sm-forming-qa`:
   same name was another face (a wrong height or a refusal, depending on the face hit). It
   is now the face in the same plane on the part before the flange (a face only the new
   flange has is refused with the reason).
+- **Editing an earlier flange took edges and faces of the later steps** (the part is shown
+  whole while a flange is edited): a click on a later flange's edge was linked to that
+  later step and failed ("Edge54 is gone"). Picks on the flange itself and on later steps
+  are now mapped to the part before the flange (same line / same plane), or refused with the
+  reason ("made by a later step").
 - **A base or contour flange Join standing on the sheet (or across its edge)** was fused
   into a T or a sharp L: a solid no flat pattern can unfold (a corner between two sheets
   needs a bend). Join now needs the new sheet (a contour: one of its walls) to carry on a

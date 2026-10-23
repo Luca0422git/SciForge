@@ -574,13 +574,16 @@ class FlangePanel(Panel):
                 "profile to start one."
             )
             return
-        if self.target is not None and obj is self.target:
+        if self._not_before(obj):
             base = self.target.BaseFeature
             mapped = _same_edge(obj, short, base)
             if mapped is None:
                 self.message.setText(
                     "⚠ That edge belongs to the flange being made: OK this one first, then "
                     "flange its edges with a new Flange."
+                    if obj is self.target
+                    else "⚠ That edge is made by a later step: pick an edge of the part as it "
+                    "is before this flange."
                 )
                 return
             obj, short = base, mapped
@@ -630,7 +633,7 @@ class FlangePanel(Panel):
         if short and not short.startswith("Face"):
             self.message.setText("⚠ To Object: pick a flat face or a plane.")
             return
-        if self.target is not None and obj is self.target:
+        if self._not_before(obj):
             mapped = self._face_before(obj, short)
             if mapped is None:
                 return
@@ -645,7 +648,7 @@ class FlangePanel(Panel):
         if short and not short.startswith("Face"):
             self.message.setText("⚠ Two Offsets: pick a flat face or a plane.")
             return
-        if self.target is not None and obj is self.target:
+        if self._not_before(obj):
             mapped = self._face_before(obj, short)
             if mapped is None:
                 return
@@ -654,6 +657,24 @@ class FlangePanel(Panel):
         self.activate("ref2" if index == 0 and self.offset_refs[1] is None else "selection")
         self._refresh_picks()
         self._changed()
+
+    def _not_before(self, obj):
+        """True for the flange itself and the steps after it in its body (shown while an
+        earlier flange is edited): their edges and faces are taken on the step before the
+        flange instead (a link to them would loop, and their names are theirs, QA)."""
+        target = self.target
+        if target is None or obj is None:
+            return False
+        if obj is target:
+            return True
+        if flange.owner_body(obj) is not flange.owner_body(target):
+            return False
+        step = target.BaseFeature
+        while step is not None:
+            if step is obj:
+                return False
+            step = getattr(step, "BaseFeature", None)
+        return obj.isDerivedFrom("PartDesign::Feature")
 
     def _face_before(self, obj, short):
         """(the step before the preview, its face) for a face clicked on the flange being
