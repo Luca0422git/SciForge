@@ -123,8 +123,21 @@ FreeCAD facts found:
   one face: never measure the sheet's thickness from a face's extent alone.
 - `harness.press` sends keys to the 3D view: a non-modal window (Sheet Metal Rules) gets Esc
   only when it is sent to its own focused widget.
+- While a flange previews, a click on geometry that the preview and the step before it both
+  show can land on either object; the two number their faces and edges differently, so a
+  pick on the preview (or on a later step while an earlier flange is edited) is mapped by
+  geometry (same line, same plane), never by name.
+- `Document.UndoCount` is a cheap way for a scenario to prove a Cancel / Esc added no step.
 
-New tests: scenario `sheetmetal_qa` (empty design, preselected edge, Cancel, save / reopen,
-edit from the timeline, rule Undo / Redo, later flanges, component rule refusal, New
-Component rule, Outside mitre), golden models `sheetmetal_edge_flange_adjacent_later` and
+Left for later (also in the parity doc): an inserted design's rule with the same name as one
+In This Design takes the design's values; Paste New leaves a hidden copy of the rule store; a
+later Flange next to an earlier one meets it with an open corner (Fusion unknown); sm-more's
+own `sheetmetal_bend.edge_frame` measures the side face the same extent-based way and will
+refuse a Hem / Bend on the edge next to an earlier flange the same way (its QA should port
+`_sheet_thick_at`).
+
+New tests: scenario `sheetmetal_qa` (170 checks: empty design, preselected edge, Cancel,
+save / reopen, edit from the timeline, rule Undo / Redo, later flanges, editing an earlier
+flange, component rule refusal, New Component rule, Outside mitre, To Object on the part's
+own wall, Join refusal, extent switch, rule units), golden models `sheetmetal_edge_flange_adjacent_later` and
 `sheetmetal_edge_flange_miter_outside`.
