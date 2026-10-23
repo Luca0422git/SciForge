@@ -128,7 +128,8 @@ New tests: scenarios `plastic_qa_rules` and `plastic_qa_tools` (an empty design,
 a rule and Ctrl+Z, Esc in Manage after a followed edit, renaming a rule, the zero-draft rule,
 Boss on a face then Esc, a drafted Rest then Esc, a boss edited after save and reopen, a rule
 assigned after reopen, Flip with a picked body, the inch rule, a lid in its own component
-with its own rule), golden `plastic_boss_major_draft`, three unit tests (24 in all). Gaps
+with its own rule), golden `plastic_boss_major_draft` and `plastic_rest_cut` (the Rest's
+cut-only case, also probed on a shelled pipe crossing the plane: exact), three unit tests (24 in all). Gaps
 found but not fixed are in the parity doc's Known gaps (rules of nested components; the
 plastic library settings are not reset between scenarios by the test harness: every plastic
 scenario resets them itself in its setup).

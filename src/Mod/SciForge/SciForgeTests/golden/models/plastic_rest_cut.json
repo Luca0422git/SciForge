@@ -1,0 +1,60 @@
+{
+  "id": "plastic_rest_cut",
+  "title": "Rest: a flat landing cut into a round bar (the bar bulges past the sketch plane)",
+  "tags": [
+    "plastic",
+    "rest"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            20
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 60
+    },
+    {
+      "op": "sf_rest",
+      "id": "r1",
+      "plane": "XY",
+      "offset": 16,
+      "rect": [
+        20,
+        -6,
+        40,
+        6
+      ],
+      "thickness": 2,
+      "draft": 0,
+      "comment": "the plane z 16 lies below the bar's crown (z 20): the rest only cuts"
+    }
+  ],
+  "expect": {
+    "volume": 74511.228371,
+    "solids": 1,
+    "bbox": [
+      0,
+      -20,
+      -20,
+      60,
+      20,
+      20
+    ],
+    "source": "analytic",
+    "note": "Bar r 20 x 60 along X = pi 400 60 = 75398.223686. Inside the profile x 20..40, |y| <= 6 the bar's top (z = sqrt(400 - y^2) >= 19.08) bulges past the plane z 16 everywhere and is cut away; below the plane the bar is solid, so nothing is added: 20 (6 sqrt(364) + 400 asin(0.3) - 12 * 16) = 886.995316 removed (QA pass)."
+  }
+}
