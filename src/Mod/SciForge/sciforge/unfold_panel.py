@@ -191,6 +191,7 @@ class SheetPanel(pickpanel.PickPanel):
                 other = self._other_body(obj)
                 if other is None:
                     continue
+                self.drop_preview()
                 self.switch_body(*other)
                 self.picks = {key: [] for key in self.picks}
                 changed = True
@@ -212,6 +213,18 @@ class SheetPanel(pickpanel.PickPanel):
             self.refresh_boxes()
             self.update()
         return False  # update() rebuilt what it needs
+
+    def drop_preview(self):
+        """The preview step made in the body the dialog leaves for another one is removed
+        (QA: it stayed in the first body, its picks were then set to the second body's
+        faces, and OK kept an Unfold / Rip of one body that read another body's face)."""
+        if self.target is None or self.editing:
+            return
+        try:
+            bodies.remove_step(self.target)
+        except Exception as exc:
+            warn("%s: the preview of %s not removed: %s" % (self.title, self.body.Label, exc))
+        self.target = None
 
     def shown(self):
         names = []
