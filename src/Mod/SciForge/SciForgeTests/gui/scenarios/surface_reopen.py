@@ -3,8 +3,9 @@
 Fusion user, only real input.
 
 An L of walls (sketch lines (0, 0) - (30, 0) - (30, 20) on XY, SURFACE Extrude 10: area
-500), saved. Offset both walls 3 (a new surface: 440 inside the L, or 500 + 10 (pi / 2) 3 = 547.12
-outside with its rounded corner). Thicken both walls 2 (a new solid body: 960 inside or
+500), saved. Offset both walls 3 (a new surface: 440 inside the L, or 33 x 10 + 23 x 10 = 560
+outside with its sharp corner, Offset Type Sharp). Thicken both walls 2 (a new solid body:
+960 inside or
 1040 outside). Ctrl+S (Enter skips the version description), closed, opened:
 the same bodies with the same icons (surface, surface, solid), the same timeline, every
 step computed. Double-click "Extrude 1": its curves and distance read back; type 15, OK:
@@ -12,7 +13,6 @@ the walls, the offset surface and the solid grow by half (they follow the extrud
 Redo. Double-click "Thicken 1", Cancel: nothing changes.
 """
 
-import math
 import os
 import tempfile
 
@@ -27,7 +27,7 @@ from SciForgeTests.gui import versions_input as vi
 
 V = App.Vector
 s = {}
-OFFSETS = (440.0, 500 + 15 * math.pi)
+OFFSETS = (440.0, 560.0)  # Offset Type Sharp (the default since surface part 3)
 THICK = (960.0, 1040.0)
 
 
@@ -106,7 +106,11 @@ def offset_ok():
     st.settle()
     body = st.step_body()
     area = st.area(body)
-    h.check("an offset surface (440 or 547.12)", any(st.near(area, a, 1e-5) for a in OFFSETS), area)
+    h.check(
+        "an offset surface (440 or 560, sharp corner)",
+        any(st.near(area, a, 1e-5) for a in OFFSETS),
+        area,
+    )
     s["offset"] = body
     s["offset_area"] = area
     st.ok()

@@ -3208,3 +3208,44 @@ try:
     install()
 except Exception as _exc:  # never let an import fail the commands
     warn("surface delete watch unavailable: %s" % _exc)
+
+
+# -- Change Parameters lists the surface steps' numbers -------------------------------------------
+PARAMETER_WORDS = {
+    "distance": "Distance",
+    "distance2": "Distance Two",
+    "start_offset": "Offset",
+    "taper": "Taper Angle",
+    "taper2": "Taper Angle Two",
+    "angle": "Angle",
+    "angle2": "Angle Two",
+    "twist": "Twist Angle",
+    "rail_distance": "Guide Rail Distance",
+    "start_weight": "First Profile Weight",
+    "end_weight": "Last Profile Weight",
+    "start_angle": "First Profile Takeoff Angle",
+    "end_angle": "Last Profile Takeoff Angle",
+    "thickness": "Thickness",
+    "tolerance": "Tolerance",
+}
+
+
+def register_parameters():
+    """Fusion's Change Parameters lists every feature's numbers: the surface steps' too (the
+    Patch's Tangency Weight changes nothing in SciForge, so it is left out)."""
+    from . import parameters
+
+    for kind, numbers in surface.NUMBERS.items():
+        if kind == "patch":
+            continue
+        rows = [
+            (prop, PARAMETER_WORDS.get(key, key.replace("_", " ").title()))
+            for key, prop in numbers.items()
+        ]
+        parameters.SCIFORGE_PROPS.setdefault(core.sciforge_type(kind), rows)
+
+
+try:
+    register_parameters()
+except Exception as _exc:  # never let an import fail the commands
+    warn("surface parameters unavailable: %s" % _exc)

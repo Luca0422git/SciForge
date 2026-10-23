@@ -137,7 +137,7 @@ def r1_types():
         return
     box = p.rows["type"][0]
     types = [box.itemText(i) for i in range(box.count())]
-    h.check("Type: Angle, To, Full", types == ["Angle", "To", "Full"], types)
+    h.check("Type: Partial, To, Full", types == ["Partial", "To", "Full"], types)
     h.fit()
     h.check("clicked the profile line", h.click_edge(V(10, 0, 10)))
 
