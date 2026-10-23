@@ -49,8 +49,10 @@ its other 137 checks pass.
 
 - After an edit makes a later step fail (the Trim, the Split Body above), the failed step is
   red with its reason, but its body keeps showing the step's last good shape (FreeCAD keeps a
-  failed feature's previous Shape); Fusion shows the model as computed up to the failure. Both
-  scenarios check the red state and the reason, and Ctrl+Z.
+  failed feature's previous Shape) and the steps after it keep theirs, not red (in
+  `journey_surface2` only the Trim is red; the Extend .. Thicken after it stay as they were);
+  Fusion shows the model as computed up to the failure. Both scenarios check the red state,
+  that the reason is in words, that nothing new is built from it, and Ctrl+Z.
 - A step that fails in a recompute writes FreeCAD's error lines to the Report view; the
   scenarios read them away in the step that causes them (`h.new_errors()`).
 - The harness counts any Report line with "failed" as an error, the step names printed by the
