@@ -167,10 +167,7 @@ follows a rule once its component gets one (QA pass).
   material, and its rule links, to the bodies of its sub-components that have no rule of
   their own, but `default_for` / `rule_for_body` of such a body give no rule (no
   inheritance). Fusion's behaviour for sub-components is not documented.
-- **Plastic settings between test scenarios**: the user library and the default rule
-  (`Mod/SciForge/Plastic`) are not reset by `harness.run`'s `prepare()`; every plastic
-  scenario resets them in its setup (`plastic_steps.clear_library_prefs`). A plastic-2
-  scenario after a failed plastic one in a CI shard could inherit another default rule.
+
 
 ## QA pass (sf/plastic-1-qa, 2026-10-23)
 
@@ -200,7 +197,9 @@ sank its cone 22-26 mm3 into the part: a Flat head now needs Side 1's Hole Type 
 the library's default rule at every recompute, so Set As Default in the user's library (a
 setting, not the design) re-sized them in every design without a rule: they now keep the
 values they were made with (from the default rule at the time) until the component gets a
-rule. New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
+rule. The test harness's `prepare()` now resets the user's plastic library and default rule
+(`plastic.reset_for_tests()`), so a scenario after a failed plastic one in a CI shard
+(plastic-2's too) starts from the built-in default. New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
 golden `plastic_boss_major_draft`, unit tests. Every builder scenario, the plastic golden
 models, the unit tests and the shared dialogs' scenarios pass after the fixes.
 

@@ -142,6 +142,6 @@ Boss on a face then Esc, a drafted Rest then Esc, a boss edited after save and r
 assigned after reopen, Flip with a picked body, the inch rule, a lid in its own component
 with its own rule), golden `plastic_boss_major_draft` and `plastic_rest_cut` (the Rest's
 cut-only case, also probed on a shelled pipe crossing the plane: exact), four unit tests (25 in all). Gaps
-found but not fixed are in the parity doc's Known gaps (rules of nested components; the
-plastic library settings are not reset between scenarios by the test harness: every plastic
-scenario resets them itself in its setup).
+found but not fixed are in the parity doc's Known gaps (rules of nested components). Shared
+test file touched: `SciForgeTests/gui/harness.py` (one try block in `prepare()` resetting the
+plastic library settings, beside the other settings resets).

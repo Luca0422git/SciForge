@@ -32,6 +32,7 @@ Added by plastic-1 (wave 6):
     usable(field, value)                 whether a rule value can drive a SOLID step's field
     save_library_rule(rule), delete_library_rule(name)
     default_rule_name(), set_default_rule(name)   Fusion's "Set As Default" (library only)
+    reset_for_tests()                    the user's library and default rule back to none
     is_used(doc, name)                   a design rule assigned to a component
     unique_name(doc, base)               "ABS 2 mm (2)" for a copy
     material_key(rule)                   the rule's physical material in material.LIBRARY
@@ -117,6 +118,13 @@ def set_default_rule(name):
     if library_rule(name) is None:
         raise ValueError("no library rule named '%s'" % name)
     _pref().SetString("Default", name)
+
+
+def reset_for_tests():
+    """The user's own library rules and default rule back to none (the test harness: a CI
+    shard shares one settings profile across its scenarios)."""
+    _pref().SetString("Library", "")
+    _pref().SetString("Default", "")
 
 
 def is_used(doc, name):
