@@ -61,6 +61,7 @@ SIDE_FIELDS = [
     ("hole_start_radius", "Hole Start Radius", "mm"),
     ("hole_end_radius", "Hole End Radius", "mm"),
     ("step_tip_radius", "Alignment Tip Radius", "mm"),
+    ("step_root_radius", "Alignment Root Radius", "mm"),
     ("major_tip_radius", "Major Tip Radius", "mm"),
     ("major_root_radius", "Major Root Radius", "mm"),
 ]
@@ -399,6 +400,7 @@ class BossPanel(Panel):
                 "hole_start_radius": hole and (side == 1 or s["hole"] == "simple"),
                 "hole_end_radius": hole and side == 2 and s["extent"] != "through",
                 "step_tip_radius": s["step"] != "none",
+                "step_root_radius": s["step"] != "none",
                 "major_tip_radius": hole and s["hole"] == "counterbore",
                 "major_root_radius": hole and s["hole"] == "counterbore",
             }

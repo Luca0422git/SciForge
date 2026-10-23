@@ -193,6 +193,23 @@ def side_shapes(base, frame, s, label="Side"):
             step_solid = _fillet_circle_at(
                 step_solid, frame.at(tip - h), r_top, r_round, label, "alignment tip"
             )
+        r_foot = float(s.get("step_root_radius", 0.0))
+        if r_foot > TOL:
+            if not adds or r_base >= od / 2.0 - 1e-3:
+                raise BossError(
+                    "%s: the alignment root radius needs a spigot narrower than the boss's "
+                    "tip: set it to 0." % label
+                )
+            if r_foot >= min(od / 2.0 - r_base, h) - 1e-3:
+                raise BossError("%s: the alignment root radius is too big for the step." % label)
+            joined = adds.pop().fuse(step_solid)
+            try:
+                joined = joined.removeSplitter()
+            except Exception:
+                pass
+            step_solid = _fillet_circle_at(
+                joined, frame.at(tip), r_base, r_foot, label, "alignment root"
+            )
         adds.append(step_solid)
         spigot = h
     elif s["step"] == "in":
@@ -201,7 +218,15 @@ def side_shapes(base, frame, s, label="Side"):
             raise BossError("%s: the alignment recess is deeper than the boss." % label)
         r_top = s["step_diameter"] / 2.0
         r_bottom = max(0.05, r_top - h * _tan(s["step_draft"]))
-        cuts.append(_cone(r_top, r_bottom, h + 0.02, frame.at(tip - 0.02), frame.d))
+        recess = _cone(r_top, r_bottom, h + 0.02, frame.at(tip - 0.02), frame.d)
+        r_foot = float(s.get("step_root_radius", 0.0))
+        if r_foot > TOL:
+            if r_foot >= min(r_bottom, h) - 1e-3:
+                raise BossError("%s: the alignment root radius is too big for the step." % label)
+            recess = _fillet_circle_at(
+                recess, frame.at(tip + h), r_bottom, r_foot, label, "alignment root"
+            )
+        cuts.append(recess)
         r_round = float(s.get("step_tip_radius", 0.0))
         if r_round > TOL:
             if r_round >= min(od / 2.0 - r_top, h) - 1e-3:

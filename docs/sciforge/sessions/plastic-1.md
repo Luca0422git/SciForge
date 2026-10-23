@@ -30,7 +30,7 @@ SOLID dialogs, Boss, Rest and Rule Fillet. Spec and gaps: `docs/sciforge/parity/
 golden models; core split and unit tests; the critic pass; Boss on a face; Side bodies;
 fastener; the merge of `sf/sm-forming` (its browser settings-row hook); the Plastic Rule row;
 Rest Body box; rule links of the SOLID steps; hole radii; fastener heads; ribs one by one;
-counterbore / alignment blends (the log from 3eeb5b1 to the branch's head).
+counterbore / alignment blends, alignment root radius (the log from 3eeb5b1 to the branch's head).
 
 **FreeCAD facts and traps found**
 
@@ -81,6 +81,7 @@ FreeCAD core change.
 `plastic_boss_fastener` (23), `plastic_rest` (39) and `ribbon_sweep` with
 `SWEEP_TABS=plastic` (114) pass. Golden `plastic_boss_enclosure`, `plastic_boss_fastener`,
 `plastic_boss_hole_radii`, `plastic_boss_ribs_each`, `plastic_boss_blends`,
+`plastic_boss_alignment_roots`,
 `plastic_rest_cylinder`, `plastic_rule_boss_wall`, `plastic_rule_edit_moves_boss` pass
 (exact, analytic). The existing scenarios of the touched dialogs pass: shell_draft (103),
 shell_draft_draft (85), shell_draft_hollow (72), modify2_shell (53), sweep_loft_rib (68),
@@ -90,7 +91,7 @@ sheetmetal_rules (60), timeline_browser (92). `test_plastic_core.py` (21) passes
 (existing), smoke and journey pass.
 
 **Open** (see the parity doc's Known gaps): more fastener heads / drives / thread, the
-alignment root / rib outer blends, per-rib extents per point, Boss / Rest in Change
+rib outer blends, per-rib extents per point, Boss / Rest in Change
 Parameters, Thicken / Emboss defaults, Rib draft, the Shell Sharp half-pipe finding.
 **Merge note**: `ribbon_config.py` conflicts with `sf/plastic-2` at the PLASTIC CREATE items
 (Boss / Snap Fit / Lip / Rest are adjacent lines): keep both sides' lines.

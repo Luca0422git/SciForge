@@ -34,6 +34,7 @@ SIDE_NUMBERS = (
     "hole_start_radius",
     "hole_end_radius",
     "step_tip_radius",
+    "step_root_radius",
     "major_tip_radius",
     "major_root_radius",
     "rib_total_angle",
@@ -96,6 +97,7 @@ def side_defaults(side, rule, screw=3.0):
         "hole_start_radius": 0.0,
         "hole_end_radius": 0.0,
         "step_tip_radius": 0.0,
+        "step_root_radius": 0.0,
         "major_tip_radius": 0.0,
         "major_root_radius": 0.0,
         "ribs": False,
@@ -205,6 +207,7 @@ def check_options(options):
             "hole_start_radius",
             "hole_end_radius",
             "step_tip_radius",
+            "step_root_radius",
             "major_tip_radius",
             "major_root_radius",
         ):
@@ -262,6 +265,7 @@ def check_options(options):
             "hole_start_radius",
             "hole_end_radius",
             "step_tip_radius",
+            "step_root_radius",
             "major_tip_radius",
             "major_root_radius",
         ):

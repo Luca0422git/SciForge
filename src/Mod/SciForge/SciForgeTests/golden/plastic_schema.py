@@ -47,6 +47,7 @@ SIDE_NUMBERS = {
     "hole_start_radius",
     "hole_end_radius",
     "step_tip_radius",
+    "step_root_radius",
     "major_tip_radius",
     "major_root_radius",
     "rib_count",
