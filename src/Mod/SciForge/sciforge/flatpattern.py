@@ -49,23 +49,31 @@ def face_memo(face):
 
 def refind(shape, name, memo):
     """The face name on shape that is the stationary face remembered in memo (the name can
-    change when the folded body is edited)."""
+    change when the folded body is edited). A face that moved along its normal (the rule's
+    Thickness changed: the plate's top face is higher now) is still found: the face facing
+    the same way that lies over (or under) the remembered point, the nearest one."""
     if not memo:
         return name
     p = _vec(memo["p"])
     n = _vec(memo["n"])
 
-    def fits(face):
+    def fits(face, moved=False):
         if not unfolder.is_planar(face):
             return None
         fn = unfolder.normal_at(face, unfolder.inner_point(face))
         if fn.dot(n) < 1 - 1e-6:
             return None
         plane = face.Surface
-        off = abs((p - plane.Position).dot(plane.Axis))
-        if off > 1e-3:
+        height = (p - plane.Position).dot(plane.Axis)
+        if not moved:
+            if abs(height) > 1e-3:
+                return None
+            return face.distToShape(Part.Vertex(p))[0]
+        # the point brought onto the face's plane must lie on the face
+        q = p - plane.Axis * height
+        if face.distToShape(Part.Vertex(q))[0] > 1e-3:
             return None
-        return face.distToShape(Part.Vertex(p))[0]
+        return abs(height)
 
     try:
         face = shape.getElement(name)
@@ -75,10 +83,13 @@ def refind(shape, name, memo):
     except Exception:
         pass
     best = None
-    for i, face in enumerate(shape.Faces):
-        d = fits(face)
-        if d is not None and (best is None or d < best[0]):
-            best = (d, "Face%d" % (i + 1))
+    for moved in (False, True):
+        for i, face in enumerate(shape.Faces):
+            d = fits(face, moved)
+            if d is not None and (best is None or d < best[0]):
+                best = (d, "Face%d" % (i + 1))
+        if best is not None:
+            break
     if best is None:
         raise FlatPatternError(
             "the stationary face is gone after an edit: pick it again (Edit Flat Pattern)"
