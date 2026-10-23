@@ -10,6 +10,7 @@ import math
 import FreeCAD as App
 import FreeCADGui as Gui
 
+from SciForgeTests.gui import arrow_input as ai
 from SciForgeTests.gui import dialog_input as ui
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import smmore_steps as st
@@ -84,6 +85,35 @@ def rounded():
     p = fillet_panel()
     st.settle(p)
     h.check("5 mm corner round", st.close(vol(), FLAT - cut(5)), (vol(), FLAT - cut(5)))
+
+
+def drag_radius():
+    p = fillet_panel()
+    st.settle(p)
+    handle = p.handles.get("value") if p else None
+    h.check("a radius arrow on the corner", handle is not None)
+    if handle is None:
+        return
+    s["before"] = p.value("value")
+    start = h.screen_point(ai.head_point(handle))
+    end = h.screen_point(handle.origin + handle.direction * (s["before"] + 4.0 + 0.9 * handle.size))
+    s["drag"] = ai.HeldDrag(start, end, moves=30, every_ms=25, hold_ms=300)
+    s["drag"].run()
+
+
+def dragged():
+    p = fillet_panel()
+    st.settle(p)
+    r = p.value("value") if p else 0
+    h.check("dragging the arrow makes the round bigger", r > s.get("before", 5) + 1.0, r)
+    h.check("the preview follows", st.close(vol(), FLAT - cut(r), 1e-3), (vol(), FLAT - cut(r)))
+    h.check("a value box shows the radius", p is not None and "value" in p.value_boxes.boxes)
+    st.type_into(p, "value", "5")
+
+
+def back_to_5():
+    st.settle(fillet_panel())
+    h.check("typed 5 again", st.close(vol(), FLAT - cut(5)), vol())
 
 
 def new_set():
@@ -205,6 +235,9 @@ h.run(
         click_corner,
         type_5,
         rounded,
+        drag_radius,
+        dragged,
+        back_to_5,
         new_set,
         click_second,
         type_10,

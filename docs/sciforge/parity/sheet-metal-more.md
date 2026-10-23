@@ -96,7 +96,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Fusion | SciForge | Src |
 |---|---|---|
 | Only the edges through the thickness can be picked | Only those light up (straight, as long as the sheet is thick, square to its faces); any other is refused with the reason | A[R41] |
-| Fillet radius sets (at least one) | "+ New Set" keeps the corners picked with their radius and starts another set; the sets are listed and come back on edit | A[R41] |
+| Fillet radius sets (at least one) | "+ New Set" keeps the corners picked with their radius and starts another set; the sets are listed and come back on edit. A blue arrow on the corner drags the radius (value box beside it) | A[R41] |
 | Chamfer distance | Equal distance per set | A[R42], G |
 | The flat pattern keeps the rounds | The rounds are cylinders through the thickness, so they show as arcs in the outline | G |
 | The SHEET METAL tab's MODIFY Fillet / Chamfer | The same buttons; on a body that is not sheet metal they open the SOLID Fillet / Chamfer (Fusion repeats the solid commands) | A[R42], G |
@@ -113,7 +113,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Scenario `smmore_hem` | every type from the Type list (volumes from the cross-section), the rows each type shows, the Length arrow dragged (value box), a Length too short refused, a second edge mitred, OK, Hem 1, Ctrl+Z / Ctrl+Y, edit (Flip), Cancel | PASS, 40 checks |
 | Scenario `smmore_join` | CREATE menu Join by Bend; parallel plate refused, Esc; joined (hand-worked volume); the other body hidden; Ctrl+Z / Ctrl+Y; edit to a 3 mm Bend Radius | PASS, 25 checks |
 | Scenario `smmore_corner` | two edge flanges (Flange code) on a notched plate; MODIFY menu Corner Closure; Round relief greyed with its reason; Symmetric Gap (points inside / in the gap); Overlap with a 0 gap; OK; Ctrl+Z / Ctrl+Y; edit back; Cancel | PASS, 24 checks |
-| Scenario `smmore_round` | MODIFY Fillet; a top edge not taken; 5 mm, + New Set, 10 mm (hand-worked volumes); OK; Fillet 1; Ctrl+Z / Ctrl+Y; Chamfer 4 mm; edit (sets back) | PASS, 21 checks |
+| Scenario `smmore_round` | MODIFY Fillet; a top edge not taken; 5 mm; the radius arrow dragged (value box); + New Set, 10 mm (hand-worked volumes); OK; Fillet 1; Ctrl+Z / Ctrl+Y; Chamfer 4 mm; edit (sets back) | PASS, 26 checks |
 | Scenario `smmore_lofted` | CREATE menu Lofted Flange; square + circle: Brake Form in a new sheet metal body; chord 0.5; Die Form (not developable); Face Number 4; OK; Ctrl+Z / Ctrl+Y; an open line with a closed square refused; Esc | PASS, 23 checks |
 
 ## Known gaps
