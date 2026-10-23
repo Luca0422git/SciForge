@@ -217,6 +217,20 @@ def rule_changes():
     h.check("the typed Beam Length stays 14", ps.near(step.BeamLength.Value, 14.0))
     h.check("the hook is thinner now", ps.volume(lid) < before - 10, (ps.volume(lid), before))
     h.check("still computed", "Invalid" not in step.State, step.State)
+    from sciforge import parameters
+
+    labels = [r["label"] for r in parameters.model_parameters(ps.doc()) if r["object"] == step.Name]
+    h.check("Change Parameters lists the snap fit's sizes", "Beam Length" in labels, labels)
+    ps.tl.menu("Snap Fit 1", "Delete")
+
+
+def deleted():
+    base, lid = ps.by_label("Base"), ps.by_label("Lid")
+    h.check("Delete: no snap fit left", not ps.snap_steps())
+    left = [o.Name for o in ps.doc().Objects if getattr(o, "SciForgeType", "") == "SnapFitGroove"]
+    h.check("its groove step went with it", not left, left)
+    h.check("the lid as at first", ps.near(ps.volume(lid), 4800.0), ps.volume(lid))
+    h.check("the base as at first", ps.near(ps.volume(base), ps.BASE), ps.volume(base))
 
 
 h.run(
@@ -239,5 +253,6 @@ h.run(
         describe,
         close_reopen,
         reopened,
+        deleted,
     ],
 )
