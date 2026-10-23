@@ -80,12 +80,13 @@ tuned or checked on timings measured in the sandbox.
   (0.3 mm: where three rounded edges meet, the exact solid has a round corner patch, the
   picture shows the bands cut at the corner, ~0.23 mm off there); Variable radius (0.06 mm:
   OpenCASCADE's own smooth radius law).
-- GUI scenario `fillet_live` (real input, 64 checks): box by sketch + extrude; Fillet on the
+- GUI scenario `fillet_live` (real input, 76 checks): box by sketch + extrude; Fillet on the
   front top edge: the picture is prepared while idle; a real held drag of the arrow: the
   picture shows during the moves, at the dialog's radius, lies on the exact round (checked
   mid-drag), no exact rebuild between the moves; let go: picture gone, no node left in the
-  view, the exact round's volume. Dragged far: held just under 10 mm, no picture past the
-  limit once known. Typed 3 + Tab: the picture at once, then exact. Typed 2.5 then Cancel:
+  view, the exact round's volume. Dragged far: held just under 10 mm, no picture at the end;
+  6 typed, then dragged far again (the limit known): the picture follows up to the limit,
+  stops there, never shows a radius past it. Typed 3 + Tab: the picture at once, then exact. Typed 2.5 then Cancel:
   no picture left, no fillet. Chamfer Two Distances: the second arrow dragged, the band
   follows and lies on the exact chamfer; OK: nothing left. Fillet, typed 2, Ctrl+Z: dialog
   ends, nothing left in the view.
@@ -107,6 +108,30 @@ tuned or checked on timings measured in the sandbox.
 - Variable radius points' positions (not their radii) are not shown live (they rebuild on
   the rest as before).
 
+## Found and fixed during the runs
+
+- `fillet2_full_round` failed its "no kernel errors" check: the dialog logged "no live
+  picture for these picks" to the Report view for Full Round (nothing to draw). Now a picture
+  the picks cannot have is silent (only an unexpected error is logged).
+- The first version of `fillet_live`'s limit check needed the limit search to finish while
+  the button was still held (timing-dependent under load); it now types 6 and drags past the
+  known limit again, which is deterministic.
+
 ## Tests run
 
-(filled in at the end of the session)
+- `--only unit`: 2210 tests, OK (9 skipped), with the new `test_fillet_live_core` (12).
+- Golden (inside `--only base`): 467 pass + 2 known xfail (`plate_hole_grid`,
+  `sf_loft_merge_slot_volume`), including the 16 new `live_*` models.
+- `--only base` otherwise: headless AI tools 284 calls / 0 failed, MCP agent 81 checks / 0
+  failed, smoke, journey and restarts pass. Two failures, neither from this branch's code:
+  - `test_ai_docs_contract` (2 tests): the generated AI docs list the golden models; fixed by
+    running `tools/sciforge/make_ai_docs.py` (committed), the two tests pass now.
+  - docs examples: `get_drawing#1` differs from its recorded page only by the date in the
+    drawing's title block ("2026-10-22" recorded, today is 2026-10-23): date-dependent,
+    unrelated (re-record with `SCIFORGE_DOCS_RECORD=1` when convenient).
+- GUI scenarios `chamfer_arrow`, every `fillet*` and `fillet2_*`, `limits_fillet`,
+  `limits_review`, `undo_fast`, `fillet_live`: all pass in the final run (two parallel
+  shards) except `limits_fillet` once, at "with the largest radius that fits" (the formula's
+  hint, found by a time-budgeted search on a 450 ms timer, was not there yet after 2.5 s with
+  two FreeCADs running); it passed in the first full run and again alone. Load-sensitive
+  timing of the hint, not a wrong result.
