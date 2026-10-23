@@ -1,0 +1,203 @@
+{
+  "id": "plastic2_split_enclosure",
+  "title": "Fusion's usual way: a closed hollow box split in two, Lip And Groove on the parting line, then a Hook and Loop snap fit between the halves",
+  "tags": [
+    "plastic",
+    "lip",
+    "snap_fit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "a"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 30
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 2,
+      "geometry": [
+        {
+          "rect": [
+            2,
+            2,
+            58,
+            38
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 26,
+      "operation": "cut"
+    },
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "line": [
+            -10,
+            20,
+            70,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "split_body",
+      "id": "x1",
+      "body": "e1",
+      "tool": {
+        "sketch": "s3",
+        "edge": 1
+      }
+    },
+    {
+      "op": "sf_lip",
+      "id": "l1",
+      "of": "x1",
+      "edges": {
+        "any_of": [
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 38
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 58
+              }
+            ],
+            "count": 1
+          }
+        ],
+        "count": 4
+      },
+      "options": {
+        "inner_draft": 0,
+        "outer_draft": 0
+      }
+    },
+    {
+      "op": "sf_snap_fit",
+      "id": "sf1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          30,
+          20
+        ]
+      ],
+      "options": {
+        "fillet": 0,
+        "draft": 0,
+        "type": "loop"
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "x1": {
+          "volume": 12086.76,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 19983.599847577294,
+    "solids": 2,
+    "source": "analytic",
+    "note": "Measured over both halves (a split measures its pieces from then on). The box 60x40x30 with a 2 mm wall all round split at z 20: halves 11712 and 7872. Lip 188 on the lower half, groove 227.964 in the upper (plastic2_lip_and_groove). The hook hangs from the upper half's top (8 mm above the parting plane: base block 2 x 6 x 8 = 96, the 1 mm into the top adds nothing) with beam 144 and catch 12.80385; the loop stands on the lower half's floor: 186.76 (plastic2_snap_loop)."
+  }
+}
