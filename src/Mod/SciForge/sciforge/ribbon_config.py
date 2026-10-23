@@ -225,6 +225,9 @@ INSPECT = group(
         item("Isocurve Analysis", "SciForge_IsocurveAnalysis", "isocurve"),
         item("Accessibility Analysis", "SciForge_AccessibilityAnalysis", "accessibility"),
         item("Minimum Radius Analysis", "SciForge_MinimumRadiusAnalysis", "min_radius"),
+        item(
+            "Environmental Map Analysis", "SciForge_EnvironmentMapAnalysis", "environment_map"
+        ),  # owner: surface-3
         SEP,
         item(
             "Section Analysis",

@@ -83,6 +83,7 @@ ANALYSIS_ICONS = {
     "IsocurveAnalysis": "isocurve",
     "AccessibilityAnalysis": "accessibility",
     "MinimumRadiusAnalysis": "min_radius",
+    "EnvironmentMapAnalysis": "environment_map",  # surface-3 (wave 6)
 }
 
 
