@@ -96,10 +96,11 @@ def tool_shape(tool, extend, around, fit=False):
         if not shape.Solids:
             # A surface body as the Splitting Tool (Fusion: "body (solid or open)", the
             # classic hybrid workflow: cut a solid with a sculpted surface). Extend
-            # Splitting Tool carries its open edges on (surfmod, surface-4).
+            # Splitting Tool carries its open edges on (surfmod, surface-4); the red preview
+            # shows it carried on too, where it cuts.
             from . import surfmod
 
-            return surfmod.extended_tool(shape, around) if extend and not fit else shape
+            return surfmod.extended_tool(shape, around) if extend else shape
         return shape
     if not sub.startswith("Face"):
         raise SplitError("Split with a plane, a face or a body.")

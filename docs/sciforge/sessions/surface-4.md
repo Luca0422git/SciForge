@@ -66,8 +66,7 @@ change.
 
 ## Gaps (details and evidence in the parity doc)
 
-Press Pull of a face whose neighbours meet it at an angle, or of a curved face (no per-face
-offset of an open shell in OpenCASCADE's Python API); Press Pull on a surface fillet's face;
-Merge of faces on different surfaces (Fusion refits them); surface Fillet's Chord Length,
-Variable, G2, Setback and Rule options; Merge offered with history on (Fusion hides it); the
-Split Body preview shows a surface tool without its extension.
+Press Pull of a curved face, or of a flat one whose curved neighbours meet it at an angle (no
+per-face offset of an open shell in OpenCASCADE's Python API; flat polygons are handled by
+sliding the corners); Merge of faces on different surfaces (Fusion refits them); surface Fillet's Chord Length,
+Variable, G2, Setback and Rule options; Merge offered with history on (Fusion hides it).

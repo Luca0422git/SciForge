@@ -5,7 +5,8 @@ An open box of surfaces (30 x 20 floor, 10 high walls, no lid: one surface body,
 SURFACE tab, MODIFY > Fillet with nothing picked: the surface Fillet dialog opens on the
 shown surface body. Click a vertical corner edge, type Radius 3, OK: a "Fillet" step, the
 corner round: 6 faces, area 1600 - 2*3*10 + (pi*3/2)*10 - (9 - 9 pi/4). Undo / Redo.
-Double-click the Fillet in the timeline: Radius 3 reads back; type 2, OK: the area follows.
+Double-click the Fillet in the timeline: Radius 3 reads back; type the parameter r (2 mm),
+OK: the area follows; r changed to 1.5: the fillet follows it; back to 2.
 Click another vertical edge (selected), MODIFY > Chamfer: the dialog starts with it; Distance
 2, OK: one face more, area 1600-ish minus 2*2*10 plus the 2 sqrt 2 x 10 bevel. A refusal:
 Fillet, click a top edge (on the outside of the surface: one face): the dialog says why and
@@ -31,8 +32,12 @@ def fillet_area(r):
 
 
 def setup():
+    from sciforge import parameters
+
     s4.new_design("Surface4Fillet")
     s["box"] = s4.surface_box()
+    parameters.set_user(App.ActiveDocument, "r", "2 mm")  # a user parameter (Change Parameters)
+    App.ActiveDocument.recompute()
     h.fit()
     h.check("an open box of surfaces", s4.faces(s["box"]) == 5, s4.faces(s["box"]))
     h.check("area 1600", s4.near(st.area(s["box"]), AREA), st.area(s["box"]))
@@ -97,7 +102,7 @@ def edit_open():
         return
     h.check("Radius 3 read back", s4.near(p.fields["radius"][0].value(), 3.0))
     h.check("its edge read back", len(p.picked) == 1, p.picked)
-    s4.type_main("2")
+    s4.type_main("r")  # Fusion's fields take a parameter
 
 
 def edit_ok():
@@ -106,8 +111,19 @@ def edit_ok():
 
 
 def edited():
+    from sciforge import parameters
+
     h.check("dialog closed", s4.panel() is None)
-    h.check("radius 2 now", s4.near(st.area(s["box"]), fillet_area(2), 1e-5), st.area(s["box"]))
+    h.check("radius r = 2 now", s4.near(st.area(s["box"]), fillet_area(2), 1e-5), st.area(s["box"]))
+    parameters.set_user(App.ActiveDocument, "r", "1.5 mm")
+    App.ActiveDocument.recompute()
+    h.check(
+        "the fillet follows r = 1.5",
+        s4.near(st.area(s["box"]), fillet_area(1.5), 1e-5),
+        st.area(s["box"]),
+    )
+    parameters.set_user(App.ActiveDocument, "r", "2 mm")
+    App.ActiveDocument.recompute()
     Gui.Selection.clearSelection()
     h.fit()
 

@@ -264,7 +264,7 @@ def merge_faces(shape, names):
 
 # -- Press Pull on a surface face ---------------------------------------------------------------
 def _plane_of(face):
-    if face.Surface.TypeId != "Part::GeomPlane":
+    if not _is_flat(face):
         raise SurfaceModifyError(
             "SciForge pushes or pulls flat faces of a surface body. For a curved face use "
             "Offset (SURFACE > CREATE), or Move."
@@ -323,9 +323,14 @@ def _trim(face, origin, normal, sign, around):
 def press_pull(shape, names, distance):
     """The surface `shape` with its flat faces `names` moved by `distance` along their
     normals (Fusion's Press Pull / Offset Face on a surface body). The faces around a picked
-    face follow it: a face that runs from the shared edge along the move grows by a band
-    or is cut back to the moved face. Refused with the reason when a face around it does
-    not run along the move (SciForge's kernel has no general face offset for open bodies)."""
+    face follow it. Two ways, the first that applies:
+      - flat polygons around it (a box, a tray with slanted walls): every corner of the face
+        slides along the edge that leaves it until it reaches the moved plane, and the faces
+        around are the same polygons with those corners moved (exact);
+      - faces that run along the move (an extruded wall, round or flat, under a lid): each
+        grows by a band or is cut back to the moved face.
+    Refused with the reason otherwise (OpenCASCADE's Python API has no face offset for open
+    bodies)."""
     core.check_values("surface_press_pull", {"distance": distance})
     d = float(distance)
     if not names:
@@ -336,6 +341,10 @@ def press_pull(shape, names, distance):
     for _o, n in planes[1:]:
         if n.getAngle(normal0) > 1e-6:
             raise SurfaceModifyError("Pick faces that face the same way (parallel).")
+    try:
+        return _result(_slide_corners(shape, picked, planes, d), "Press Pull")
+    except _NotPolygons:
+        pass
     moved = []
     for face, (_origin, n) in zip(picked, planes):
         copy = face.copy()
@@ -401,6 +410,97 @@ def press_pull(shape, names, distance):
     return _result(result, "Press Pull")
 
 
+class _NotPolygons(Exception):
+    """The faces around are not all flat polygons: the band / trim way is tried instead."""
+
+
+def _is_line(edge):
+    """A straight edge (a line, or a spline that runs straight: a tapered extrusion's)."""
+    try:
+        if edge.Curve.TypeId in ("Part::GeomLine", "Part::GeomLineSegment"):
+            return True
+        ends = [v.Point for v in edge.Vertexes]
+        return len(ends) == 2 and abs(edge.Length - (ends[1] - ends[0]).Length) < 1e-7
+    except Exception:
+        return False
+
+
+def _is_flat(face):
+    if face.Surface.TypeId == "Part::GeomPlane":
+        return True
+    try:
+        return face.findPlane(1e-7) is not None
+    except Exception:
+        return False
+
+
+def _is_polygon(face):
+    return len(face.Wires) == 1 and all(_is_line(e) for e in face.Edges) and _is_flat(face)
+
+
+def _slide_corners(shape, picked, planes, d):
+    """Press Pull of flat faces among flat polygons: each corner of a picked face slides
+    along the one edge that leaves it (along the normal when none does) to the moved plane;
+    every face with a moved corner is rebuilt as the same polygon. Raises _NotPolygons when
+    the faces involved are not flat polygons."""
+    picked_edges = [e for f in picked for e in f.Edges]
+    moved = {}
+    for face, (origin, n) in zip(picked, planes):
+        if not _is_polygon(face):
+            raise _NotPolygons()
+        target = origin + n * d
+        for vertex in face.Vertexes:
+            leaving = [
+                e
+                for e in shape.ancestorsOfType(vertex, Part.Edge)
+                if not any(e.isSame(x) for x in picked_edges)
+            ]
+            if len(leaving) > 1 or (leaving and not _is_line(leaving[0])):
+                raise _NotPolygons()
+            start = vertex.Point
+            if not leaving:
+                new = start + n * d
+            else:
+                ends = [v.Point for v in leaving[0].Vertexes]
+                other = ends[1] if (ends[0] - start).Length < 1e-7 else ends[0]
+                along = other - start
+                across = along.dot(n)
+                if abs(across) < 1e-9 * max(along.Length, 1.0):
+                    raise _NotPolygons()  # an edge in the face's plane: the band way
+                t = (target - start).dot(n) / across
+                if t >= 1.0 - 1e-7:
+                    raise SurfaceModifyError(
+                        "That is further than the faces next to it reach: they would "
+                        "disappear. Use a smaller distance."
+                    )
+                new = start + along * t
+            key = vertex.hashCode()
+            if key in moved and (moved[key] - new).Length > 1e-7:
+                raise SurfaceModifyError("Two picked faces share a corner that cannot follow both.")
+            moved[key] = new
+    faces = []
+    for face in shape.Faces:
+        if not any(v.hashCode() in moved for v in face.Vertexes):
+            faces.append(face.copy())
+            continue
+        if not _is_polygon(face):
+            raise _NotPolygons()
+        points = [moved.get(v.hashCode(), v.Point) for v in face.OuterWire.OrderedVertexes]
+        try:
+            new = Part.Face(Part.makePolygon(points + [points[0]]))
+        except Exception:
+            raise SurfaceModifyError("A face around it would fold over. Use a smaller distance.")
+        if new.Area < 1e-9 or not new.isValid():
+            raise SurfaceModifyError("A face around it would vanish. Use a smaller distance.")
+        u0, u1, v0, v1 = face.ParameterRange
+        before = face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+        u0, u1, v0, v1 = new.ParameterRange
+        if new.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0).dot(before) < 0:
+            new.reverse()  # each face keeps its side (its normal)
+        faces.append(new)
+    return sew(faces)
+
+
 def _join_band(faces, band):
     """A neighbour face grown by `band`: one face again where they lie on one surface."""
     joined = sew([f for f in faces] + list(band.Faces))
@@ -409,6 +509,39 @@ def _join_band(faces, band):
     except Exception:
         pass
     return [f.copy() for f in joined.Faces]
+
+
+def blend_step_of_face(obj, short):
+    """The surface Fillet / Chamfer step whose round (bevel) face `short` of `obj` is, or
+    None: Press Pull on a fillet's face changes that fillet, as in Fusion."""
+    body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+    if body is None:
+        return None
+    holder = body.Tip if obj is body else obj
+    try:
+        face = holder.Shape.getElement(short)
+    except Exception:
+        return None
+    for step in reversed(list(getattr(body, "Group", []))):
+        if kind_of(step) not in ("surface_fillet", "surface_chamfer"):
+            continue
+        base = getattr(step, "BaseFeature", None)
+        if base is None or step.Shape.isNull() or base.Shape.isNull():
+            continue
+        made = [f for f in step.Shape.Faces if not any(_same_face(f, g) for g in base.Shape.Faces)]
+        if any(_same_face(f, face) for f in made):
+            return step
+    return None
+
+
+def _same_face(a, b, tol=1e-6):
+    try:
+        return (
+            abs(a.Area - b.Area) <= tol * max(1.0, a.Area)
+            and (a.CenterOfMass - b.CenterOfMass).Length <= 1e-5
+        )
+    except Exception:
+        return False
 
 
 # -- the steps ---------------------------------------------------------------------------------
@@ -524,12 +657,15 @@ def _names_on(obj, base_shape):
 
 
 def _same_place(shape, elem):
-    items = shape.Faces if elem.ShapeType == "Face" else shape.Edges
-    prefix = "Face" if elem.ShapeType == "Face" else "Edge"
+    """The name of the element of `shape` where `elem` is (same middle and size), or ''."""
+    face = elem.ShapeType == "Face"
+    items = shape.Faces if face else shape.Edges
+    prefix = "Face" if face else "Edge"
     mid = elem.CenterOfMass
+    size = elem.Area if face else elem.Length
     for i, other in enumerate(items, start=1):
         try:
-            if abs(other.Area if prefix == "Face" else other.Length) < 0:
+            if abs((other.Area if face else other.Length) - size) > 1e-6 * max(1.0, size):
                 continue
             if (other.CenterOfMass - mid).Length < 1e-6:
                 return "%s%d" % (prefix, i)

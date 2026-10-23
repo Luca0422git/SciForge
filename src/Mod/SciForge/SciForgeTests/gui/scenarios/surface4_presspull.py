@@ -123,6 +123,33 @@ def fillet_on_edge():
         "Press Pull on a surface edge is its Fillet", p is not None and p.kind == "surface_fillet"
     )
     h.check("with the edge", p is not None and len(p.picked) == 1, p and p.picked)
+    s4.type_main("2")
+
+
+def fillet_ok():
+    s4.settle()
+    st.ok()
+
+
+def q_on_fillet_face():
+    h.check("filleted: one face more", s4.faces(s["box"]) == 6, s4.faces(s["box"]))
+    Gui.Selection.clearSelection()
+    h.press("q")
+
+
+def click_fillet_face():
+    h.click(V(2 - 2**0.5, 18 + 2**0.5, 6.5))
+
+
+def fillet_edit_opens():
+    s4.settle()
+    p = s4.panel()
+    h.check(
+        "Press Pull on the fillet's face changes that fillet",
+        p is not None and p.kind == "surface_fillet" and p.editing,
+        p and (p.kind, p.editing),
+    )
+    h.check("Radius 2 reads back", p is not None and s4.near(p.fields["radius"][0].value(), 2.0))
     st.esc()
 
 
@@ -171,6 +198,10 @@ h.run(
         select_edge,
         q_on_edge,
         fillet_on_edge,
+        fillet_ok,
+        q_on_fillet_face,
+        click_fillet_face,
+        fillet_edit_opens,
         q_again,
         click_curved,
         refused,

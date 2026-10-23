@@ -28,6 +28,8 @@ from .compat import QtCore, QtWidgets
 from .taskui import DistanceField, ValueBoxes
 
 PICKS_EDGES = ("surface_fillet", "surface_chamfer")
+# value field -> the step's property it drives (a parameter or formula typed goes on it)
+PROPS = {"radius": "Radius", "distance": "Distance", "distance2": "Distance2"}
 HINTS = {
     "surface_fillet": "Click edges of a surface body (between two of its faces) to round.",
     "surface_chamfer": "Click edges of a surface body (between two of its faces) to bevel.",
@@ -130,12 +132,18 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
         self.arrows = []
         self.value_boxes = ValueBoxes(self, default="value")
         self.message_text = ""
+        self.formulas = {}  # value field -> the formula typed in it (Fusion's parameters)
+        self.formula_errors = {}
         if feature is not None:
             self.body = bodies.body_of(feature)
             base, names, options = surfmod.read(feature)
             self.base = feature.BaseFeature or base
             self.picked = list(names)
             self.options.update(options)
+            for key, prop in PROPS.items():
+                text = preview.formula_of(feature, prop) if prop in feature.PropertiesList else ""
+                if text:
+                    self.formulas[key] = text
         else:
             self.body = body
             self.base = body.Tip if body is not None else None
@@ -191,6 +199,48 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
             self._chamfer_rows()
         if self.kind == "surface_press_pull":
             self._field("distance", "Distance")
+        self.formula_label = QtWidgets.QLabel("")
+        self.formula_label.setWordWrap(True)
+        self.formula_label.setStyleSheet("color: #b8c7d9;")
+        self.layout.addRow(self.formula_label)
+        # Fusion's value fields take a parameter or a formula ("r", "wall * 2")
+        self.formula_inputs = {
+            key: preview.FormulaInput(self, key, field) for key, (field, _c) in self.fields.items()
+        }
+        self._show_formulas()
+
+    # -- formulas (preview.FormulaInput calls these) ----------------------------------------
+    def formula_typed(self, key, text, value):
+        self.formula_errors.pop(key, None)
+        self.formulas[key] = text
+        self.options[key] = value
+        self._show_formulas()
+        self._typed()
+
+    def formula_cleared(self, key):
+        self.formula_errors.pop(key, None)
+        if self.formulas.pop(key, None):
+            self._show_formulas()
+        self._typed()
+
+    def formula_failed(self, key, text):
+        self.formula_errors[key] = text
+        self.show_status()
+
+    def _show_formulas(self):
+        rows = []
+        for key, (_field, caption) in self.fields.items():
+            if self.formulas.get(key):
+                rows.append("%s = %s" % (caption.text(), self.formulas[key]))
+        self.formula_label.setText("\n".join(rows))
+
+    def _apply_formulas(self):
+        if self.target is None:
+            return
+        for key in self.fields:
+            prop = PROPS.get(key)
+            if prop and prop in self.target.PropertiesList:
+                preview.set_formula(self.target, prop, self.formulas.get(key, ""))
 
     def _field(self, key, label, minimum=None):
         field = DistanceField(float(self.options.get(key, 0.0)), on_change=lambda v: self._typed())
@@ -446,11 +496,9 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
         return mid, direction.normalize()
 
     def _box(self, text):
+        """A value or a formula typed in the box beside the arrow: as if typed in the field."""
         try:
-            key = self.main_key()
-            field = self.fields[key][0]
-            field.take(field.parse(text))
-            self._typed()
+            self.formula_inputs[self.main_key()].take(text)
         except Exception as exc:
             self.error = str(exc)
             self.show_status()
@@ -490,12 +538,16 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
             )
         else:
             surfmod.apply(self.target, self.base, self.picked, self.options)
+        self._apply_formulas()
         self.quiet_recompute()
         self.follow_later()
         self.show_preview(True)
         self.show_status()
 
     def show_status(self):
+        if self.formula_errors:
+            self.say("⚠ " + list(self.formula_errors.values())[0])
+            return
         if self.base is None:
             self.say("⚠ " + self._no_body())
             return
@@ -527,7 +579,7 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
                 return False
             self._preview()
             obj = self.target
-            if self.error or obj is None:
+            if self.error or self.formula_errors or obj is None:
                 self.show_status()
                 return False
             state = list(obj.State)
@@ -624,11 +676,17 @@ def take_blend(kind, selection_picks, solid_ready):
 
 def take_press_pull(doc, picks):
     """Press Pull hands over here when the first picks are on a surface body: faces are
-    pushed or pulled (surface_press_pull), edges filleted (as Press Pull does on a solid)."""
+    pushed or pulled (surface_press_pull), edges filleted (as Press Pull does on a solid),
+    the face of a surface Fillet / Chamfer opens that step to change its size."""
     picks = surface_picks(picks)
     if not picks:
         return False
     faces = [p for p in picks if p[1].startswith("Face")]
+    for obj, short, _point in faces:
+        step = surfmod.blend_step_of_face(obj, short)
+        if step is not None:  # a fillet's (chamfer's) face: change that fillet (Fusion)
+            edit(step)
+            return True
     if faces:
         open_panel("surface_press_pull", picks=faces, doc=doc)
     else:
