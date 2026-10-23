@@ -611,8 +611,8 @@ SHEET_METAL_CREATE = group(
         SEP,
         item("Flange", None, None),  # owner: sm-forming
         item("Lofted Flange", None, None),  # owner: sm-more
-        item("Bend", None, None),  # owner: sm-more
-        item("Hem", None, None),  # owner: sm-more
+        item("Bend", "SciForge_SheetMetalBend", "sm_bend"),  # owner: sm-more
+        item("Hem", "SciForge_SheetMetalHem", "sm_hem"),  # owner: sm-more
         item("Join by Bend", None, None),  # owner: sm-more
         SEP,
         item("Create Flat Pattern", None, None),  # owner: sm-flat
