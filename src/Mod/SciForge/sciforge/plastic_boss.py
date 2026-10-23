@@ -584,8 +584,8 @@ def sketch_frame(sketch):
 
 
 def point_names(sketch):
-    """Every "VertexN" of the sketch that is a lone sketch point (a Part.Point), or every
-    vertex when the sketch has none."""
+    """Every "VertexN" of the sketch that is a lone sketch point (a Part.Point, not the end
+    of a line or arc)."""
     try:
         shape = sketch.Shape
     except Exception:
@@ -632,7 +632,7 @@ def check_refs(refs):
 
 # -- finding the two bodies ------------------------------------------------------------------------
 def candidate_bodies(doc, skip=()):
-    """Solid bodies that can take a boss: shown, not used up, not sheet metal."""
+    """Solid bodies that can take a boss: shown, not used up, not a boss's screws."""
     used = set()
     try:
         used = {b.Name for b in bodies.consumed(doc)}
@@ -643,6 +643,8 @@ def candidate_bodies(doc, skip=()):
         if body.Name in used or body in skip:
             continue
         if App.GuiUp and not bodies.is_shown(body):
+            continue
+        if any(getattr(o, "SciForgeType", "") == "BossFastener" for o in body.Group):
             continue
         found.append(body)
     return found
