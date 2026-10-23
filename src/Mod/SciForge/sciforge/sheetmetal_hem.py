@@ -57,25 +57,42 @@ def hem_shape(shape, edge_names, options, thickness, rule_radius, miter_gap):
         raise sb.SheetMetalError("Pick one or more edges of the sheet to hem.")
     values = dict(options)
     try:
-        pieces, x0, _inner = core.hem_profile(values, thickness, rule_radius)
+        segs, inner = core.hem_segments(values, thickness, rule_radius)
+        x0 = core.hem_start(values.get("position", "inside"), inner, thickness)
     except ValueError as exc:
         raise sb.SheetMetalError(str(exc))
+    return edge_strips(
+        shape,
+        edge_names,
+        segs,
+        x0,
+        thickness,
+        miter_gap if options.get("miter", True) else None,
+        bool(options.get("flip", False)),
+        "This hem",
+    )
+
+
+def edge_strips(shape, edge_names, segs, x0, thickness, miter_gap, flip, what):
+    """The solid with a strip of sheet (core.walk segments, starting x0 from each edge) added
+    along each picked edge, the sheet cut back to x0 first. miter_gap None: no mitres."""
+    pieces, _end = core.walk(segs, (x0, -thickness / 2.0), 0.0, thickness)
     frames = [sb.edge_frame(shape, name, thickness) for name in edge_names]
-    flip = bool(options.get("flip", False))
     big = shape.BoundBox.DiagonalLength * 2.0 + 10.0
-    cuts = _corner_cuts(frames, miter_gap) if options.get("miter", True) else {}
+    cuts = _corner_cuts(frames, miter_gap) if miter_gap is not None else {}
     trims, strips = [], []
     for index, fr in enumerate(frames):
         up = fr["normal"] * (-1.0 if flip else 1.0)
         origin = fr["start"] - (fr["normal"] * thickness if flip else V(0, 0, 0))
         xdir = fr["out"]
         along = fr["dir"]
-        trims.append(
-            sb.frame_box(
-                origin, xdir, along, up,
-                x0, big, 0.0, fr["length"], -thickness * 1.5, thickness * 0.5,
+        if x0 < -1e-9:
+            trims.append(
+                sb.frame_box(
+                    origin, xdir, along, up,
+                    x0, big, 0.0, fr["length"], -thickness * 1.5, thickness * 0.5,
+                )
             )
-        )
         strip = sb.strip_solid(pieces, thickness, origin, xdir, up, along * fr["length"])
         for point, normal in cuts.get(index, []):
             # keep the side of the corner's bisector this edge lies on
@@ -85,7 +102,7 @@ def hem_shape(shape, edge_names, options, thickness, rule_radius, miter_gap):
         strips.append(strip)
     trimmed = shape.cut(trims) if trims else shape
     merged = sb.fuse_all(trimmed, strips)
-    return sb.one_solid(merged, "This hem")
+    return sb.one_solid(merged, what)
 
 
 class HemFeature:
