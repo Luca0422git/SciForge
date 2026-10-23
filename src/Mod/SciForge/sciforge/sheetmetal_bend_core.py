@@ -481,6 +481,41 @@ def facets_for_arc(radius, sweep_deg, control, value):
     raise ValueError("unknown facet control %r" % control)
 
 
+def triangulate(t1, t2, closed):
+    """Triangles between two point lists placed at t1, t2 (0..1: their share of a turn or of
+    the length; closed lists without the repeated first point), walking both. Each corner
+    of one profile fans out to the stretch of the other that faces it (a square to a
+    circle: a fan of facets at each corner, one facet along each side), as a press-brake
+    transition is laid out. Index triples into
+    list1 + list2 (list2's indices shifted by len(t1))."""
+    n1, n2 = len(t1), len(t2)
+    tris = []
+    i = j = 0
+    end1 = n1 if closed else n1 - 1
+    end2 = n2 if closed else n2 - 1
+
+    def next_t(ts, k, n):
+        return ts[k + 1] if k + 1 < n else 1.0
+
+    while i < end1 or j < end2:
+        if i >= end1:
+            move_b = True
+        elif j >= end2:
+            move_b = False
+        else:
+            # the other profile's points up to the middle of this segment fan out from
+            # this point: each corner's fan is centred on it, each side's facet meets the
+            # point facing the side's middle
+            move_b = next_t(t2, j, n2) <= 0.5 * (t1[i] + next_t(t1, i, n1)) + 1e-12
+        if move_b:
+            tris.append((i % n1, n1 + (j + 1) % n2, n1 + j % n2))
+            j += 1
+        else:
+            tris.append((i % n1, (i + 1) % n1, n1 + j % n2))
+            i += 1
+    return tris
+
+
 # -- sheet metal Fillet / Chamfer ----------------------------------------------------------------
 def is_thickness_edge(edge_dir, face_normal, length, thickness, tol=1e-3):
     """True for an edge that runs straight through the sheet: parallel to the sheet's normal

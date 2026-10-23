@@ -178,6 +178,31 @@ class FacetTests(unittest.TestCase):
                 core.facets_for_arc(15, 90, control, 0)
 
 
+class TriangulateTests(unittest.TestCase):
+    def test_square_to_circle_fans_from_corners(self):
+        # square corners at 1/8, 3/8, 5/8, 7/8 of a turn, 16 circle points
+        t1 = [0.0, 0.25, 0.5, 0.75]
+        t2 = [i / 16.0 for i in range(16)]
+        tris = core.triangulate(t1, t2, True)
+        self.assertEqual(len(tris), 4 + 16)  # one per square side + one per circle chord
+        per_corner = {}
+        for tri in tris:
+            corners = [k for k in tri if k < 4]
+            if len(corners) == 1:
+                per_corner[corners[0]] = per_corner.get(corners[0], 0) + 1
+        self.assertEqual(sorted(per_corner.values()), [4, 4, 4, 4])  # a fan of 4 at each
+
+    def test_equal_counts_give_quads(self):
+        tris = core.triangulate([0.0, 0.5], [0.0, 0.5], True)
+        self.assertEqual(len(tris), 4)
+        used = sorted(set(k for tri in tris for k in tri))
+        self.assertEqual(used, [0, 1, 2, 3])
+
+    def test_open_strip(self):
+        tris = core.triangulate([0.0, 1.0], [0.0, 0.5, 1.0], False)
+        self.assertEqual(len(tris), 3)
+
+
 class ThicknessEdgeTests(unittest.TestCase):
     def test_only_through_the_sheet(self):
         self.assertTrue(core.is_thickness_edge((0, 0, 1), (0, 0, 1), 1.0, 1.0))

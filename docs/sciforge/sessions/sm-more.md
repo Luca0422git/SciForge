@@ -7,7 +7,8 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 
 - **Bend** (SHEET METAL > CREATE > Bend, Fusion's Fold): Stationary Side + Bend Lines boxes,
   Angle (round handle with value box), Bend Line Start / Center / End, Flip, Bend / Corner
-  Relief (stored), Override Bend Radius. Several lines in one step (bent farthest first).
+  Relief (stored), Override Bend Radius. Several lines in one step (bent farthest first), each
+  line with its own angle / position / flip through "Values For".
   The zone is laid onto the bend's cylinders by mapping its outline in the cylinder's (angle,
   height) parameters, so holes in the zone come through.
 - **Hem** (CREATE > Hem): Flat / Open / Rolled / Teardrop / Rope / Double with their values,
@@ -18,12 +19,13 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
   Overlap, rule gap or own gap, Overlap, Flip Overlap; Trim To Bend, Round and Square reliefs
   (cut in the flat state through sm-flat's unfolder and folded back: `sf/sm-flat` merged in).
 - **Lofted Flange** (CREATE > Lofted Flange, own entry under Flange): two profiles (auto-chain),
-  Brake Form with the four facet controls, Die Form, Orientation, New Body / Join.
+  Brake Form with the four facet controls (laid out like a transition piece: corner fans,
+  matched by direction round each profile's centre), Die Form, Orientation, New Body / Join.
 - **Sheet metal Fillet / Chamfer** (MODIFY > Fillet / Chamfer of the SHEET METAL tab): only the
-  edges through the thickness; Fillet radius sets ("+ New Set"); on a solid body they open the
-  SOLID commands.
+  edges through the thickness; Fillet radius sets ("+ New Set"), a radius arrow with its value
+  box; on a solid body they open the SOLID commands.
 - Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 24 golden models,
-  21 unit tests, 7 scenarios (204 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
+  24 unit tests, 7 scenarios (204 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
 
 ## FreeCAD / OpenCASCADE facts found
 
@@ -66,6 +68,13 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
   the scratchpad) lays this branch's bends flat to exactly the plate they were bent from
   (100 x 40, volume 4000.0000): Bend's zone mapping is the exact inverse of the unfolder's
   development (both use R + K T). Hems, Join by Bend and the rounds unfold too.
+
+- Merged `sf/sm-forming` twice (its Flange for scenarios / golden models) and `sf/sm-flat`
+  once (its unfolder for Corner Closure reliefs); no conflicts but `ribbon_config.py`'s
+  adjacent CREATE lines (resolved keeping both builders' entries).
+- Ribbon sweep of the SHEET METAL tab (`SWEEP_TABS=sheet_metal`): every sm-more command passes;
+  the one failure is sm-forming's Sheet Metal Rules opening its window (intended; it needs an
+  `INTENDED` entry in `ribbon_sweep.py`, a shared file).
 
 ## Open (see the parity doc's Known gaps)
 

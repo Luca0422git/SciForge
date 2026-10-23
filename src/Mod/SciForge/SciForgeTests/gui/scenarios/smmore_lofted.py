@@ -162,6 +162,37 @@ def after_redo():
     h.check("Ctrl+Y: back", st.close(vol(), s["done"]))
 
 
+def edit():
+    st.double_click_timeline("Lofted Flange 1")
+
+
+def edit_open():
+    p = panel()
+    h.check(
+        "edit opens the Lofted Flange dialog with both profiles",
+        p is not None
+        and p.editing
+        and len(p.picks["profile1"]) == 1
+        and len(p.picks["profile2"]) == 1,
+    )
+    h.check(
+        "Face Number 4 is back",
+        p is not None and p.value("control") == "facet_number" and abs(p.value("value") - 4) < 1e-9,
+    )
+    if p:
+        st.choose(p, "forming", "Die Form")
+
+
+def edit_ok():
+    st.settle(panel(), 15000)
+    st.ok()
+
+
+def after_edit():
+    h.check("edited to Die Form", panel() is None and st.close(vol(), 3856.8239, 0.02), vol())
+    h.check("still one Lofted Flange", len(st.steps("SheetMetalLoftedFlange")) == 1)
+
+
 def open_again():
     s["square"].ViewObject.Visibility = True  # shown again from the browser's eye
     s["line"].ViewObject.Visibility = True
@@ -219,6 +250,10 @@ h.run(
         after_undo,
         redo,
         after_redo,
+        edit,
+        edit_open,
+        edit_ok,
+        after_edit,
         open_again,
         square_again,
         click_line,
