@@ -17,7 +17,8 @@ Wave 6, branch `sf/sm-flat` (2026-10-23). Implemented in `src/Mod/SciForge/scifo
 Shared files changed (lines of this area only): `ribbon_config.py` (the five SHEET METAL
 entries and the FLAT PATTERN tab), `ribbon_ui.py` (the contextual FLAT PATTERN tab:
 `set_flat_pattern_mode`, `CONTEXTUAL`), `browser_core.py` / `browser_ui.py` (the Flat
-Pattern node, its menu and double-click). No FreeCAD core change.
+Pattern node, its menu and double-click), `drawing_ui.py` / `drawing.py` (a flat pattern in
+the Create Drawing list; its base view from the top). No FreeCAD core change.
 
 Fusion's behaviour comes from `docs/sciforge/dev/research/fusion-sheet-metal.md` (sections 2.6
 to 2.12, 4.2, 4.8 and the critic pass; **A** = Autodesk help / API, **F** = forum or
@@ -53,6 +54,12 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | The flat pattern follows edits of the folded model | Same: it recomputes when the body changes; the stationary face is found again by where it was when face names change | G |
 | Timeline "FlatPattern1" | Not a timeline step (the browser row only) | F[F10], G |
 | Flat placed on XY | The stationary face at z = 0 facing +Z, the sheet below, its longest straight edge along +X, the outline's corner at the origin | G |
+
+### A drawing of the flat pattern
+
+| Fusion | SciForge | Src |
+|---|---|---|
+| Drawing > From Design, the flat pattern as the view source | File > New Drawing, Contents Select lists "Flat Pattern / <body>" (unticked); its Base View defaults to Top (the flat lies on XY); outline, holes and bend lines are drawn | F[F9], A[R37] |
 
 ### Export DXF (FLAT PATTERN > EXPORT, or right-click the Flat Pattern)
 
@@ -113,7 +120,8 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   lofted flanges (curved two ways: refused) and parts whose "lowest +Z face" is an edge face.
 - Scenarios (real clicks): `flatpattern_l_bracket`, `flatpattern_u_channel_dxf`,
   `flatpattern_unfold_refold`, `flatpattern_rip_convert`, `flatpattern_component_rip`,
-  `flatpattern_refusals`, `flatpattern_environment`, `flatpattern_flange`.
+  `flatpattern_refusals`, `flatpattern_environment`, `flatpattern_flange`,
+  `flatpattern_drawing`.
 - Unit tests: `SciForgeTests/unit/test_flatpattern_core.py` (DXF writer and read-back, the
   bend maths of the flat sizes, the FLAT PATTERN tab, the browser node, the golden format).
 
@@ -127,9 +135,10 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 - **FLAT PATTERN tab contents**: only INSPECT, SELECT, EXPORT (Export DXF) and FINISH; no
   sketches or construction geometry on the flat (Fusion allows them, A[R35]). The flat
   pattern is a shape beside the body, not a component of its own.
-- **Flat pattern STEP export, drawing views of the flat pattern with a bend table and bend
-  notes** (Fusion: A[R36] preview, A[R17]): not built (the DXF carries the bend notes as
-  text instead).
+- **Flat pattern STEP export, a drawing's Bend Table and bend notes** (Fusion: A[R36]
+  preview, A[R17]): not built (the DXF carries the bend notes as text instead). A drawing
+  *can* show the flat pattern (File > New Drawing > Contents Select > "Flat Pattern / ...",
+  its Base View defaults to Top, bend lines drawn as lines), without up / down styles.
 - **Side faces cut at an angle through the thickness** (sm-forming's mitres are bevelled
   along the corner's bisector plane): the flat takes the stationary side's outline, so its
   volume differs a little from the folded part's; a real (square) mitre cut has no such

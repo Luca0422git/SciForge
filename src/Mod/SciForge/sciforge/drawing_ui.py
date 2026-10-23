@@ -1149,6 +1149,13 @@ class CreateDrawingPanel(taskui.Panel):
             item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
             item.setCheckState(QtCore.Qt.Checked)
             self.bodies.addItem(item)
+        for flat in _flat_patterns(doc):
+            # Fusion: a sheet metal part's flat pattern can be drawn instead (sm-flat)
+            item = QtWidgets.QListWidgetItem("Flat Pattern / %s" % _body_caption(flat.Body))
+            item.setData(QtCore.Qt.UserRole, flat.Name)
+            item.setFlags(item.flags() | QtCore.Qt.ItemIsUserCheckable)
+            item.setCheckState(QtCore.Qt.Unchecked)
+            self.bodies.addItem(item)
         self.layout.addRow(self.bodies)
         self.bodies.setVisible(False)
         self.template = _combo(["SciForge title block", "Blank sheet (frame only)"])
@@ -1235,6 +1242,16 @@ def _design_units(doc):
     except Exception:
         pass
     return "mm"
+
+
+def _flat_patterns(doc):
+    """The design's sheet metal flat patterns (flatpattern.py) that can be drawn."""
+    try:
+        from . import flatpattern
+
+        return [f for f in flatpattern.all_of(doc) if f.Body is not None and f.Shape.Solids]
+    except Exception:
+        return []
 
 
 def _body_caption(body):

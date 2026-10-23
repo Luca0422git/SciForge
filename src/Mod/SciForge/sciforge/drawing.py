@@ -693,6 +693,8 @@ def orientation_axes(name):
 def add_base_view(page, sources, x, y, orientation="Front", style=None, scale=None, tangent=None):
     """The first view of a drawing (Fusion's Base View)."""
     doc = page.Document
+    if sources and all(kind(s) == "FlatPattern" for s in sources) and orientation == "Front":
+        orientation = "Top"  # a flat pattern lies on XY: drawn from the top (sm-flat)
     style = style or "Visible and Hidden Edges"
     tangent = tangent or "Full Length"
     if scale is None:
