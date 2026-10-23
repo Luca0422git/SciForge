@@ -78,6 +78,7 @@ class RulesDialog(QtWidgets.QDialog):
         # the undo step opens at the first change (one opened here was closed, empty, by
         # FreeCAD when the ribbon's command returned: the changes then went unrecorded)
         self._changed = False
+        self._opened = False  # this dialog opened the undo step (it closes only its own)
         self.editing = None  # ("design" | "library", old name or None)
         layout = QtWidgets.QVBoxLayout(self)
         self.pages = QtWidgets.QStackedWidget()
@@ -195,6 +196,7 @@ class RulesDialog(QtWidgets.QDialog):
         try:
             if App.getActiveTransaction() is None:
                 self.doc.openTransaction("Sheet Metal Rules")
+                self._opened = True
         except Exception as exc:
             warn("Sheet Metal Rules: %s" % exc)
 
@@ -404,11 +406,20 @@ class RulesDialog(QtWidgets.QDialog):
         log("sheet metal rule '%s' saved (%s)" % (rule["name"], key))
 
     # -- closing --------------------------------------------------------------------------------
+    def _commit(self):
+        """Close the undo step this dialog opened (never another command's)."""
+        if not self._opened:
+            return
+        self._opened = False
+        active = App.getActiveTransaction()
+        if active is not None and active[0] == "Sheet Metal Rules":
+            self.doc.commitTransaction()
+
     def accept(self):
         try:
             if self.pages.currentIndex() == 1:
                 self.close_editor()
-            self.doc.commitTransaction()
+            self._commit()
             if self._changed:
                 self.doc.recompute()
         except Exception as exc:
@@ -420,7 +431,7 @@ class RulesDialog(QtWidgets.QDialog):
             if self.pages.currentIndex() == 1:
                 self.close_editor()
                 return
-            self.doc.commitTransaction()
+            self._commit()
         except Exception as exc:
             warn("Sheet Metal Rules: %s" % exc)
         super().reject()

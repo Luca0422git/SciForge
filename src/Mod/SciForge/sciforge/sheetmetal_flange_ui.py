@@ -633,6 +633,7 @@ class FlangePanel(Panel):
                 if self.made_with and self.made_with[:2] == made_with[:2]:
                     body = flange.owner_body(self.target)
                     sheetmetal.make_sheet_metal_body(body, self.rule_name)
+                    self.target.touch()  # it reads the body's rule when it computes
                     self.made_with = made_with
                 else:
                     self._discard()
@@ -646,6 +647,7 @@ class FlangePanel(Panel):
                     operation=self.operation,
                     body=self._join_body(),
                     target=self.to_object,
+                    hide=False,  # the sketch stays in view while picking; OK hides it
                 )
                 self.made_with = made_with
             else:

@@ -538,6 +538,7 @@ def make(
     body=None,
     name=None,
     target=None,
+    hide=True,
 ):
     """Make a flange step. kind: base / contour / edge. refs: [(sketch, "InternalFaceN")]
     (base), [(sketch, "EdgeN")] (contour) or [(feature, "EdgeN")] (edge, the body's last
@@ -594,7 +595,8 @@ def make(
         if marked is not None:
             setattr(marked, sheetmetal.RULE_PROP, "")
         raise
-    hide_sketches(refs if kind != "edge" else [])
+    if hide:
+        hide_sketches(refs if kind != "edge" else [])
     log("flange (%s) %s made in %s" % (kind, step.Name, body.Label))
     return step
 
