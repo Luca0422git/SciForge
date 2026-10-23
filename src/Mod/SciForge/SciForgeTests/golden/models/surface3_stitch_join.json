@@ -169,6 +169,16 @@
         "p1",
         "p2"
       ]
+    },
+    {
+      "op": "reopen_check",
+      "bodies": {
+        "e1": {
+          "volume": 1500,
+          "solids": 1
+        }
+      },
+      "comment": "saved and opened again: the Join keeps the stitched cube in the box"
     }
   ],
   "expect": {
