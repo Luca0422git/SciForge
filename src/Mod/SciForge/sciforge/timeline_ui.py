@@ -20,7 +20,7 @@ timeline_ops.py, the layout logic by timeline_core.py."""
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import _remember, components, timeline_core as core
+from . import _remember, components, doc_epoch, timeline_core as core, undo_fast
 from . import timeline_ops as ops
 from . import ui_icon, warn
 from .compat import QtCore, QtGui, QtWidgets, Signal
@@ -302,11 +302,19 @@ class _ItemButton(QtWidgets.QToolButton):
     def paintEvent(self, event):
         super().paintEvent(event)
         item = self.item
-        if not (item.suppressed or item.status != "ok"):
+        if not (item.suppressed or item.status != "ok" or item.locked):
             return
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.Antialiasing)
         w, h = self.width(), self.height()
+        if item.locked:  # Fusion: a padlock on a fully constrained sketch's icon
+            try:
+                from . import sketch_explain
+
+                size = max(8, ICON // 2)
+                sketch_explain.paint_padlock(painter, QtCore.QRect(1, h - size - 1, size, size))
+            except Exception:
+                pass
         if item.suppressed:  # struck through, like a step that is switched off
             pen = QtGui.QPen(QtGui.QColor("#c3cad4"), 2)
             painter.setPen(pen)
@@ -555,7 +563,8 @@ class TimelineWidget(QtWidgets.QWidget):
 
         self._timer = QtCore.QTimer(self)
         self._timer.setInterval(400)
-        self._timer.timeout.connect(self.refresh)
+        self._timer.timeout.connect(self._poll)
+        self._gate = doc_epoch.Gate()  # the poll reads the design only after a change
         self._play_timer = QtCore.QTimer(self)
         self._play_timer.setInterval(450)
         self._play_timer.timeout.connect(self._play_step)
@@ -571,6 +580,8 @@ class TimelineWidget(QtWidgets.QWidget):
         return button
 
     def start(self):
+        doc_epoch.install()
+        undo_fast.install()
         try:
             ops.install_guard(_defer)
             if self._undo_watch is None:
@@ -595,21 +606,29 @@ class TimelineWidget(QtWidgets.QWidget):
 
     def after_undo(self):
         """Fusion recomputes after Undo/Redo; FreeCAD puts the shapes back but leaves
-        steps that were red (or waiting) in that state until the next recompute."""
+        steps that were red (or waiting) in that state until the next recompute. When the
+        shapes it put back are already the right ones, nothing is rebuilt (undo_fast)."""
         try:
             doc = _doc()
             if doc is None or Gui.Control.activeDialog():
                 return
+            if getattr(doc, "Recomputing", False):
+                # A long recompute runs Qt's events from inside it, so this can come in the
+                # middle of one (an undo followed by a script's recompute): a second recompute
+                # nested in it rebuilt the whole design twice. Once it has ended.
+                QtCore.QTimer.singleShot(100, self.after_undo)
+                return
             gdoc = Gui.ActiveDocument
             if gdoc is not None and gdoc.getInEdit() is not None:
                 return
-            stale = False
-            for obj, _body in ops.steps(doc):
-                state = list(obj.State)
-                if "Invalid" in state or "Touched" in state or "Error" in state:
-                    stale = True
-                    break
-            if stale:
+            # Every object, not only the timeline's steps: Ctrl+Z of a new step leaves its
+            # Body touched (its Tip and list changed back), and a Body left touched made the
+            # next transaction start "not up to date", so its own Ctrl+Z rebuilt everything
+            # (undo_fast). The AI's Undo looks at the same objects.
+            stale = bool(undo_fast.touched(doc))
+            # (undo_fast: when FreeCAD put back every shape built from the values it restored,
+            # the design is already as built: no rebuild, which took 15-23 s on big designs)
+            if stale and not undo_fast.settle_without_rebuild(doc):
                 ops.recompute(doc)
             ops.show_marker_state(doc)  # sketches/planes drawn as the marker says
             self.refresh(force=True)
@@ -617,9 +636,25 @@ class TimelineWidget(QtWidgets.QWidget):
             warn("timeline after undo: %s" % exc)
 
     # -- reading the design --------------------------------------------------------
+    def _poll(self):
+        """The timer's tick: reads the design only when something may have changed since
+        the last read (doc_epoch: on a long design the read took 30 ms every 400 ms while
+        nothing happened, a hitch in an orbit)."""
+        try:
+            if doc_epoch.busy():
+                return  # a long recompute runs the timers from inside it: read it once done
+            key = doc_epoch.key()
+            if key is not None and not self._gate.ready(key):
+                self._sync_selection()
+                return
+            self.refresh()
+        except Exception as exc:
+            _remember("info", "timeline poll: %s" % exc)
+
     def refresh(self, force=False):
         if self._busy or self._drag is not None or self._editor is not None:
             return  # never pull the widgets from under the mouse or the keyboard
+        key = doc_epoch.key()  # (before reading: a change during the read is read again)
         self._follow_history_mode()
         try:
             doc = _doc()
@@ -635,6 +670,8 @@ class TimelineWidget(QtWidgets.QWidget):
         except Exception as exc:  # e.g. an object deleted mid-read
             _remember("info", "timeline refresh skipped: %s" % exc)
             return
+        if key is not None:
+            self._gate.done(key)
         self._sync_selection()
         if sig == self._sig and not force:
             return
@@ -704,22 +741,44 @@ class TimelineWidget(QtWidgets.QWidget):
                 return w
         return None
 
-    def _clear(self):
+    def _clear(self, keep_steps=False):
+        """Empty the row. keep_steps: the step buttons are kept aside (self._spare) for the
+        rebuild to use again where nothing about their step's look changed."""
         self.unhover()  # the step under the mouse may change or go
         self._cancel_editor()
+        self._spare = {}
         while self._row.count():
             entry = self._row.takeAt(0)
             widget = entry.widget()
-            if widget is not None:
-                if widget.hasFocus():
-                    # (hidden with the focus, Qt hands it to the next widget in the Tab
-                    # order, which may be in another tab: that tab came to the front)
-                    widget.clearFocus()
-                widget.hide()
-                widget.deleteLater()
+            if widget is None:
+                continue
+            if keep_steps and isinstance(widget, _ItemButton) and widget.item.name not in self._spare:
+                self._spare[widget.item.name] = widget
+                continue
+            self._drop(widget)
+
+    @staticmethod
+    def _drop(widget):
+        if widget.hasFocus():
+            # (hidden with the focus, Qt hands it to the next widget in the Tab
+            # order, which may be in another tab: that tab came to the front)
+            widget.clearFocus()
+        widget.hide()
+        widget.deleteLater()
 
     def _rebuild(self):
-        self._clear()
+        """The row made again from self._items. A step whose look did not change keeps its
+        button: making and styling a button per step after every change took 140 ms on a
+        design of 120 steps (SciForge speed with big designs, 2026-10-21)."""
+        self._clear(keep_steps=True)
+        try:
+            self._build_row()
+        finally:
+            spare, self._spare = self._spare, {}
+            for widget in spare.values():
+                self._drop(widget)
+
+    def _build_row(self):
         self._buttons = []
         if self._doc_name is None or not self._items:
             text = (
@@ -821,8 +880,38 @@ class TimelineWidget(QtWidgets.QWidget):
         self._row.addWidget(button)
         self._slots.append((button, item.index, item.index + 1))
 
+    @staticmethod
+    def _look(item):
+        """Everything a step's button shows: equal looks, the same button can stand for it.
+        (The icon's cacheKey changes when the light / dark look makes new icons.)"""
+        return (
+            item.name,
+            item.icon,
+            ui_icon(item.icon).cacheKey(),
+            item.state,
+            item.status,
+            bool(item.suppressed),
+            bool(item.locked),  # the padlock (sketch_explain), drawn on the button
+            item.display,
+            core.tooltip(item),
+        )
+
     def _item_button(self, item):
+        look = self._look(item)
+        old = getattr(self, "_spare", {}).pop(item.name, None)
+        if old is not None:
+            try:
+                if getattr(old, "_look", None) == look:
+                    old.item = item  # (the new reading of the same step)
+                    old._press = None  # a press on the old row does not carry over
+                    old._dragging = False
+                    return old
+            except RuntimeError:
+                old = None  # deleted meanwhile
+            if old is not None:
+                self._drop(old)
         button = _ItemButton(self, item)
+        button._look = look
         icon = ui_icon(item.icon)
         if item.state == "rolled_back" or item.suppressed:
             # Greyed-out icon, like steps after Fusion's marker or switched off.
@@ -834,6 +923,7 @@ class TimelineWidget(QtWidgets.QWidget):
         button.setProperty("state", item.state)
         button.setProperty("status", item.status)
         button.setProperty("suppressed", "true" if item.suppressed else "false")
+        button.setProperty("locked", "true" if item.locked else "false")  # the padlock
         button.setToolTip(core.tooltip(item))
         button.doubleClicked.connect(lambda n=item.name: self.edit(n))
         button.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
@@ -1158,8 +1248,6 @@ class TimelineWidget(QtWidgets.QWidget):
         obj = self._object(name)  # finishing the open command may have removed it
         if obj is None:
             return
-        doc = obj.Document
-        back = self._roll_for_edit(doc, name)
         try:
             body = ops.body_of(obj)
             if body is not None:
@@ -1168,51 +1256,10 @@ class TimelineWidget(QtWidgets.QWidget):
             pass
         from . import taskui
 
-        taskui.edit_object(obj)  # the feature's SciForge dialog (EDITORS), else FreeCAD's
-        if back is not None:
-            self._roll_back_after_edit(doc.Name, *back)
-
-    def _roll_for_edit(self, doc, name):
-        """Fusion: editing a step after the history marker rolls the design to that
-        step while its dialog is open (else the edit could not be seen). Returns what
-        to roll back to afterwards: (marker count before, marker count while editing)."""
+        # the feature's SciForge dialog (EDITORS), else FreeCAD's; the marker rolls to the
+        # step while it is edited (edit_rollback)
+        taskui.edit_object(obj)
         self.refresh(force=True)
-        item = self._timeline.find(name)
-        if item is None or item.state != "rolled_back":
-            return None
-        tips, note = core.marker_for_slot(self._timeline, item.index + 1)
-        saved = (core.active_count(self._timeline), self._timeline.before)
-        ops.set_marker_untracked(doc, tips, note)
-        self.refresh(force=True)
-        return saved, (core.active_count(self._timeline), self._timeline.before)
-
-    def _roll_back_after_edit(self, doc_name, before, during):
-        """Once the edit is over, put the marker back where it was (unless the user
-        moved it meanwhile)."""
-        timer = QtCore.QTimer(self)
-        timer.setInterval(150)
-
-        def check():
-            try:
-                if _command_open():
-                    return
-                timer.stop()
-                timer.deleteLater()
-                doc = _doc()
-                if doc is None or doc.Name != doc_name:
-                    return
-                tl = ops.timeline(doc, deps=False)
-                if (core.active_count(tl), tl.before) != during:
-                    return  # the user rolled the marker himself
-                count, note = before
-                ops.set_marker_untracked(doc, core.tips_for_count(tl, count), note)
-                self.refresh(force=True)
-            except Exception as exc:
-                timer.stop()
-                warn("timeline: %s" % exc)
-
-        timer.timeout.connect(check)
-        timer.start()
 
     def edit_profile(self, name):
         obj = self._object(name)

@@ -1,0 +1,802 @@
+# Autodesk Fusion's command tree, by NAME only: the checklist tools/sciforge/parity.py compares
+# with SciForge's own menus to write docs/sciforge/parity-checklist.md.
+#
+# This file is for us, never shown in SciForge's interface. It records names only (a command's
+# name is a generic CAD term or Fusion's label, kept as a checklist entry); no descriptions,
+# icons or wording of Autodesk's are copied. Written from memory of stock Fusion (2024-2026
+# releases), cross-checked with docs/sciforge/feature-outline.md and docs/sciforge/parity/*.md
+# (which cite Autodesk's help and forum answers). Corrections are welcome: Luca can open Fusion
+# and fix a line; the next run of parity.py takes it.
+#
+# FORMAT
+#   - One name per line; "#" starts a comment line; blank lines are ignored.
+#   - Indentation is 2 spaces per level. Level 0 is an AREA (a ribbon tab, a menu, a context
+#     menu). Level 1 is usually a PANEL (CREATE, MODIFY...) or a node type. A line with lines
+#     under it is a heading (a panel or a submenu): it is not counted itself, only the lines
+#     without children (the commands) are counted.
+#   - A trailing "?" means the name or its place is not sure (it is counted all the same; the
+#     checklist marks it so someone can confirm it in Fusion).
+#   - Attributes in square brackets at the end of a line apply to that line and everything
+#     under it:
+#       [in=SCOPE,SCOPE]  where parity.py looks for the command in SciForge. Scopes:
+#                         tab:<id> (a ribbon tab of ribbon_config.TABS: solid, surface, mesh,
+#                         utilities, sketch, drawing), file (the File menu), quick (the
+#                         application bar), nav (navigation bar), workspace (the workspace
+#                         button's menu), marking (right-click marking menu), sketch-marking
+#                         (the marking menu inside a sketch), browser or browser:<node kind>
+#                         (browser right-click menus, browser_core.MENUS), timeline:step,
+#                         timeline:group, timeline:settings, timeline:playback, viewcube,
+#                         sheets (a drawing's sheet bar).
+#       [out=REASON]      left out of SciForge on purpose (feature-outline.md section 8, or a
+#                         decision of Luca's in MEMORY.md). Counted in the overall figure, left
+#                         out of the "areas SciForge builds" figure.
+#   - Panels Fusion repeats on several tabs (CONSTRUCT, INSPECT, INSERT, SELECT, and the shared
+#     MODIFY commands such as Physical Material) are listed once, under SOLID. A command that
+#     appears in two genuinely different places (Delete in MODIFY and in the marking menu) is
+#     listed in both: the checklist counts menu entries, like a user hunting for a command.
+#   - Not covered: dialog options (Extrude's Taper, Fillet's types...), the Sketch Palette's
+#     check boxes, keyboard-only actions, the Data Panel, Help and account menus.
+
+APPLICATION BAR [in=quick,file]
+  Home
+  Data Panel
+  Save
+  Undo
+  Redo
+  Profile menu
+    Preferences
+    My Profile [out=accounts are out of scope]
+    Autodesk Account [out=accounts are out of scope]
+  Job Status? [out=cloud collaboration is out of scope]
+  Notifications? [out=cloud collaboration is out of scope]
+
+FILE MENU [in=file,quick]
+  New Design
+  New Design from File?
+  New Electronics Design [out=electronics is out of scope]
+  New Drawing
+    From Design
+    From Animation [out=animation is out of scope]
+  New Drawing Template?
+  Open
+  Recover Documents
+  Upload
+  Save
+  Save As
+  Save As Latest
+  Export
+  3D Print
+  Capture Image
+  Share [out=cloud collaboration is out of scope]
+    Public Link
+    Collaboration?
+  View
+    Show/Hide Data Panel?
+    Show/Hide Browser?
+    Show/Hide Comments? [out=cloud collaboration is out of scope]
+    Show/Hide Text Commands?
+    Show/Hide Navigation Bar?
+    Show/Hide ViewCube?
+    Show/Hide Timeline?
+    Reset to Default Layout?
+
+WORKSPACES [in=workspace]
+  Design
+  Generative Design [out=generative design is out of scope]
+  Render [out=rendering is out of scope]
+  Animation [out=animation is out of scope]
+  Simulation [out=simulation is out of scope]
+  Manufacture [out=CAM is out of scope]
+  Drawing
+    From Design
+
+SOLID [in=tab:solid]
+  CREATE
+    New Component
+    Create Sketch
+    Create Form [out=sculpting (T-spline) is out of scope]
+    Derive
+    Extrude
+    Revolve
+    Sweep
+    Loft
+    Rib
+    Web
+    Emboss
+    Hole
+    Thread
+    Box
+    Cylinder
+    Sphere
+    Torus
+    Coil
+    Pipe
+    Pattern
+      Rectangular Pattern
+      Circular Pattern
+      Pattern on Path
+    Mirror
+    Thicken
+    Boundary Fill
+    Create Base Feature
+    Create PCB? [out=electronics is out of scope]
+  FINISH BASE FEATURE
+    Finish Base Feature
+  MODIFY
+    Press Pull
+    Fillet
+    Chamfer
+    Shell
+    Draft
+    Scale
+    Combine
+    Offset Face
+    Replace Face
+    Split Face
+    Split Body
+    Silhouette Split
+    Move/Copy
+    Align
+    Delete
+    Remove
+    Physical Material
+    Appearance
+    Manage Materials
+    Change Parameters
+    Compute All
+  CONFIGURE?
+    Create Configured Design?
+    Configuration Table?
+  CONSTRUCT
+    Offset Plane
+    Plane at Angle
+    Tangent Plane
+    Midplane
+    Plane Through Two Edges
+    Plane Through Three Points
+    Plane Tangent to Face at Point
+    Plane Along Path
+    Axis Through Cylinder/Cone/Torus
+    Axis Perpendicular at Point
+    Axis Through Two Planes
+    Axis Through Two Points
+    Axis Through Edge
+    Axis Perpendicular to Face at Point
+    Point at Vertex
+    Point Through Two Edges
+    Point Through Three Planes
+    Point at Center of Circle/Sphere/Torus
+    Point at Edge and Plane
+    Point Along Path
+  INSPECT
+    Measure
+    Interference
+    Curvature Comb Analysis
+    Zebra Analysis
+    Draft Analysis
+    Curvature Map Analysis
+    Isocurve Analysis
+    Accessibility Analysis
+    Minimum Radius Analysis
+    Section Analysis
+    Center of Mass
+    Display Component Colors
+  INSERT
+    Insert Derive
+    Decal
+    Canvas
+    Insert Mesh
+    Insert SVG
+    Insert DXF
+    Insert Fastener?
+    Insert McMaster-Carr Component [out=online part catalogues are cloud services]
+    Insert a manufacturer part [out=online part catalogues are cloud services]
+    Insert TraceParts Supplier Components? [out=online part catalogues are cloud services]
+  ASSEMBLE
+    New Component
+    Joint
+    As-built Joint
+    Joint Origin
+    Rigid Group
+    Tangent Relationship?
+    Drive Joints
+    Motion Link
+    Enable Contact Sets
+    Enable All Contact
+    Disable Contact
+    New Contact Set
+    Motion Study
+  POSITION
+    Capture Position
+    Revert
+  SELECT
+    Select
+    Window Selection
+    Freeform Selection
+    Paint Selection
+    Selection Tools
+      Select All?
+      Select Through
+      Invert Selection?
+      Select Other?
+      Select by Size?
+      Select Boundary?
+    Selection Priority
+      Select Body Priority
+      Select Face Priority
+      Select Edge Priority
+      Select Component Priority
+    Selection Filters
+      Bodies
+      Body Faces
+      Body Edges
+      Body Vertices
+      Components
+      Sketch Curves
+      Sketch Points
+      Work Geometry
+      Joint Origins
+      Canvases?
+      Decals?
+    Component Drag
+
+SURFACE [in=tab:surface]
+  CREATE
+    Extrude
+    Revolve
+    Sweep
+    Loft
+    Patch
+    Ruled
+    Offset
+  MODIFY
+    Trim
+    Untrim
+    Extend
+    Stitch
+    Unstitch
+    Reverse Normal
+
+MESH [in=tab:mesh]
+  CREATE
+    Tessellate
+    Create Mesh Section Sketch?
+  PREPARE
+    Create Face Group?
+    Generate Face Groups
+    Combine Face Groups
+    Repair
+  MODIFY
+    Remesh
+    Reduce
+    Plane Cut
+    Shell
+    Smooth
+    Combine
+    Separate
+    Reverse Normal
+    Direct Edit
+    Erase and Fill
+    Make Closed Mesh?
+    Convert Face Groups?
+  CONVERT
+    Convert Mesh
+
+FORM [in=tab:form] [out=sculpting (T-spline) is out of scope]
+  CREATE
+    Box
+    Plane
+    Cylinder
+    Sphere
+    Torus
+    Quadball
+    Pipe
+    Face
+    Extrude
+    Revolve
+    Sweep
+    Loft
+  MODIFY
+    Edit Form
+    Insert Edge
+    Subdivide
+    Insert Point
+    Merge Edge
+    Bridge
+    Fill Hole
+    Erase and Fill?
+    Weld Vertices
+    UnWeld Edges
+    Crease
+    UnCrease
+    Bevel Edge
+    Slide Edge
+    Smooth
+    Pull
+    Flatten
+    Straighten
+    Match
+    Interpolate
+    Thicken
+    Freeze
+    UnFreeze
+  SYMMETRY
+    Mirror - Internal
+    Circular - Internal
+    Mirror - Duplicate
+    Circular - Duplicate
+    Clear Symmetry
+    Isolate Symmetry
+  UTILITIES
+    Display Mode
+    Repair Body
+    Make Uniform
+    Convert
+    Enable Better Performance
+  FINISH FORM
+    Finish Form
+
+SHEET METAL [in=tab:sheetmetal] [out=Luca 2026-10-09: no SHEET METAL tab for now]
+  CREATE
+    Flange
+    Contour Flange?
+    Hem?
+    Bend
+    Unfold
+    Refold Faces?
+    Create Flat Pattern
+    Convert to Sheet Metal
+    Rip
+  MODIFY
+    Sheet Metal Rules
+  FLAT PATTERN
+    Export DXF?
+    Finish Flat Pattern?
+
+PLASTIC [in=tab:plastic] [out=Luca 2026-10-09: no PLASTIC tab for now]
+  CREATE
+    Boss
+    Snap Fit
+    Lip?
+    Rest?
+  MODIFY
+    Plastic Rules?
+    Rule Fillet?
+
+MANAGE [in=tab:manage] [out=Luca 2026-10-09: no MANAGE tab for now]
+  New Change Order?
+  Item?
+  Release?
+
+UTILITIES [in=tab:utilities]
+  MAKE
+    3D Print
+  ADD-INS
+    Scripts and Add-Ins
+    Fusion App Store [out=an online store of Autodesk's]
+
+SKETCH [in=tab:sketch]
+  CREATE
+    Line
+    Midpoint Line
+    Rectangle
+      2-Point Rectangle
+      3-Point Rectangle
+      Center Rectangle
+    Circle
+      Center Diameter Circle
+      2-Point Circle
+      3-Point Circle
+      2-Tangent Circle
+      3-Tangent Circle
+    Arc
+      3-Point Arc
+      Center Point Arc
+      Tangent Arc
+    Polygon
+      Circumscribed Polygon
+      Inscribed Polygon
+      Edge Polygon
+    Ellipse
+    Slot
+      Center to Center Slot
+      Overall Slot
+      Center Point Slot
+      Three Point Arc Slot
+      Center Point Arc Slot
+    Spline
+      Fit Point Spline
+      Control Point Spline
+    Conic Curve
+    Point
+    Text
+    Mirror
+    Circular Pattern
+    Rectangular Pattern
+    Project / Include
+      Project
+      Intersect
+      Include 3D Geometry
+      Project to Surface
+      Intersection Curve?
+    Sketch Dimension
+  MODIFY
+    Fillet
+    Chamfer?
+      Equal Distance Chamfer?
+      Distance and Angle Chamfer?
+      Two Distance Chamfer?
+    Trim
+    Extend
+    Break
+    Offset
+    Sketch Scale
+    Move/Copy
+  CONSTRAINTS
+    Horizontal/Vertical
+    Coincident
+    Tangent
+    Equal
+    Parallel
+    Perpendicular
+    Fix/Unfix
+    Midpoint
+    Concentric
+    Collinear
+    Symmetry
+    Curvature
+    AutoConstrain?
+  FINISH SKETCH
+    Finish Sketch
+
+DRAWING [in=tab:drawing]
+  CREATE
+    Base View
+    Projected View
+    Section View
+    Detail View
+    Break View
+    Breakout Section View
+    Exploded View?
+    Create Sketch?
+  MODIFY
+    Edit View?
+    Edit Title Block?
+    Move
+    Rotate
+    Delete
+  GEOMETRY
+    Centerline
+    Center Mark
+    Center Mark Pattern
+    Edge Extension
+  DIMENSIONS
+    Dimension
+    Linear Dimension
+    Aligned Dimension
+    Angular Dimension
+    Radius Dimension
+    Diameter Dimension
+    Arc Length Dimension?
+    Ordinate Dimension
+    Baseline Dimension
+    Chain Dimension
+    Arrange Dimensions
+    Edit Dimension?
+  TEXT
+    Text
+    Leader
+    Note?
+    Hole and Thread Note?
+  SYMBOLS
+    Surface Texture
+    Feature Control Frame
+    Datum Identifier
+    Welding Symbol?
+  TABLES
+    Table
+    Balloon
+    Renumber
+    Align Balloons
+    Hole Table?
+  EXPORT
+    Export PDF
+    Export DWG
+    Export DXF
+    Export CSV
+  SHEET BAR [in=sheets]
+    New Sheet
+    Rename Sheet
+    Delete Sheet
+
+MARKING MENU [in=marking]
+  Ring
+    Repeat
+    Delete
+    Press Pull
+    Undo
+    Redo
+    Move/Copy
+    Hole
+    Create Sketch
+    Extrude?
+  Overflow list
+    Measure?
+    Fillet?
+    Show/Hide?
+    Show All?
+    Look At?
+    Fit?
+    Find in Browser?
+    Find in Window?
+    Select Other?
+  While a command runs
+    OK
+    Cancel
+
+SKETCH MARKING MENU [in=sketch-marking]
+  Ring
+    Repeat
+    Delete
+    Line
+    Undo
+    Redo
+    Finish Sketch
+    Center Diameter Circle
+    Sketch Dimension
+    2-Point Rectangle
+  Overflow list
+    Trim
+    Offset
+    Project
+    Move/Copy
+    Normal/Construction
+    Fix/Unfix?
+    Look At
+    Fit?
+  While a command runs
+    OK
+    Cancel
+
+BROWSER [in=browser]
+  Design (top node) [in=browser:document]
+    Activate Component
+    New Component
+    Paste
+    Paste New
+    Show All Components?
+    Show All Bodies?
+    Show All Sketches?
+    Hide All Sketches?
+    Physical Material?
+    Appearance?
+    Properties?
+    Do Not Capture Design History
+    Rename?
+  Units [in=browser:units]
+    Change Active Units
+  Named Views [in=browser:views]
+    New Named View
+  Named view [in=browser:saved_view,browser:view]
+    Go to View?
+    Rename?
+    Delete?
+  Origin [in=browser:origin]
+    Show/Hide
+  Folder (Bodies, Sketches, Construction...) [in=browser:folder]
+    Show/Hide
+  Component [in=browser:component]
+    Activate Component
+    New Component?
+    Copy
+    Cut
+    Paste
+    Paste New?
+    Delete
+    Remove
+    Ground
+    Ground to Parent?
+    Rigid Group?
+    Create Selection Set
+    Physical Material
+    Appearance
+    Texture Map Controls
+    Properties
+    Save Copy As
+    Save As Mesh
+    Open?
+    Edit In Place
+    Break Link
+    Show/Hide
+    Selectable/Unselectable
+    Opacity Control
+    Isolate
+    Find in Window
+    Find in Timeline
+    Cycle Component Color?
+    Display Detail Control?
+    Rename?
+  Body [in=browser:body]
+    Move/Copy
+    Create Components from Bodies
+    Create Selection Set
+    Physical Material
+    Appearance
+    Texture Map Controls
+    Properties
+    Save As Mesh
+    Copy
+    Cut
+    Delete
+    Remove
+    Show/Hide
+    Selectable/Unselectable
+    Opacity Control
+    Isolate
+    Find in Window
+    Find in Timeline
+    Display Detail Control?
+    Rename?
+  Mesh body [in=browser:mesh_body]
+    Convert Mesh?
+    Repair?
+    Show/Hide
+    Find in Window?
+    Delete
+  Sketch [in=browser:sketch]
+    Edit Sketch
+    Redefine Sketch Plane
+    Save As DXF
+    Show Profile?
+    Show Dimensions?
+    Show/Hide
+    Look At
+    Find in Window
+    Find in Timeline
+    Delete
+    Rename?
+  Construction plane, axis or point [in=browser:construction]
+    Edit Feature
+    Show/Hide
+    Find in Window
+    Find in Timeline
+    Delete
+    Rename?
+  Joint [in=browser:joint]
+    Edit Joint
+    Edit Joint Limits
+    Drive Joint
+    Animate Joint
+    Lock?
+    Suppress
+    Show/Hide
+    Find in Timeline
+    Delete
+  Joint origin [in=browser:joint_origin]
+    Edit Joint Origin
+    Show/Hide
+    Find in Timeline
+    Delete
+  Rigid group [in=browser:rigid_group]
+    Edit Rigid Group
+    Suppress
+    Find in Timeline
+    Delete
+  Canvas [in=browser:canvas]
+    Edit Canvas
+    Calibrate
+    Show/Hide
+    Find in Window
+    Delete
+  Decal [in=browser:decal]
+    Edit Decal?
+    Show/Hide
+    Find in Timeline?
+    Delete
+  Analysis [in=browser:analysis]
+    Edit?
+    Show/Hide
+    Delete
+
+TIMELINE
+  Feature [in=timeline:step]
+    Edit Feature
+    Edit Sketch
+    Edit Profile Sketch
+    Suppress Features
+    Roll History Marker Here
+    Rename
+    Delete
+    Find in Browser
+    Find in Window
+    Group Features
+  Group [in=timeline:group]
+    Expand Group
+    Suppress Features?
+    Roll History Marker Here?
+    Rename
+    Ungroup
+    Delete
+  Settings [in=timeline:settings]
+    Do Not Capture Design History
+    Display Component Color Swatches?
+    Expand All Groups?
+    Collapse All Groups?
+  Playback [in=timeline:playback]
+    Move to Beginning?
+    Step Back?
+    Play?
+    Step Forward?
+    Move to End?
+
+VIEWCUBE [in=viewcube]
+  Go Home
+  Orthographic
+  Perspective
+  Perspective with Ortho Faces
+  Set Current View as Home
+    Fit to View
+    Fixed Distance
+  Reset Home
+  Set Current View as Front?
+  Reset Front?
+
+NAVIGATION BAR [in=nav]
+  Orbit
+    Constrained Orbit
+    Free Orbit
+  Look At
+  Pan
+  Zoom
+  Zoom Window
+  Fit
+  Display Settings
+    Visual Style
+      Shaded
+      Shaded with Hidden Edges
+      Shaded with Visible Edges Only
+      Wireframe
+      Wireframe with Hidden Edges
+      Wireframe with Visible Edges Only
+    Environment
+      Photo Booth
+      Dark Sky
+      Grey Room?
+      Infinity Pool?
+      Tranquility Blue?
+      Warm Light?
+      Soft Light?
+      Sharp Highlights?
+    Effects
+      Ground Shadow
+      Object Shadow?
+      Ground Reflections?
+      Ambient Occlusion
+      Anti-Aliasing?
+    Object Visibility
+      Origins
+      Analysis
+      Joints
+      Joint Origins
+      Sketches
+      Construction Planes
+      Construction Axes
+      Construction Points
+      Canvases
+      Mesh Bodies?
+    Camera
+      Orthographic
+      Perspective
+      Perspective with Ortho Faces
+    Ground Plane Offset
+    Enter Full Screen?
+  Grid and Snaps
+    Layout Grid
+    Layout Grid Lock
+    Snap to Grid
+    Grid Settings
+    Incremental Move
+    Set Increments
+  Viewports
+    Single View
+    Multiple Views

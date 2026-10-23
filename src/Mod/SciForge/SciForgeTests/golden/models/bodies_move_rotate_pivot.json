@@ -1,0 +1,64 @@
+{
+  "id": "bodies_move_rotate_pivot",
+  "title": "Move/Copy Rotate 90 degrees about Z through a pivot at the body's corner (not the origin)",
+  "tags": [
+    "bodies",
+    "move",
+    "rotate",
+    "pivot"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            50,
+            0,
+            60,
+            10
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "rotate",
+      "axis": "Z",
+      "angle": 90,
+      "pivot": [
+        50,
+        0,
+        0
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 1000,
+    "area": 600,
+    "faces": 6,
+    "bbox": [
+      40,
+      0,
+      0,
+      50,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "about the vertical line through (50, 0): (x, y) -> (50 - y, x - 50): x 50..60 -> y 0..10, y 0..10 -> x 40..50. Before the fix the pivot was ignored and the box turned about the origin (bbox x -10..0, y 50..60)."
+  }
+}

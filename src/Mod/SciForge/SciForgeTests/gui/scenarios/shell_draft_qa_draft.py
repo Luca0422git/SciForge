@@ -10,9 +10,10 @@ Path 2, OK with the plane but no face (the dialog says what is missing and stays
         face; Esc in the middle: nothing made, the part as it was.
 Path 3, Q (Press Pull) while a second Draft is open with a good preview: the draft is
         kept, Press Pull opens; Esc.
-Path 4, the first draft edited from the timeline: the curved handle dragged far (past
-        what can be drafted: explained, OK waits), then the other way (a negative angle:
-        the face leans out); 3 typed; OK.
+Path 4, the first draft edited from the timeline: the curved handle dragged far (it stops
+        at the steepest angle that can be drafted and the dialog says so: Luca's decision
+        of 2026-10-21, it was refused), then the other way (a negative angle: the face
+        leans out); 3 typed; OK.
 Path 5, a third Draft on the front face: the pull arrow in the 3D view clicked flips the
         pull direction (Fusion), like the flip button next to Pull Direction; clicked
         again, back; Cancel.
@@ -29,6 +30,7 @@ Volumes by hand (h = 10, a, b in degrees):
                                       cavity from z = t to h with each side moved in by
                                       t / cos a.
 """
+
 import math
 import os
 import tempfile
@@ -75,6 +77,18 @@ def moulded(a, t):
     hh = 10 - t
     inner = hh / 6.0 * (area(t, t / c) + 4 * area(t + hh / 2, t / c) + area(10, t / c))
     return outer - inner
+
+
+def moulded_cavity(a, t):
+    """What the shell of moulded(a, t) takes away."""
+    k = tan(a)
+    c = math.cos(math.radians(a))
+
+    def area(z, d):
+        return (40 - 2 * z * k - 2 * d) * (30 - 2 * z * k - 2 * d)
+
+    hh = 10 - t
+    return hh / 6.0 * (area(t, t / c) + 4 * area(t + hh / 2, t / c) + area(10, t / c))
 
 
 def doc():
@@ -284,18 +298,18 @@ def p4_open():
 def p4_far():
     p = sd.draft_panel()
     a = p.angle.value() if p else 0
-    h.check("P4 dragged far: the angle stops at 89.9", abs(a - 89.9) < 1e-6 or a > 60, a)
-    h.check("P4 explained in the dialog", msg(p).startswith("⚠"), msg(p))
+    note = p.limit_label.text() if p is not None and p.limit_label.isVisible() else ""
+    h.check("P4 dragged far: the angle stops at the steepest that works", 30.0 < a < 89.9, a)
+    h.check("P4 no error", msg(p) == "", msg(p))
+    h.check("P4 the note says so", note == "Largest that fits here: %.1f°" % a, note)
     h.check("P4 nothing in the Report view", not sd.report_errors(), sd.report_errors())
-    h.task_button("OK")
 
 
-p4_far.wait_ms = 1200
+p4_far.wait_ms = 4000
 
 
 def p4_ok_waits():
     p = sd.draft_panel()
-    h.check("P4 OK waits", p is not None and dialog_open())
     if p is None or p.handle is None:
         return
     h.fit()
@@ -308,7 +322,7 @@ def p4_negative():
     a = p.angle.value() if p else 0
     h.check("P4 dragged the other way: a negative angle", -30 < a < 0, a)
     v = h.solid_volume()
-    expect = front_right(a, 2)
+    expect = front(a)  # Draft 2 (the right face) waits while Draft 1 is edited (Fusion)
     h.check("P4 the face leans out (wider at the top)", sd.close(v, expect), (v, expect, a))
     h.check("P4 no message", msg(p) == "", msg(p))
     h.shot("p4-negative")
@@ -522,8 +536,10 @@ def p7_edit():
 
 
 def p7_edit_ok():
+    # the shell after the draft waits while the draft is edited (Fusion): the solid drafted 5
     v = h.solid_volume()
-    h.check("P7 the preview shells the new draft", sd.close(v, moulded(5, 1)), (v, moulded(5, 1)))
+    expect = moulded(5, 1) + moulded_cavity(5, 1)
+    h.check("P7 the preview drafts 5 degrees", sd.close(v, expect), (v, expect))
     h.task_button("OK")
 
 

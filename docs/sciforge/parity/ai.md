@@ -126,3 +126,48 @@ Tests: scenario `ai_panel.py` (UTILITIES > AI opens and closes it, the X, the sw
 Home's, two chat keys listed with badges on the panel and Home, double-click picks Claude,
 Home closes the browser and opens Preferences); `ai_bridge.py` Path 8 turns AI control off
 with the switch.
+
+## Documentation for AI models (2026-10-21, Luca: "give all the tools possible, with absolutely all the documentation available")
+
+An AI that can read more about SciForge works better in it. Fusion has help pages for people;
+SciForge also has documentation written for AI models, searchable by them, and checked
+against the code: **beyond Fusion**.
+
+Implemented in `src/Mod/SciForge/`:
+- `docs/ai/`: the handbook (what SciForge is, Fusion's ideas mapped to it, coordinates and
+  units, the timeline and history marker, bodies, components and joints, ids, how tool calls
+  become undo steps, a good way to work), sketches, selectors (with a cookbook), checking,
+  troubleshooting (the real failure messages and how to recover), 12 recipes (bracket,
+  enclosure with lid, shaft with keyway, gear pair, flange with bolt pattern, threaded
+  fastener, snap-fit, sheet-like part, revolved knob, lofted handle, surface patch,
+  parametric plate), and generated pages: `tools.md`, one `reference/<tool>.md` per tool,
+  `examples/golden-models.md` and a copy of the person's documents under `user/`.
+- `sciforge/ai/docs_core.py`: the library (BM25 search over every section, sections by
+  anchor, pages, examples, the system prompt's index, the single-file export);
+  `sciforge/ai/tool_docs.py` writes the generated pages; `tools/sciforge/make_ai_docs.py`
+  runs it.
+- Tools `docs_search`, `docs_read`, `examples_search` (the MCP server answers them itself, so
+  they work while SciForge is closed); MCP resources `sciforge://docs/<path>[#anchor]`,
+  `sciforge://examples/golden/<id>`, `sciforge://handbook` (all in one file; `/compact`,
+  `/full`); the chat panel's system prompt has a short index of the documents.
+- One file for AI apps that load files: **+ Add an AI > Save AI handbook...** (writes the
+  compact file to load, about 45 thousand tokens, and next to it the one with every tool's
+  page, about 170 thousand; the dialog gives both sizes in tokens),
+  `sciforge-cli docs export FILE [--compact | --full]`.
+
+| What | SciForge |
+|---|---|
+| Accurate | Every tool call in every document is run in real FreeCAD by the tests (`SciForgeTests/headless/docs_runner.py`, 320 calls in 17 documents), each with what its answer must contain; every tool's reference example answer is recorded in FreeCAD and checked again on every run; a unit test fails when a generated page is out of date or a `sciforge://` link (anchor included) is broken. |
+| Searchable | `docs_search` "cut does nothing" finds the troubleshooting section; the unit tests ask 25 realistic questions and check the right page is in the first three answers. |
+| Complete | Every tool has a page with every argument (type, unit, default, limits), the answer, the errors and a complete example with its real answer; the person's own documentation is included. |
+
+Fixed on the way (found by writing the documentation): Move/Copy rotate ignored `pivot`
+(golden `bodies_move_rotate_pivot`); bounding boxes of free-form bodies were too big (lofts,
+patches: FreeCAD's quick box includes the control points); a surface step that failed did
+not say why; a surface body reported a volume; deleting a parameter used by another
+parameter's formula was allowed (the formula broke); a step that changed nothing (a cut from
+the top face without flip, a shell thicker than the part) answered "Done" with no warning.
+
+Tests: `test_ai_docs_library.py`, `test_ai_docs_contract.py` (unit); the docs runner
+(`run_tests.sh --only headless / base`); scenario `ai_docs_gui` (the reference examples that
+need the window, the docs tools through the bridge, Save AI handbook... with a real click).

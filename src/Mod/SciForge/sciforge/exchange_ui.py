@@ -115,7 +115,21 @@ def open_file(path):
         "Opened %s"
         % core.describe(len(comps), len(made.instances), len(made.bodies), os.path.basename(path))
     )
+    report_cad_import(made, path, "Opened")
     return doc
+
+
+def report_cad_import(made, path, verb):
+    """Say what the STEP / IGES file had that did not come in (export_report). Never
+    raises."""
+    try:
+        from . import export_report, export_report_ui
+
+        export_report_ui.report_import(
+            os.path.basename(path), export_report.cad_import_items(made.notes), verb
+        )
+    except Exception as exc:
+        warn("import report: %s" % exc)
 
 
 def _doc_name(label):
@@ -190,6 +204,7 @@ def insert_cad_file(path):
             len(made.components) - 1, len(made.instances), len(made.bodies), os.path.basename(path)
         )
     )
+    report_cad_import(made, path, "Inserted")
     if made.top is not None:
         place_after(doc.Name, made.top.Name)
     return made
@@ -233,6 +248,14 @@ def save_as_dxf(target=None, path=None):
     written = exchange.export_dxf(target, path)
     export_ui._remember_folder(written)
     commands.tell("Saved %s as %s" % (target[0].Label, os.path.basename(written)))
+    try:  # what the DXF leaves out of the sketch (dimensions, constraints ...), if anything
+        from . import export_report_ui
+
+        export_report_ui.report_losses(
+            target[0].Document, target, "DXF", os.path.basename(written), verb="Saved"
+        )
+    except Exception as exc:
+        warn("Save As DXF report: %s" % exc)
     return written
 
 

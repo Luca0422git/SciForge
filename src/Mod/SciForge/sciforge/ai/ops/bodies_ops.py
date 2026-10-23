@@ -173,6 +173,11 @@ def _move_options(self, step, found):
         point, direction = move.axis_of(line, "")
         options["axis_point"], options["axis_dir"] = list(point), list(direction)
         options["axis_label"] = step["axis"]
+        if options.get("move_type") == "rotate" and "pivot" in step:
+            # the origin axis's direction through the pivot (the catalogue's "rotate:
+            # angle about axis X / Y / Z through pivot"; before, the pivot was ignored and
+            # the bodies turned about the origin axis itself)
+            options["axis_point"] = list(step["pivot"])
     return options
 
 

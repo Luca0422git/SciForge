@@ -5,8 +5,9 @@ GUI code: the Draft dialog (draft_ui.py) and the golden-model builder both use t
 What the user picks:
   plane  the fixed plane: an origin plane, a construction plane of the body, or a flat
          face of the part. The drafted faces turn about the line where they meet it.
-  faces  the faces to tilt (flat side faces, or round ones whose axis is the pull
-         direction). Tangent Chain picks the faces that continue a picked one smoothly.
+  faces  the faces to tilt: faces that run along the pull direction (flat, round or
+         free-form side walls; flat and conical faces may lean already). Tangent Chain picks
+         the faces that continue a picked one smoothly.
 Options: {"angle": degrees, "flip": bool, "tangent": bool, "draft_type": "fixed" or
 "parting", "sides": "one", "two" or "symmetric", "angle2": degrees, "parting": [refs]}.
 
@@ -22,6 +23,10 @@ out of a picked face (its outward side) or along an origin/construction plane's 
 and "flip" turns it round. A positive angle makes the part narrower toward the pull
 direction, as Fusion does. FreeCAD's Draft always pulls along the plane's own normal
 and has a Reversed switch; apply() works out which to use.
+
+OpenCASCADE's draft (FreeCAD's Draft) only tilts planes and round faces about the pull
+direction; every other wall (the side of an extruded spline or ellipse...) is drafted by
+SciForge's draft_walls.py, in _scratch(), and its step is always a DraftFeature.
 
 FreeCAD's Draft is silent about some failures (a face it cannot tilt is just skipped,
 with a message in the Report view only), so check() refuses such faces first and
@@ -126,6 +131,8 @@ def why_not(shape, name, pull, plane_ref=None):
         face = shape.getElement(name)
     except Exception:
         return "%s no longer exists." % name
+    from . import draft_walls
+
     kind = face.Surface.__class__.__name__
     if kind == "Plane":
         u, v = face.Surface.parameter(face.CenterOfMass)
@@ -133,11 +140,37 @@ def why_not(shape, name, pull, plane_ref=None):
         if abs(normal.dot(pull)) >= PARALLEL:
             return "A face parallel to the fixed plane cannot be drafted."
         return ""
-    if kind in ("Cylinder", "Cone"):
-        if abs(_unit(face.Surface.Axis).dot(pull)) >= PARALLEL:
-            return ""
-        return "A round face can only be drafted when its axis is the pull direction."
-    return "This kind of face (%s) cannot be drafted." % kind.lower()
+    if draft_walls.native_ok(face, pull) or draft_walls.is_wall(face, pull):
+        return ""  # FreeCAD's Draft, or a side wall along the pull (draft_walls)
+    return (
+        "Only faces that run along the pull direction (side walls, flat, round or free-form) "
+        "can be drafted; this %s face does not." % _KIND_WORDS.get(kind, "curved")
+    )
+
+
+_KIND_WORDS = {
+    "Cylinder": "round",
+    "Cone": "conical",
+    "Sphere": "spherical",
+    "Toroid": "torus",
+    "BSplineSurface": "free-form",
+    "BezierSurface": "free-form",
+    "SurfaceOfExtrusion": "free-form",
+    "SurfaceOfRevolution": "revolved",
+}
+
+
+def needs_engine(shape, plane_ref, names, options):
+    """True when some face needs SciForge's draft_walls (FreeCAD's Draft cannot tilt it)."""
+    from . import draft_walls
+
+    if shape is None or plane_ref is None or not names:
+        return False
+    try:
+        pull = pull_direction(plane_ref, bool(options.get("flip")))
+        return bool(draft_walls.engine_names(shape, list(names), pull))
+    except Exception:
+        return False
 
 
 def tangent_faces(shape, names):
@@ -177,22 +210,48 @@ def check(shape, plane_ref, names, options):
 
 def undrafted(base_shape, result_shape, names):
     """Faces of `names` the result left as they were (FreeCAD skips a face it cannot tilt
-    and only says so in the Report view)."""
+    and only says so in the Report view). Only the result's faces with the same box as a
+    picked face are measured (comparing every face's area and centre took 0.5 s a preview
+    on a part of 180 faces; the boxes are kept per shape: shape_checks.face_boxes)."""
+    from . import shape_checks
+
+    boxes = shape_checks.face_boxes(result_shape)
     left = []
     for name in names:
         try:
             face = base_shape.getElement(name)
         except Exception:
             continue
-        for other in result_shape.Faces:
+        box = face.BoundBox
+        kind = face.Surface.__class__
+        area = center = None
+        for other, other_box in boxes:
+            if not _same_box(box, other_box):
+                continue
+            if other.Surface.__class__ is not kind:
+                continue
+            if area is None:
+                area, center = face.Area, face.CenterOfMass
             if (
-                abs(other.Area - face.Area) < 1e-7 * max(1.0, face.Area)
-                and (other.CenterOfMass - face.CenterOfMass).Length < 1e-6
-                and other.Surface.__class__ is face.Surface.__class__
+                abs(other.Area - area) < 1e-7 * max(1.0, area)
+                and (other.CenterOfMass - center).Length < 1e-6
             ):
                 left.append(name)
                 break
     return left
+
+
+def _same_box(a, b, tol=1e-4):
+    """Two bounding boxes alike (an unchanged face keeps its box; the tolerance allows for a
+    box grown by a changed edge tolerance)."""
+    return (
+        abs(a.XMin - b.XMin) < tol
+        and abs(a.XMax - b.XMax) < tol
+        and abs(a.YMin - b.YMin) < tol
+        and abs(a.YMax - b.YMax) < tol
+        and abs(a.ZMin - b.ZMin) < tol
+        and abs(a.ZMax - b.ZMax) < tol
+    )
 
 
 # -- the angle handle --------------------------------------------------------------------
@@ -274,10 +333,13 @@ def solid_base(body):
     return shelling.solid_base(body)
 
 
-def needs_own_feature(options):
-    """True when FreeCAD's Draft cannot make it: a Parting Line draft, or Two Side /
-    Symmetric (both split the faces at a line first)."""
-    return options.get("draft_type", "fixed") == "parting" or options.get("sides", "one") != "one"
+def needs_own_feature(options, shape=None, plane_ref=None, names=None):
+    """True when FreeCAD's Draft cannot make it: a Parting Line draft, Two Side / Symmetric
+    (both split the faces at a line first), or a face only draft_walls can tilt (a free-form
+    side wall; give the base shape, plane and faces to check that)."""
+    if options.get("draft_type", "fixed") == "parting" or options.get("sides", "one") != "one":
+        return True
+    return needs_engine(shape, plane_ref, names, options)
 
 
 def is_own(obj):
@@ -294,7 +356,7 @@ def apply(feature, base, plane_ref, names, options, formula="", formula2=""):
     if is_own(feature):
         _apply_own(feature, base, plane_ref, names, options, formula, formula2)
         return
-    if needs_own_feature(options):
+    if needs_own_feature(options, base.Shape if base else None, plane_ref, names):
         raise DraftError("FreeCAD's draft cannot do this; use update() to switch.")
     old = feature.Base
     if not (old and old[0] is base and [s for s in old[1] if s] == names):
@@ -335,7 +397,7 @@ def make(body, base, plane_ref, names, options, name="Draft", formula="", formul
     rest. Not recomputed."""
     if base is None or base.Shape.isNull() or not base.Shape.Solids:
         raise DraftError("Make a solid first (Create Sketch, then Extrude).")
-    if needs_own_feature(options):
+    if needs_own_feature(options, base.Shape, plane_ref, names):
         if before is not None:
             feature = body.Document.addObject(OWN_TYPE, name)
             body.insertObject(feature, before, False)
@@ -358,7 +420,8 @@ def update(feature, base, plane_ref, names, options, formula="", formula2=""):
     """Change a draft. Returns the feature: a new object when the change needs the other
     kind (FreeCAD's Draft <-> SciForge's DraftFeature); it takes the old one's place and
     label, later steps and the draft's followers in other bodies move over to it."""
-    if needs_own_feature(options) == is_own(feature):
+    own = needs_own_feature(options, base.Shape if base else None, plane_ref, names)
+    if own == is_own(feature):
         apply(feature, base, plane_ref, names, options, formula, formula2)
         return feature
     from . import modify_bodies, shelling
@@ -428,6 +491,34 @@ def remove(feature):
 
     modify_bodies.remove_all(feature)
     shelling.remove(feature)
+
+
+# Refusals that no other angle cures: the picks themselves (a face that cannot be drafted
+# with this pull direction, nothing on the pull side of the parting line...). The dialog
+# shows no live picture for such picks (review finding DRAFT-1-F4).
+_ANGLE_FREE = (
+    "Only faces that run along the pull direction",
+    "cannot be drafted",
+    "no longer exists",
+    "Pick the",
+    "Pick one plane",
+    "The fixed plane",
+    "None of the faces lies on the pull side",
+    "cannot be split at the parting line",
+    "Splitting the faces at the parting line",
+    "The parting line is not flat",
+    "The parting tool has no curves",
+    "Move Parting Line is not available",
+    "The draft has no pull direction",
+    "Make a solid first",
+    "The draft is not in a body",
+)
+
+
+def angle_free(reason):
+    """True when the refusal `reason` does not depend on the draft angle."""
+    text = reason or ""
+    return any(words in text for words in _ANGLE_FREE)
 
 
 def friendly(text):
@@ -723,10 +814,80 @@ def _hinge(piece, spec, pull, point):
 
 def draft_shape(shape, names, spec):
     """`shape` (body coordinates) with faces `names` drafted as `spec` says (build_spec).
-    Raises DraftError with the reason."""
+    Raises DraftError with the reason.
+
+    The last few results (and refusals) are kept per shape, faces and spec: the limit search
+    builds an angle (value_limits) and the preview then builds the same one in the document
+    (a DraftFeature's execute) - once is enough. The result is shared: callers do not change
+    it (DraftFeature refines a copy)."""
+    _check_spec(spec)
+    key = _result_key(shape, names, spec)
+    if key is not None:
+        for k, kept, result in _RESULTS:
+            if k == key and kept.isSame(shape):
+                if isinstance(result, DraftError):
+                    raise DraftError(str(result))
+                return result
+    try:
+        result = _draft_shape(shape, names, spec)
+    except DraftError as exc:
+        _remember(key, shape, DraftError(str(exc)))
+        raise
+    _remember(key, shape, result)
+    return result
+
+
+_RESULTS = []  # [(key, base shape, result or DraftError)], newest last
+_KEEP_RESULTS = 8
+
+
+def _remember(key, shape, result):
+    if key is None:
+        return
+    _RESULTS.append((key, shape, result))
+    del _RESULTS[:-_KEEP_RESULTS]
+
+
+def _result_key(shape, names, spec):
+    """What a draft_shape() result depends on, as a hashable key (None: do not keep it)."""
+    try:
+
+        def vec(v):
+            return (round(v.x, 9), round(v.y, 9), round(v.z, 9))
+
+        plane = spec.get("plane")
+        curves = spec.get("curves")
+        curve_key = None
+        if curves is not None:
+            curve_key = tuple(
+                (
+                    e.Curve.__class__.__name__,
+                    round(e.Length, 9),
+                    vec(e.valueAt(e.FirstParameter)),
+                    vec(e.valueAt(e.LastParameter)),
+                    vec(e.valueAt(0.5 * (e.FirstParameter + e.LastParameter))),
+                )
+                for e in curves.Edges
+            )
+        return (
+            shape_key(shape),
+            tuple(names),
+            spec.get("type"),
+            spec.get("sides"),
+            round(float(spec.get("angle", 0.0)), 9),
+            round(float(spec.get("angle2", 0.0)), 9),
+            vec(spec["pull"]),
+            None if plane is None else (vec(plane[0]), vec(plane[1])),
+            curve_key,
+            tuple(vec(v) for v in spec.get("sweeps") or []),
+        )
+    except Exception:
+        return None
+
+
+def _draft_shape(shape, names, spec):
     import Part
 
-    _check_spec(spec)
     faces = []
     for name in names:
         try:
@@ -789,38 +950,99 @@ def _plane_key(hinge):
 
 
 def _faces_at(shape, points):
-    import Part
-
     names = []
     for point in points:
+        found = _face_at(shape, point)
+        if found not in names:
+            names.append(found)
+    return names
+
+
+def _face_at(shape, point):
+    """The name of the face of `shape` that `point` lies on. A live preview asks this for
+    every picked face on every rebuild: the faces whose box holds the point are tried by
+    projecting it onto their surface (fast), the slow distance search only if that fails."""
+    import Part
+
+    key = (shape_key(shape), round(point.x, 9), round(point.y, 9), round(point.z, 9))
+    if key in _FACE_AT:
+        return _FACE_AT[key][0]
+    found = None
+    faces = shape.Faces
+    for i, face in enumerate(faces, start=1):
+        box = face.BoundBox
+        box.enlarge(1e-5)
+        if not box.isInside(point):
+            continue
+        try:
+            u, v = face.Surface.parameter(point)
+            if (face.Surface.value(u, v) - point).Length < 1e-6 and face.isPartOfDomain(u, v):
+                found = "Face%d" % i
+                break
+        except Exception:
+            continue
+    if found is None:
         probe = Part.Vertex(point)
-        found = None
-        for i, face in enumerate(shape.Faces, start=1):
+        for i, face in enumerate(faces, start=1):
             try:
                 if face.distToShape(probe)[0] < 1e-6:
                     found = "Face%d" % i
                     break
             except Exception:
                 continue
-        if found is None:
-            raise DraftError("A face to draft was lost while drafting the faces next to it.")
-        if found not in names:
-            names.append(found)
-    return names
+    if found is None:
+        raise DraftError("A face to draft was lost while drafting the faces next to it.")
+    if len(_FACE_AT) > 256:
+        _FACE_AT.clear()
+    _FACE_AT[key] = (found, shape)  # the shape is kept: its key cannot be reused meanwhile
+    return found
+
+
+_FACE_AT = {}
+
+
+def shape_key(shape):
+    """Tells shapes apart between rebuilds of a live preview: the same shape (the step before
+    a draft, unchanged while only the angle is dragged) gives the same key. Whoever caches
+    by it keeps a face of the shape, so the shape (and its key) cannot be reused meanwhile."""
+    return (shape.hashCode(), shape.ShapeType)  # (counting its faces costs ~0.5 ms a call)
 
 
 def _scratch(shape, points, hinge, pull, angle):
-    """FreeCAD's own Draft run on `shape` in a hidden throw-away document: the faces at
-    `points` tilted by `angle` toward `pull` about the hinge plane (point, normal)."""
+    """The faces at `points` of `shape` tilted by `angle` toward `pull` about the hinge plane
+    (point, normal): FreeCAD's own Draft for the faces OpenCASCADE can tilt (planes, round
+    faces about the pull direction), SciForge's draft_walls for the other walls (free-form
+    sides, and the walls joined to them, so a tangent chain stays tangent)."""
+    from . import draft_walls
+
+    at = [_face_at(shape, p) for p in points]
+    names = []
+    for name in at:
+        if name not in names:
+            names.append(name)
+    own = draft_walls.engine_names(shape, names, _unit(pull))
+    if not own:
+        return _occ_draft(shape, names, hinge, pull, angle)
+    own_points = [p for p, name in zip(points, at) if name in own]
+    native_points = [p for p, name in zip(points, at) if name not in own]
+    if native_points:
+        shape = _occ_draft(shape, _faces_at(shape, native_points), hinge, pull, angle)
+    return draft_walls.draft(shape, _faces_at(shape, own_points), hinge, pull, angle)
+
+
+def _occ_draft(shape, names, hinge, pull, angle):
+    """FreeCAD's own Draft run on `shape` in a hidden throw-away document."""
     import FreeCAD as App
 
-    names = _faces_at(shape, points)
     doc = _scratch_document()
     try:
         holder = doc.addObject("Part::Feature", "Solid")
-        holder.Shape = shape
+        _unseen(holder)
+        holder.Shape = _unplaced(shape)
         body = doc.addObject("PartDesign::Body", "Body")
+        _unseen(body)
         base = body.newObject("PartDesign::FeatureBase", "Base")
+        _unseen(base)
         base.BaseFeature = holder
         origin, normal = hinge
         plane = body.newObject("PartDesign::Plane", "Hinge")
@@ -830,6 +1052,7 @@ def _scratch(shape, points, hinge, pull, angle):
         line.MapMode = "Deactivated"
         line.Placement = App.Placement(origin, App.Rotation(App.Vector(0, 0, 1), _unit(pull)))
         draft = body.newObject("PartDesign::Draft", "Draft")
+        _unseen(draft)
         draft.Base = (base, names)
         draft.NeutralPlane = (plane, [""])
         draft.PullDirection = (line, [""])
@@ -839,18 +1062,76 @@ def _scratch(shape, points, hinge, pull, angle):
         for obj in (base, plane, line, draft):
             obj.recompute()
         state = list(draft.State)
-        out = draft.Shape.copy()
+        out = draft.Shape  # a shape of its own: it outlives the scratch objects (no copy)
         status = draft.getStatusString() if ("Invalid" in state or "Error" in state) else ""
     finally:
         _release_scratch(doc)
     if status or out.isNull() or not out.Solids or not out.isValid():
         raise DraftError(friendly(status))
-    if abs(out.Volume - shape.Volume) < 1e-9:
+    if abs(out.Volume - _volume(shape)) < 1e-9:
         raise DraftError(
             "The faces could not be tilted with this plane and angle. Try another angle or "
             "pick other faces."
         )
     return out
+
+
+def _unplaced(shape):
+    """`shape` with its Placement built into its geometry (same faces, same order). A body's
+    solid made from a YZ or XZ sketch carries a turned Placement; given to the scratch
+    Part::Feature, the Placement went to the feature and the PartDesign Draft worked on the
+    shape without it: the hinge and pull (body coordinates) met the faces in the wrong frame,
+    so the trial drafts of the limit search tilted the wrong way and the dialog held angles at
+    a false limit (review finding DRAFT-1-F6). Kept for the last few shapes."""
+    try:
+        if shape.Placement.isIdentity():
+            return shape
+    except Exception:
+        return shape
+    key = shape_key(shape)
+    for k, kept, baked in _UNPLACED:
+        if k == key and kept.isSame(shape):
+            return baked
+    import FreeCAD as App
+
+    matrix = shape.Placement.toMatrix()
+    baked = shape.copy()
+    baked.Placement = App.Placement()
+    baked = baked.transformed(matrix, True)
+    _UNPLACED.append((key, shape, baked))
+    del _UNPLACED[:-4]
+    return baked
+
+
+_UNPLACED = []  # [(shape key, shape, the same shape without a Placement)], newest last
+
+
+def _unseen(obj):
+    """A scratch object is never drawn: in the GUI its view provider would tessellate every
+    shape it gets (the part, again and again during a limit search)."""
+    try:
+        view = getattr(obj, "ViewObject", None)
+        if view is not None:
+            view.Visibility = False
+        obj.Visibility = False
+    except Exception:
+        pass
+
+
+_VOLUMES = []  # [(shape key, shape, volume)], newest last
+
+
+def _volume(shape):
+    """shape.Volume, kept for the last few shapes (the part before the draft: every trial of
+    a limit search compares with it)."""
+    key = shape_key(shape)
+    for k, kept, volume in _VOLUMES:
+        if k == key and kept.isSame(shape):
+            return volume
+    volume = shape.Volume
+    _VOLUMES.append((key, shape, volume))
+    del _VOLUMES[:-4]
+    return volume
 
 
 # The throw-away document is kept and reused. In the GUI, closing a document ends the undo
@@ -1010,7 +1291,8 @@ class DraftFeature:
             if plane_ref is None:
                 raise DraftError("Pick the pull direction (a plane or a flat face).")
             spec = build_spec(plane_ref, options, obj)
-            result = draft_shape(base.Shape.copy(), names, spec)
+            # not a copy: the same shape between rebuilds lets draft_walls reuse its work
+            result = draft_shape(base.Shape, names, spec)
             if obj.Refine:
                 try:
                     result = result.removeSplitter()

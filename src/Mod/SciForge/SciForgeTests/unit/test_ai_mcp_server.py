@@ -220,6 +220,94 @@ class ServerProcess(unittest.TestCase):
         self.assertNotIn("wrong-key", log)
 
 
+class FlakyBridge:
+    """A bridge that reads each request and then hangs up without answering, the first
+    `drops` times (a lost reply: SciForge may or may not have done the call)."""
+
+    def __init__(self, key, drops):
+        self.key = key
+        self.drops = drops
+        self.calls = []
+        owner = self
+
+        class Handler(http.server.BaseHTTPRequestHandler):
+            def do_POST(self):
+                length = int(self.headers.get("Content-Length") or 0)
+                tool, args = bridge_core.decode_request(self.rfile.read(length))
+                owner.calls.append(tool)
+                if owner.drops > 0:
+                    owner.drops -= 1
+                    self.close_connection = True
+                    return  # no answer at all
+                body = bridge_core.encode_result(bridge_core.result("answered %s" % tool))
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args):
+                pass
+
+        self.server = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+        self.port = self.server.server_address[1]
+        threading.Thread(target=self.server.serve_forever, daemon=True).start()
+
+    def close(self):
+        self.server.shutdown()
+        self.server.server_close()
+
+
+class HonestRetries(unittest.TestCase):
+    """After a lost reply only read-only tools are asked again; a change is never repeated
+    blindly: the answer says it may or may not have been applied (CADCraft's rule)."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.bridge_file = bridge_core.bridge_path(self.tmp.name)
+
+    def client(self, drops):
+        key = bridge_core.make_key()
+        bridge = FlakyBridge(key, drops)
+        self.addCleanup(bridge.close)
+        bridge_core.write_bridge_file(self.bridge_file, bridge_core.bridge_info(bridge.port, key))
+        return sciforge_mcp.BridgeClient(self.bridge_file, timeout=10, retry_wait=0.01), bridge
+
+    def test_read_only_tools_are_asked_again(self):
+        client, bridge = self.client(drops=1)
+        answer = client.call_tool("get_design", {})
+        self.assertFalse(answer["is_error"], answer)
+        self.assertEqual(answer["text"], "answered get_design")
+        self.assertEqual(bridge.calls, ["get_design", "get_design"])
+
+    def test_read_only_tools_give_up_after_the_retries(self):
+        client, bridge = self.client(drops=10)
+        answer = client.call_tool("get_timeline", {})
+        self.assertTrue(answer["is_error"])
+        self.assertIn("also when asked again", answer["text"])
+        self.assertEqual(len(bridge.calls), 1 + sciforge_mcp.RETRIES)
+
+    def test_changes_are_never_repeated(self):
+        for tool, args in (
+            ("extrude", {"profile": "Sketch1", "distance": 5}),
+            ("save", {}),
+            ("delete_step", {"steps": ["Fillet1"]}),
+        ):
+            client, bridge = self.client(drops=1)
+            answer = client.call_tool(tool, args)
+            self.assertTrue(answer["is_error"])
+            self.assertIn("may or may not have been applied", answer["text"])
+            self.assertIn("inspect the design first", answer["text"])
+            self.assertEqual(bridge.calls, [tool])
+
+    def test_not_running_is_not_a_lost_reply(self):
+        client = sciforge_mcp.BridgeClient(self.bridge_file, timeout=5, retry_wait=0.01)
+        bridge_core.write_bridge_file(self.bridge_file, bridge_core.bridge_info(1, "k"))
+        answer = client.call_tool("extrude", {"profile": "s", "distance": 1})
+        self.assertEqual(answer["text"], bridge_core.NOT_RUNNING)  # refused: never sent
+
+
 class BridgeFileLocation(unittest.TestCase):
     def test_explicit_and_environment(self):
         self.assertEqual(sciforge_mcp.find_bridge_file("/x/b.json", env={}), "/x/b.json")

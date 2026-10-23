@@ -16,18 +16,23 @@ constraints that were on the corner moved to it); its helper arc goes again and 
 become dimensions from that corner point: the first distance; Equal distance: the second
 distance follows the first (an expression, fx); Distance and angle: the angle between the
 first line and the chamfer; Two distances: both. The maths is sketch_chamfer_core.py.
-Never lets an exception out (warn() and carry on).
+Between two lines, a distance past what the lines can take (the pointer far out, or a
+number typed) stops at the largest that fits and the text by the pointer says so (Luca,
+2026-10-21; Fusion refuses it: value_limits.py). Never lets an exception out (warn() and
+carry on).
 """
 
 import math
 
 import FreeCAD as App
 
-from . import log, warn
+from . import log, value_limits, warn
 from . import sketch_chamfer_core as core
 from . import sketch_draw as draw
 from .compat import QtCore, QtWidgets
 from .sketch_draw import ANGLE, LENGTH, Field
+from .sketch_fillet_tool import give_back
+from .sketch_geometry import set_geometry
 
 CHOOSER_NAME = "SciForgeSketchChamferType"
 CHOOSER_STYLE = (
@@ -106,6 +111,7 @@ class SketchChamfer(draw.DrawTool):
         self.keeps = []  # per picked line: the click on the part that stays, or None
         self.chooser = None
         self.made = {}  # the last chamfer made (tests): line, corner point, constraints
+        self.limits = value_limits.Limiter()  # distances past what fits stop at the largest
 
     # -- life cycle ------------------------------------------------------------------------
     def start(self):
@@ -147,6 +153,8 @@ class SketchChamfer(draw.DrawTool):
     def _enter_step(self, step):
         if step == 0:
             self.keeps = []
+            if getattr(self, "limits", None) is not None:
+                self.limits.note = ""
         super()._enter_step(step)
 
     def prompt(self):
@@ -155,6 +163,9 @@ class SketchChamfer(draw.DrawTool):
             return "%s: click a corner, or the first line." % kind
         if self.step == 1:
             return "%s: click the second line." % kind
+        note = getattr(self, "limits", None) and self.limits.note
+        if note:
+            return "%s: %s (Enter makes it)." % (kind, note)
         if SketchChamfer.kind == "equal":
             return "%s: move to size it, or type the distance, Enter." % kind
         if SketchChamfer.kind == "two_distances":
@@ -288,16 +299,52 @@ class SketchChamfer(draw.DrawTool):
             f = self.boxes.field(name)
             if f is not None:
                 f.value = given.get(name)
-        d = self.boxes.typed("distance")
-        d = given["distance"] if d is None else d
+        typed_d = self.boxes.typed("distance")
+        d = given["distance"] if typed_d is None else typed_d
         second = None
+        typed_2 = None
         if kind == "two_distances":
-            second = self.boxes.typed("distance2")
-            second = given["distance2"] if second is None else second
+            typed_2 = self.boxes.typed("distance2")
+            second = given["distance2"] if typed_2 is None else typed_2
         elif kind == "distance_angle":
             second = self.boxes.typed("angle")
+        before = self.limits.note
+        angle_given = second if kind == "distance_angle" else None
+        d, note = self._held("distance", d, typed_d is not None, data, kind, angle_given)
+        if kind == "two_distances":
+            second, note2 = self._held("distance2", second, typed_2 is not None, data, kind)
+            note = note or note2
+        self.limits.note = note
+        if note != before:
+            self._tell()
+        for name, value in (("distance", d), ("distance2", second)):
+            f = self.boxes.field(name)
+            if f is not None and self.boxes.typed(name) is None and value is not None:
+                f.value = value
         s1, s2 = core.setbacks(kind, angle, d, second)
         return s1, s2, data
+
+    def _held(self, name, value, typed, data, kind, angle=None):
+        """Between two lines: (`value` held at the largest that fits them, the note). At that
+        largest value the chamfer runs to the far end of a line and takes it whole (exact:
+        sketch_chamfer_core.largest); a value within the box's precision of it is that
+        largest one too, so no sliver of a line is left. `angle`: Distance and angle's."""
+        if value is None or value <= 0:
+            return value, ""
+        point, u1, u2, reach1, reach2, corner_angle = data
+        try:
+            cap = core.largest(kind, name, corner_angle, reach1, reach2, angle)
+            if cap is None or cap <= 0:
+                return value, ""
+            if value > cap + 1e-9:
+                if typed:
+                    return cap, value_limits.note_typed(value, cap)
+                return cap, value_limits.note_reached(cap, "hi")
+            if cap - value < self.limits.step():  # a sliver would be left: take it whole
+                return cap, value_limits.note_reached(cap, "hi")
+        except Exception:
+            pass
+        return value, ""
 
     def arc_values(self, snap):
         """Line and arc: (setback on the line, chord on the arc, P1, P2, data)."""
@@ -396,14 +443,19 @@ class SketchChamfer(draw.DrawTool):
         s1, s2, data = self.values(self.snaps[-1])
         point, u1, u2, reach1, reach2, angle = data
         core.check_fits(s1, s2, reach1, reach2)
+        whole = (core.takes_whole(s1, reach1), core.takes_whole(s2, reach2))
         l1, l2 = self.picks
         # FreeCAD's fillet in chamfer mode: trims both lines, keeps the corner as a
-        # construction point (constraints on the old corner move to it).
+        # construction point (constraints on the old corner move to it). A line the
+        # chamfer takes whole: first cut less (a line cut to nothing breaks FreeCAD's corner
+        # constraints), then it is given back whole and the chamfer runs to its far end.
         refs = [
             App.Vector(point[0] + u[0] * r / 2, point[1] + u[1] * r / 2, 0)
             for u, r in ((u1, reach1), (u2, reach2))
         ]
-        radius = core.fillet_radius(min(s1, s2), angle)
+        first = min(s1, s2) * (0.5 if any(whole) else 1.0)
+        radius = core.fillet_radius(first, angle)
+        originals = {g: sketch.Geometry[g].copy() for g in (l1, l2)}
         before = len(sketch.Geometry)
         sketch.fillet(l1, l2, refs[0], refs[1], radius, True, True, True)
         new = list(range(before, len(sketch.Geometry)))
@@ -417,21 +469,26 @@ class SketchChamfer(draw.DrawTool):
         if construction:
             sketch.toggleConstruction(line)
         ch = sketch.Geometry[line]
-        p1 = App.Vector(point[0] + u1[0] * s1, point[1] + u1[1] * s1, 0)
+        p1 = App.Vector(point[0] + u1[0] * first, point[1] + u1[1] * first, 0)
         first_end = 1 if (ch.StartPoint - p1).Length <= (ch.EndPoint - p1).Length else 2
         on1 = ch.StartPoint if first_end == 1 else ch.EndPoint
         on2 = ch.EndPoint if first_end == 1 else ch.StartPoint
         pos1 = self._end_at(l1, on1)
         pos2 = self._end_at(l2, on2)
+        to1, to2 = pos1, pos2  # where the dimensions end: a line taken whole, its far end
+        if any(whole):
+            p1, p2 = core.points(point, u1, u2, s1, s2)
+            far = give_back(sketch, (l1, l2), whole, line, {l1: p1, l2: p2}, originals, corner)
+            to1, to2 = far.get(l1, pos1), far.get(l2, pos2)
         kind = SketchChamfer.kind
-        added = [sketch.addConstraint(Sketcher.Constraint("Distance", corner, 1, l1, pos1, s1))]
+        added = [sketch.addConstraint(Sketcher.Constraint("Distance", corner, 1, l1, to1, s1))]
         if kind == "distance_angle":
             added.append(
                 sketch.addConstraint(self._angle(l1, pos1, line, first_end, s1, s2, angle))
             )
         else:
             added.append(
-                sketch.addConstraint(Sketcher.Constraint("Distance", corner, 1, l2, pos2, s2))
+                sketch.addConstraint(Sketcher.Constraint("Distance", corner, 1, l2, to2, s2))
             )
         self._settle_values(added, kind)
         self.made = {"line": line, "corner": corner, "constraints": added, "kind": kind}
@@ -498,9 +555,8 @@ class SketchChamfer(draw.DrawTool):
             while last <= first:
                 last += 2 * math.pi
         arc_g.setParameterRange(first, last)
-        geos[line_geo] = line_g
-        geos[arc_geo] = arc_g
-        sketch.Geometry = geos
+        # (assigning sketch.Geometry turned construction points into normal ones)
+        set_geometry(sketch, {line_geo: line_g, arc_geo: arc_g})
         chamfer = sketch.addGeometry(Part.LineSegment(q1, q2), bool(construction))
         corner = sketch.addGeometry(Part.Point(corner_v), True)
         sketch.addConstraint(
@@ -573,3 +629,6 @@ class SketchChamfer(draw.DrawTool):
 
     def after_make(self, kept):
         log("Chamfer: %s corner cut" % core.LABELS[self.made.get("kind", "equal")])
+        if self.limits.note:
+            self.say(self.limits.note)  # a typed distance was held at the largest that fits
+            self.limits.note = ""

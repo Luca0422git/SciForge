@@ -10,7 +10,8 @@ Path 1, a model edge as the path, Cut by itself, Intersect: CREATE > Sweep takes
         channel. Intersect: only the ring is left. Cut again, OK.
 Path 2, Press Pull after the sweep, then the sweep edited: Q, the top face, 3: the cylinder
         is 3 taller. Double-click Sweep 1, Distance 0.5 (half the ring; SciForge's sweep
-        replaces FreeCAD's): the Press Pull still lifts the top face. OK.
+        replaces FreeCAD's; the Press Pull waits while the sweep is edited, as in Fusion):
+        after OK the Press Pull still lifts the top face.
 Path 3, save, close, reopen, edit: the half ring and the Press Pull come back; double-click
         Sweep 1: Distance 0.5 is shown; 0.75, OK.
 Path 4, an earlier step edited: double-click Extrude 1, 12 instead of 10: the top edge, the
@@ -245,14 +246,15 @@ def p2_edit():
 
 def p2_half():
     p = panel()
-    v = cylinder(13.0) - ring(0.5)
+    # edited with the timeline rolled to the sweep (Fusion): the Press Pull (3 taller) waits
+    v = cylinder(10.0) - ring(0.5)
     h.check("P2 no message", msg() == "", msg())
     h.check(
         "P2 SciForge's sweep for half the path",
         p is not None and p.target is not None and getattr(p.target, "SciForgeType", "") == "Sweep",
         p and p.target and p.target.TypeId,
     )
-    h.check("P2 half the ring, the Press Pull still on top", near(vol(), v, 1e-5), (vol(), v))
+    h.check("P2 half the ring, the Press Pull waits", near(vol(), v, 1e-5), (vol(), v))
     h.task_button("OK")
 
 
@@ -305,8 +307,8 @@ def p3_edit():
 
 
 def p3_three_quarters():
-    v = cylinder(13.0) - ring(0.75)
-    h.check("P3 three quarters of the ring", near(vol(), v, 1e-5), (vol(), v))
+    v = cylinder(10.0) - ring(0.75)  # the Press Pull waits while the sweep is edited
+    h.check("P3 three quarters of the ring, the Press Pull waits", near(vol(), v, 1e-5), (vol(), v))
     h.task_button("OK")
 
 

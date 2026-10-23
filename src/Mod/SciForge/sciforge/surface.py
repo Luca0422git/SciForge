@@ -120,8 +120,14 @@ def is_surface_step(obj):
 
 
 def is_surface_shape(shape):
+    """Faces and no solid. Counted, not listed: shape.Faces makes a Python object per face
+    (23 ms on a part of 1700 faces, and the browser asks for every body on each read)."""
     try:
-        return shape is not None and not shape.isNull() and bool(shape.Faces) and not shape.Solids
+        if shape is None or shape.isNull():
+            return False
+        if shape.ShapeType in ("Solid", "CompSolid"):
+            return False
+        return shape.countElement("Face") > 0 and shape.countElement("Solid") == 0
     except Exception:
         return False
 

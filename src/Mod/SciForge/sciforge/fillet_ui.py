@@ -11,8 +11,13 @@ Picking works like inside a Fusion command:
 While picking, the part before the fillet is shown see-through with the picks
 highlighted, and the result is previewed solid on top. A blue arrow on the first
 edge drags the radius (chamfer: the distance; two arrows for two distances).
-A size that does not fit is reported in the dialog and OK waits for a fix; nothing
-is printed to the Report view.
+A size dragged or typed past what fits stops at the largest size that works (Luca,
+2026-10-21; Fusion refuses it instead), and the dialog says so: "Largest that fits here: 3.47
+mm" (value_limits.py). A size from a formula is not rewritten: it is reported in the dialog,
+with that limit, and OK waits for a fix. Nothing is printed to the Report view.
+While an arrow is dragged the round (or bevel) follows the mouse as a live picture
+(fillet_live.py, a few milliseconds per move) and the exact solid is built once the mouse
+rests or is let go, as Draft's does (2026-10-23).
 
 Fusion's selection box has rows ("+" adds one): each row is a selection set with its own
 size and type, one step in the timeline, one undo step. The Fillet dialog also has
@@ -25,15 +30,18 @@ FreeCAD's PartDesign::Fillet / Chamfer (refined), so Press Pull's fillet editing
 """
 
 import contextlib
+import copy
 import math
 import time
 
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import blend, commands, fillet_core as core, fillet_sets, log, ui_icon, ui_icon_path, warn
+from . import blend, commands, fillet_core as core, fillet_sets, log, shape_checks, ui_icon
+from . import ui_icon_path, value_limits, warn
 from .blend_field import SaveFinishes, ValueField
 from .compat import QtCore, QtWidgets
+from . import taskui
 from .taskui import ArrowDragger, Panel, ValueBoxes, _end_transaction, handle_size_at
 
 GHOST = 75  # transparency (%) of the part before the blend while the preview is shown
@@ -382,6 +390,15 @@ class BlendPanel(Panel):
         self.rule_box = 0
         self.row_formulas = {}  # (row, or None for the rule radius; value name) -> formula
         self.error = None
+        # A size past what fits stops at the largest that works (value_limits.py): the limits
+        # found, the size edited last ((row, value name, "typed" / "dragged" / "formula")),
+        # whether its preview is still to come, and the sizes whose preview worked.
+        self.limits = value_limits.Limiter()
+        self.limits.key_now = self._limit_key_now  # a note goes when its inputs change
+        self._edit = None
+        self._edit_pending = False
+        self._limiting = False
+        self._good_values = {}
         self.arrows = []  # (ArrowDragger, spot, origin, direction) in global coordinates
         self.value_boxes = ValueBoxes(self)  # the value box next to each arrow
         self.fields = {}  # option name -> ValueField
@@ -413,6 +430,11 @@ class BlendPanel(Panel):
         self._hint.setSingleShot(True)
         self._hint.setInterval(450)
         self._hint.timeout.connect(self._compute_hint)
+        # the live picture while a size arrow is dragged (fillet_live.py)
+        self._live = None  # its Overlay
+        self._live_key = None  # the picks and options its picture was made for
+        self._live_failed = None  # a key the picture could not be made for (not retried)
+        self._live_hid = False  # the preview solid is hidden behind the picture
 
         if feature is not None:
             self._read(feature)
@@ -429,6 +451,8 @@ class BlendPanel(Panel):
         self._build()
         self._load_row()
         self.finish_layout()
+        self.limit_label = value_limits.note_label()  # "Largest that fits here: 3.47 mm"
+        self.layout.addRow(self.limit_label)
         try:
             self._start(refs)
         except Exception as exc:  # never leave a half-open dialog without a reason
@@ -853,6 +877,7 @@ class BlendPanel(Panel):
         """The document is closing: let go of everything without touching it."""
         self.base = self.target = self.body = None
         self._looks = _Looks()
+        self._live = None  # its view goes with the document
         self.cleanup()
         try:
             from . import taskui
@@ -1157,6 +1182,9 @@ class BlendPanel(Panel):
         self.select_button.setText("%d selected" % count if count else "Select")
         if hasattr(self, "_rebuild_points"):
             self._rebuild_points()
+        self._limit_cancel()  # a search for the old picks
+        self.limits.note = ""  # a limit found for the old picks no longer applies
+        self._hide_live()  # it shows the old picks
         self._update_arrows()
         if recompute:
             self.schedule()
@@ -1251,11 +1279,23 @@ class BlendPanel(Panel):
         return self.fields.get(what)
 
     def _typed(self, what, value):
-        """A new value from a box (typed number, formula, the box's arrows)."""
+        """A new value from a box (typed number, formula, the box's arrows). A plain number
+        past the largest size that fits (found already for these picks) is held there."""
         self.formula_error = ""
-        self._set_value(self._row_key(), what, value)
-        self._place_arrows(self._row_key(), what)
+        row = self._row_key()
+        field = self._field_for(what)
+        formula = field is not None and bool(field.formula)
+        self._edit = (row, what, "formula" if formula else "typed")
+        self._edit_pending = True
+        self._limit_stale(row, what, -1.0 if formula else value)
+        if formula:
+            self.limits.note = ""  # a formula is never held at the limit
+        else:
+            value = self._hold(row, what, value, typed=True)
+        self._set_value(row, what, value)
+        self._place_arrows(row, what)
         self._refresh_rows()
+        self._show_live()
         self.schedule()
 
     def _place_arrows(self, row, what):
@@ -1266,12 +1306,22 @@ class BlendPanel(Panel):
 
     def _dragged(self, spot, distance, released=False):
         """An arrow moved: the size follows it. Dragged back through its edge the size stops
-        at MIN_DRAG, and when the mouse is let go the arrow comes back to the size shown."""
+        at MIN_DRAG, dragged past the largest size that fits it stops there (the arrow too,
+        like the end of a slider), and when the mouse is let go the arrow comes back to the
+        size shown."""
         what, row = spot["what"], spot.get("row")
         if row is not None and row != self.active and row < len(self.groups):
             self._activate(row, rebuild=False)  # dragging a set's arrow makes it the current one
         value = max(MIN_DRAG, round(distance / spot["per_unit"], 2))
+        self._edit = (row, what, "dragged")
+        self._limit_stale(row, what, value)
+        held = self._hold(row, what, value, typed=False)
+        if held != value:
+            value = held
+            self._place_arrows_now(row, what, value)
         changed = abs(value - self._value(row, what)) > 1e-12
+        if changed:
+            self._edit_pending = True
         self._set_value(row, what, value)
         field = self._field_for(what)
         if field is not None:
@@ -1284,7 +1334,254 @@ class BlendPanel(Panel):
         if changed:
             self.formula_error = ""
             self._refresh_rows()
-            self.schedule()
+            # the picture follows the arrow at once (a few ms); the exact solid waits for the
+            # mouse to rest or be let go (schedule with settle), as Draft's does
+            live = self._show_live()
+            self.schedule(settle=live)
+        elif self.limits.note and not self.error:
+            self.show_status()
+
+    # -- sizes past what fits (value_limits.py) -----------------------------------------------
+    def _unit(self, what):
+        return "deg" if what == "angle" else "mm"
+
+    def _limit_key(self, row, what):
+        """The inputs the largest size of (row, what) depends on: the part before the blend,
+        every set's picks and every other value (not the one being changed)."""
+        spec = copy.deepcopy(self.spec)
+        self._put(spec, row, what, None)
+        return value_limits.make_key(
+            self.kind,
+            self.info.shape if self.info is not None else None,
+            self.groups,
+            self.refs2,
+            [getattr(f, "Name", "") for f in self.features],
+            [getattr(f, "Name", "") for f in self.features2],
+            spec,
+            row,
+            what,
+            self._uses_step(),
+        )
+
+    @staticmethod
+    def _put(spec, row, what, value):
+        """Set (value None: drop) value `what` of row `row` in a copy of the settings."""
+        data = spec if row is None else spec["sets"][row]
+        if what.startswith("pt"):
+            k = int(what[2:])
+            points = data.get("points", [])
+            if k < len(points):
+                points[k][1] = value
+            return
+        if value is None:
+            data.pop(what, None)
+        else:
+            data[what] = value
+
+    def _limit_key_now(self):
+        """The inputs now for the size edited last (None: none edited)."""
+        if self._edit is None or self.info is None:
+            return None
+        row, what = self._edit[0], self._edit[1]
+        if row is not None and row >= len(self.spec["sets"]):
+            return None
+        return self._limit_key(row, what)
+
+    def _limit_works(self, row, what):
+        """works(value): the blend builds with `what` set to value (nothing in the document)."""
+        spec = copy.deepcopy(self.spec)
+        uses_step = self._uses_step()
+        flat = self._flat() if uses_step else None
+        native = self._native_row()
+        info, groups = self.info, [list(g) for g in self.groups]
+        refs2, features, features2 = list(self.refs2), list(self.features), list(self.features2)
+
+        def works(value):
+            self._put(spec, row, what, value)
+            if uses_step:
+                fillet_sets.compute(info.shape, spec, flat, refs2, features, features2)
+            else:
+                blend.check_build(self.kind, info, groups[native], spec["sets"][native])
+            return True
+
+        return works
+
+    def _hold(self, row, what, value, typed):
+        """`value` held at the largest (or smallest) size known to fit for these picks; the
+        note under the boxes says so. Nothing is built here: every drag step comes past."""
+        if self.info is None:
+            return value
+        try:
+            held = self.limits.clamp(self._limit_key(row, what), value, typed, self._unit(what))
+        except Exception as exc:
+            warn("%s size limit: %s" % (self.title, exc))
+            return value
+        if held != value:
+            field = self._field_for(what)
+            if field is not None and field.raw is None:  # not while a number is being typed
+                field.set_value(held)
+        return held
+
+    def _place_arrows_now(self, row, what, value):
+        """The dragged arrow stops at the limit (it is set back on every drag step)."""
+        for dragger, spot, _origin, _direction in self.arrows:
+            if spot["what"] == what and spot.get("row") == row:
+                try:
+                    dragger.set_distance(max(value, 0.0) * spot["per_unit"])
+                except Exception:
+                    pass
+
+    def _good_size(self, row, what, key, value):
+        """(good, known): the size whose preview worked last with these same inputs, when it
+        is below `value`; else the smallest size (to be built first)."""
+        found = self._good_values.get((row, what))
+        if found is not None and found[0] == key and found[1] < value:
+            return found[1], True
+        return (MIN_DRAG if what != "angle" else 1.0), False
+
+    def _limit_refused(self, reason):
+        """The size just dragged or typed was refused as too big: find the largest that works
+        (once for these picks), use it and preview again. True when that was done, or when the
+        search runs in the background (one trial build per turn of the event loop, so a
+        dragged arrow keeps moving; Luca, 2026-10-23): its end previews the held size. While
+        OK runs, the search runs to its end at once (a wait cursor)."""
+        if self._limiting or not self._edit_pending or self._edit is None or self.info is None:
+            return False
+        row, what, source = self._edit
+        if source == "formula" or not value_limits.is_limit_error(reason):
+            return False
+        if row is not None and row >= len(self.spec["sets"]):
+            return False
+        value = self._value(row, what)
+        self._limiting = True
+        try:
+            key = self._limit_key(row, what)
+            good, good_known = self._good_size(row, what, key, value)
+            if value <= good:
+                return False
+            works, unit, keep = self._limit_works(row, what), self._unit(what), self.info.shape
+            if not getattr(self, "_accepting_limit", False):
+                answered, limit = self.limits.cached(key, value, good)
+                if not answered:
+                    self._limit_start(row, what, source, key, works, value, good, good_known)
+                    return True
+            else:
+                with value_limits._WaitCursor():
+                    limit = self.limits.find(
+                        key, works, value, good, good_known=good_known, unit=unit, keep=keep
+                    )
+            if limit is None:
+                return False
+            self._limit_hold(row, what, source, key, value, limit)
+            self._preview()
+            return True
+        except Exception as exc:
+            warn("%s size limit: %s" % (self.title, exc))
+            return False
+        finally:
+            self._limiting = False
+
+    def _limit_hold(self, row, what, source, key, value, limit):
+        """`value` (refused) held at `limit`: the note, the size, its box, the arrows."""
+        self._edit_pending = False
+        self.limits.limited(key, value, limit, source == "typed", self._unit(what))
+        self._set_value(row, what, limit)
+        field = self._field_for(what)
+        if field is not None and field.raw is None:
+            field.set_value(limit)
+        self._place_arrows(row, what)
+        self._refresh_rows()
+
+    def _limit_start(self, row, what, source, key, works, value, good, good_known):
+        """Look for the largest size that fits in the background (value_limits.Background)."""
+        self._limit_cancel()
+        progress = {}
+        unit, keep = self._unit(what), self.info.shape
+
+        def steps(clock):
+            return self.limits.find_steps(
+                key,
+                works,
+                value,
+                good,
+                good_known=good_known,
+                unit=unit,
+                keep=keep,
+                clock=clock,
+                progress=progress,
+            )
+
+        def ended(limit):
+            self._limit_job = None
+            self._limit_ended(row, what, source, key, value, limit)
+
+        job = value_limits.Background(steps, ended, key, self._limit_paused)
+        job.row, job.what, job.value, job.progress = row, what, value, progress
+        self._limit_job = job
+        self.error = None
+        self.limits.note = (
+            value_limits.SEARCHING_ANGLE if unit == "deg" else value_limits.SEARCHING_VALUE
+        )
+        self.show_status()
+        job.start()
+
+    def _limit_searching(self):
+        job = getattr(self, "_limit_job", None)
+        return job is not None and not job.done
+
+    def _limit_cancel(self):
+        job, self._limit_job = getattr(self, "_limit_job", None), None
+        if job is not None:
+            job.cancel()
+
+    def _limit_stale(self, row, what, value):
+        """A size back below the nearest one the running search found not to fit (or another
+        size edited): the search is not needed for it any more."""
+        job = getattr(self, "_limit_job", None)
+        if job is None or job.done:
+            return
+        try:
+            fails = job.progress.get("fails", job.value)
+            if (job.row, job.what) == (row, what) and value - fails >= -1e-12:
+                return
+        except Exception:
+            pass
+        self._limit_cancel()
+
+    def _limit_paused(self):
+        """True while an arrow is being dragged: the search builds nothing then."""
+        try:
+            if self._closed or not taskui.button_held():
+                return False
+            return time.perf_counter() - self.last_moved() < self.PAUSE_MS / 1000.0
+        except Exception:
+            return False
+
+    def _limit_ended(self, row, what, source, key, value, limit):
+        """The background search ended: the size is held at the limit if it is still past it
+        for the same picks, then previewed (now, or once the mouse rests)."""
+        try:
+            if self._closed:
+                return
+            if self.limits.note in (value_limits.SEARCHING_VALUE, value_limits.SEARCHING_ANGLE):
+                self.limits.note = ""
+            if limit is not None and key == self._limit_key(row, what):
+                now = self._value(row, what)
+                if now - limit > 1e-12:
+                    if self._edit is not None and self._edit[:2] == (row, what):
+                        source = self._edit[2]  # typed meanwhile: the note says so
+                    self._limit_hold(row, what, source, key, now, limit)
+            value_limits.busy(self)  # until the preview it asks for has run
+            quiet = time.perf_counter() - self.last_moved()
+            if quiet < self._rest_needed():
+                self.schedule(settle=True)
+            else:
+                self._timer.stop()
+                self._timer.setInterval(0)
+                self._timer.start()
+        except Exception as exc:
+            value_limits.busy(self, False)
+            warn("%s size limit: %s" % (self.title, exc))
 
     def _collect(self):
         """Read the dialog's choices into the settings (subclasses). The value boxes report
@@ -1517,9 +1814,18 @@ class BlendPanel(Panel):
                 pass
 
     # -- preview --------------------------------------------------------------------------
-    def schedule(self):
+    def schedule(self, settle=False):
         if not self._closed:
-            super().schedule()
+            super().schedule(settle)
+
+    @property
+    def REST_FIRST(self):
+        """Every rebuild waits for the changes to rest while the live picture can show them
+        (taskui.Panel.schedule): the picture follows at once, the exact solid comes on the
+        rest. Without a picture (Full Round, a pick it cannot draw) the dialog paces itself
+        as before."""
+        live = getattr(self, "_live", None)
+        return live is not None and getattr(self, "_live_key", None) is not None
 
     def _recompute(self):
         try:
@@ -1527,6 +1833,8 @@ class BlendPanel(Panel):
         except Exception as exc:
             self.error = str(exc)
             self.show_status()
+        finally:
+            self._hide_live()  # the exact solid (or the reason it fails) replaces it
 
     def _uses_step(self):
         """SciForge's own step builds this (or already holds it)."""
@@ -1546,10 +1854,16 @@ class BlendPanel(Panel):
                 self.features2,
             )
         else:
+            # check_build: a Distance and Angle chamfer is built in a throw-away document
+            # (trial() cannot build it); FreeCAD's own step kept the last good shape when
+            # it failed, and the dialog showed no reason
             row = self._native_row()
-            blend.trial(self.kind, self.info, self.groups[row], self.spec["sets"][row])
+            blend.check_build(self.kind, self.info, self.groups[row], self.spec["sets"][row])
 
     def _preview(self):
+        if self._limit_searching() and not self._closed:
+            return  # the search of the largest size that fits previews when it ends
+        value_limits.busy(self, False)  # the preview after a search: this one
         if self._closed:
             return
         self._collect()
@@ -1560,13 +1874,16 @@ class BlendPanel(Panel):
                 self._discard_target()
             self.show_status()
             return
-        try:
-            self._trial()
-        except blend.BlendError as exc:
-            self.error = str(exc)
-            self.show_status()
-            self._hint.start()
-            return
+        # Speed: once a preview worked, FreeCAD's own Fillet/Chamfer is changed straight away
+        # and checked afterwards (the round was built twice: a trial, then the feature); the
+        # trial only runs first after a failure, and to explain one.
+        optimistic = self._optimistic()
+        if not optimistic:
+            try:
+                self._trial()
+            except blend.BlendError as exc:
+                self._failed(str(exc))
+                return
         self.error = None
         with quiet_errors():
             if self._uses_step():
@@ -1607,9 +1924,100 @@ class BlendPanel(Panel):
                     blend.apply(self.target, options)
             # later steps (marker rolled back, or an earlier fillet edited) stay on their edges
             blend.recompute_keeping(self.doc, self.keep)
+            if optimistic and not self._target_ok():
+                self._back_to_good()
+                try:
+                    self._trial()
+                    reason = None
+                except blend.BlendError as exc:
+                    reason = str(exc)
+                if reason is not None:
+                    self._failed(reason)
+                    return
+            self._remember_good()
+        if self._edit is not None:
+            row, what, _source = self._edit
+            try:
+                key = self._limit_key(row, what)
+                self._good_values[(row, what)] = (key, self._value(row, what))
+            except Exception:
+                pass
+        self._edit_pending = False
+        self._live_hid = False  # _show_preview shows the solid again
         self._show_preview(True)
         self._refresh_rows()
         self.show_status()
+        self._live_soon()
+
+    def _failed(self, reason):
+        self._hide_live()  # no picture of a size that does not fit
+        if self._limit_refused(reason):
+            return  # held at the largest size that fits, and previewed with it
+        self._good_last = False
+        self.error = reason
+        self.show_status()
+        self._hint.start()
+
+    def _optimistic(self):
+        """The last preview worked and FreeCAD's own step holds it: change it directly."""
+        good = getattr(self, "_good", None)
+        if self.kind == "chamfer" and not self._uses_step():
+            if self.spec["sets"][self._native_row()].get("chamfer_type") == "angle":
+                # checked first (blend.check_build): FreeCAD's Distance and Angle builder
+                # crashed (OpenCASCADE segfault) on some sizes that do not fit
+                return False
+        return (
+            bool(getattr(self, "_good_last", False))
+            and good is not None
+            and good[0] is self.target
+            and _alive(self.target)
+            and not self._uses_step()
+        )
+
+    def _remember_good(self):
+        target = self.target
+        # the shape was checked already (by the trial, or by _target_ok): state only here
+        if target is None or self._uses_step() or not self._target_ok(validate=False):
+            self._good, self._good_last = None, False
+            return
+        props = {}
+        for name in ("Radius", "ChamferType", "Size", "Size2", "Angle", "FlipDirection"):
+            if hasattr(target, name):
+                props[name] = getattr(target, name)
+        base = (target.Base[0], list(target.Base[1])) if target.Base else None
+        self._good = (target, base, props)
+        self._good_last = True
+
+    def _target_ok(self, validate=True):
+        """FreeCAD's Fillet/Chamfer built a sound result (it keeps an invalid one)."""
+        target = self.target
+        try:
+            state = list(target.State)
+            if "Invalid" in state or "Error" in state or "Touched" in state:
+                return False
+            shape = target.Shape
+            if shape.isNull() or not shape.Solids:
+                return False
+            if len(shape.Solids) > max(1, len(self.info.shape.Solids)):
+                return False
+            return shape_checks.is_valid(shape) if validate else True
+        except Exception:
+            return False
+
+    def _back_to_good(self):
+        """The direct change failed: the step goes back to the last preview that worked."""
+        good = getattr(self, "_good", None)
+        if good is None or good[0] is not self.target:
+            return
+        target, base, props = good
+        try:
+            if base is not None:
+                target.Base = base
+            for name, value in props.items():
+                setattr(target, name, value)
+            blend.recompute_keeping(self.doc, self.keep)
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
 
     def _swap(self, flat):
         """FreeCAD's Fillet / Chamfer becomes SciForge's step (a second set, another type):
@@ -1660,25 +2068,39 @@ class BlendPanel(Panel):
             pass
 
     def _compute_hint(self):
+        """A size that does not fit and is not held at the limit (a formula, or picks that
+        changed under it): the error also says the largest size that fits."""
         try:
-            if self._closed or not self.error or not self._has_picks():
+            if self._closed or not self.error or not self._has_picks() or self.info is None:
                 return
-            if self._uses_step():
-                return  # several sets / types: the message names what to change
-            row = self._native_row()
-            options = self.spec["sets"][row]
-            what = "radius" if self.kind == "fillet" else "distance"
-            size = float(options.get(what, 0.0))
-            if size <= 0:
+            if not value_limits.is_limit_error(self.error) or self._limit_searching():
                 return
-            best = blend.max_size(self.kind, self.info, self.groups[row], options, size)
-            if best and best < size and self.error:
-                shown = math.floor(best * 100.0) / 100.0
-                if shown > 0:
-                    self._say(
-                        "⚠ %s\nThe largest %s that fits here is about %.2f mm."
-                        % (self.error, what, shown)
-                    )
+            if self._edit is not None and self._edit[0] == self._row_key():
+                row, what = self._edit[0], self._edit[1]
+            else:
+                row = self._row_key()
+                what = "radius" if self.kind == "fillet" else "distance"
+                if row is not None and self.mode == "fillet":
+                    rtype = self.spec["sets"][row].get("radius_type", "constant")
+                    what = "chord" if rtype == "chord" else what
+            size = self._value(row, what)
+            key = self._limit_key(row, what)
+            good, good_known = self._good_size(row, what, key, size)
+            if size <= good:
+                return
+            limit = self.limits.find(
+                key,
+                self._limit_works(row, what),
+                size,
+                good,
+                good_known=good_known,
+                unit=self._unit(what),
+                keep=self.info.shape,
+            )
+            if limit is not None and self.error:
+                self._say(
+                    "⚠ %s\n%s" % (self.error, value_limits.hint(limit, "hi", self._unit(what)))
+                )
         except Exception as exc:
             warn("%s size hint: %s" % (self.title, exc))
 
@@ -1697,7 +2119,7 @@ class BlendPanel(Panel):
         if "Invalid" in state or "Error" in state:
             self._say("⚠ " + blend.friendly(obj.getStatusString()))
             return
-        if obj.Shape.isNull() or not obj.Shape.isValid():
+        if obj.Shape.isNull() or not shape_checks.is_valid(obj.Shape):
             self._say("⚠ The result is not a valid solid. Try a smaller size.")
             return
         broken = [
@@ -1714,10 +2136,161 @@ class BlendPanel(Panel):
         return self.target
 
     def _say(self, text):
-        """Show (or clear) the dialog's message, growing the panel so no line is cut off."""
+        """Show (or clear) the dialog's message, growing the panel so no line is cut off. The
+        note of a size held at its limit shows under it while there is no error."""
         self.message.setText(text)
+        limits = getattr(self, "limits", None)
+        note = "" if text or limits is None else limits.note
+        value_limits.show_note(getattr(self, "limit_label", None), note)
         width = max(self.message.width(), self.form.width() - 30, 260)
         self.message.setMinimumHeight(self.message.heightForWidth(width) if text else 0)
+
+    # -- the live picture (fillet_live.py) ---------------------------------------------------
+    def live_shown(self, spec):
+        """Called each time the live picture shows new sizes (tests)."""
+
+    def _live_key_now(self):
+        """The picks and options the picture depends on (not the sizes: those come with each
+        show)."""
+        spec = copy.deepcopy(self.spec)
+        for data in [spec] + list(spec.get("sets", [])):
+            for key in ("radius", "chord", "start", "end", "distance", "distance2", "angle"):
+                data.pop(key, None)
+            data.pop("points", None)
+            data.pop("count", None)
+        return value_limits.make_key(
+            "live",
+            self.info.shape if self.info is not None else None,
+            self.groups,
+            self.refs2,
+            [getattr(f, "Name", "") for f in self.features],
+            [getattr(f, "Name", "") for f in self.features2],
+            spec,
+        )
+
+    def _live_overlay(self):
+        """The Overlay with the picture of the picks now (made once per set of picks), or
+        None when there is nothing to show or it cannot be made."""
+        if self._closed or self.info is None or not self._has_picks():
+            return None
+        key = self._live_key_now()
+        if key == self._live_failed:
+            return None
+        if self._live is not None and key == self._live_key:
+            return self._live
+        from . import draft_ui, fillet_live
+
+        try:
+            placement = self.body.getGlobalPlacement() if self.body else None
+            picture = fillet_live.Picture(
+                self.info,
+                self.spec,
+                [list(g) for g in self.groups],
+                list(self.refs2),
+                list(self.features),
+                list(self.features2),
+                placement,
+            )
+            if self._live is None:
+                color, line = draft_ui._colors(self.base)
+                self._live = fillet_live.Overlay(Gui.ActiveDocument.ActiveView, color, line)
+            self._live.hide()
+            self._live.set_picture(picture)
+            self._live_key = key
+            return self._live
+        except Exception as exc:
+            self._live_failed = key
+            self._live_key = None
+            if self._live is not None:
+                self._live.hide()
+            if not isinstance(exc, ValueError):
+                # a picture the picks cannot have (Full Round, smooth edges) is not news:
+                # nothing goes to the Report view for it (the dialog's rule); a bug is
+                log(
+                    "%s: no live picture for these picks (%s); the preview follows on pauses"
+                    % (self.title, exc)
+                )
+            return None
+
+    def _live_soon(self):
+        """Make the picture of new picks while nothing happens, so the first move of an arrow
+        does not wait for it."""
+        try:
+            if self._live is not None and self._live_key == self._live_key_now():
+                return
+            QtCore.QTimer.singleShot(0, self._prepare_live)
+        except Exception:
+            pass
+
+    def _prepare_live(self):
+        try:
+            if not self._closed and not getattr(self.doc, "Recomputing", False):
+                self._live_overlay()
+        except Exception as exc:
+            warn("%s live picture: %s" % (self.title, exc))
+
+    def _show_live(self):
+        """The rounds at the dialog's sizes now (a few milliseconds): the preview solid is
+        hidden behind the see-through part until the exact one is built. True when shown.
+        A size the picture cannot draw (0, a bevel that never reaches the other face), a
+        formula that does not work, or a size past the largest that fits (held there before
+        this) shows nothing."""
+        if self._closed or self.formula_error:
+            self._hide_live()
+            return False
+        try:
+            overlay = self._live_overlay()
+            if overlay is None:
+                return False
+            try:
+                overlay.show(self.spec)
+            except ValueError:
+                self._hide_live()
+                return False
+            self._hide_results()
+            self.live_shown(self.spec)
+            return True
+        except Exception as exc:
+            self._drop_live()
+            warn("%s live picture: %s" % (self.title, exc))
+            return False
+
+    def _hide_results(self):
+        """The preview solid out of the way of the live picture; the part before the step
+        see-through around it (as with the preview)."""
+        if self._live_hid:
+            return
+        if _alive(self.target) and self.target.ViewObject is not None:
+            self.target.ViewObject.makeTemporaryVisible(False)
+        if _alive(self.base) and self.base.ViewObject is not None:
+            self.base.ViewObject.makeTemporaryVisible(True)
+            if not self._looks.done("ghost"):
+                for node in _nodes(self.base.ViewObject.RootNode, "SoMaterial"):
+                    if node.getName().getString() == "ShapeMaterial":
+                        self._looks.set(node, "transparency", GHOST / 100.0)
+        self._live_hid = True
+
+    def _hide_live(self):
+        """The live picture away; the preview solid back where it was hidden for it."""
+        live = getattr(self, "_live", None)
+        if live is not None:
+            try:
+                live.hide()
+            except Exception:
+                pass
+        if not getattr(self, "_live_hid", False):
+            return
+        self._live_hid = False
+        try:
+            if self._ghost and _alive(self.target) and self.target.ViewObject is not None:
+                self.target.ViewObject.makeTemporaryVisible(True)
+        except Exception as exc:
+            warn("%s preview display: %s" % (self.title, exc))
+
+    def _drop_live(self):
+        self._hide_live()
+        self._live = None
+        self._live_key = None
 
     # -- OK / Cancel ------------------------------------------------------------------------
     def accept(self):
@@ -1733,19 +2306,34 @@ class BlendPanel(Panel):
             if self.formula_error:  # a box holds text that is no value: fix it first
                 self._say("⚠ " + self.formula_error)
                 return False
-            self._preview()
+            self._accepting_limit = True  # a size past what fits is searched at once here
+            try:
+                if self._limit_searching():  # the search still running: its end now
+                    with value_limits._WaitCursor():
+                        self._limit_job.finish()
+                    self._timer.stop()
+                self._preview()
+            finally:
+                self._accepting_limit = False
             obj = self.target
             if self.error or obj is None:
                 self.show_status()
                 return False
             state = list(obj.State)
-            if "Invalid" in state or "Error" in state or not obj.Shape.isValid():
+            if "Invalid" in state or "Error" in state or not shape_checks.is_valid(obj.Shape):
                 self.show_status()
                 return False
             self._accepted = True
             # Panel.accept() without its plain recompute: a later step this edit broke (and
             # the dialog named) would print its failure to the Report view once more.
             self.cleanup()
+            # the steps after the marker waited (preview.hold): rebuilt now, and later blends
+            # put back on their edges, in this undo step
+            from . import edit_rollback, preview
+
+            edit_rollback.restore(self.doc)
+            if preview.catch_up(self.doc):
+                blend.recompute_keeping(self.doc, self.keep)
             _end_transaction(self.doc)
             self._close()
             log("%s done" % self.title)
@@ -1761,11 +2349,14 @@ class BlendPanel(Panel):
 
     def cleanup(self):
         self._closed = True
+        self._limit_cancel()
+        value_limits.busy(self, False)
         for timer in (self._events, self._hint):
             try:
                 timer.stop()
             except Exception:
                 pass
+        self._drop_live()
         self._remove_arrows()
         self.value_boxes.discard()
         for callback, kind in (
@@ -2202,6 +2793,7 @@ class ChamferPanel(BlendPanel):
         self._update_rows()
 
     def _type_changed(self, *_):
+        self.limits.note = ""
         self._update_rows()
         self._collect()
         self._refresh_rows()

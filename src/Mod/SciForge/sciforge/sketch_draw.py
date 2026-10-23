@@ -1274,21 +1274,12 @@ class DrawTool:
 
     def _add_checked(self, constraints):
         """Add constraints; those that turn out redundant or conflicting are dropped (a
-        snap that repeats what the shape already says). Returns the ones kept."""
-        sketch = self.sketch
-        constraints = [c for c in constraints if c is not None]
-        if not constraints:
-            return []
-        first = len(sketch.Constraints)
-        sketch.addConstraint(constraints)
-        sketch.solve()
-        bad = set(sketch.RedundantConstraints) | set(sketch.ConflictingConstraints)
-        drop = [i for i in range(first, len(sketch.Constraints)) if i + 1 in bad]
-        for i in reversed(drop):
-            sketch.delConstraint(i)
-        if drop:
-            sketch.solve()
-        return list(sketch.Constraints[first:])
+        snap that repeats what the shape already says). When some do not fit, the rest
+        are tried one by one, strongest first (sketch_explain.add_checked), so a snapped
+        corner is never pushed out by a weaker guess. Returns the ones kept."""
+        from . import sketch_explain
+
+        return sketch_explain.add_checked(self.sketch, constraints)
 
     # -- constraints for a placed point -----------------------------------------------------
     def snap_constraints(self, anchor, snap, line=None):

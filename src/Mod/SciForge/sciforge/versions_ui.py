@@ -1370,6 +1370,8 @@ class Recovery:
         self.timer.timeout.connect(self.tick)
         self.postponed = False
         self.written = 0  # copies written this session (tests read it)
+        self._copied = {}  # design name -> self._epoch() when its last copy was written
+        self._own_moves = 0  # doc_epoch moves made by writing the copies themselves
 
     def start(self):
         self.timer.setInterval(autosave_interval_ms())
@@ -1423,9 +1425,32 @@ class Recovery:
                 continue
             if not forced and not is_modified(doc):
                 continue
+            if not forced and self._unchanged_since_copy(doc):
+                continue
             if self.save_copy(doc):
                 count += 1
         return count
+
+    def _unchanged_since_copy(self, doc):
+        """Nothing in any open design changed since this design's last copy (doc_epoch):
+        the copy on disk is still the design. Writing a big design takes seconds, during
+        which the window does not answer (2 s for a design of 120 steps and 1700 faces),
+        and it came back every 5 minutes while the person only looked at it."""
+        try:
+            from . import doc_epoch
+
+            return doc_epoch.installed() and self._copied.get(doc.Name) == self._epoch()
+        except Exception:
+            return False
+
+    def _epoch(self):
+        """doc_epoch's counter without the moves made by writing recovery copies: FreeCAD
+        signals the end of a save for a copy too, so writing one design's copy moved the
+        counter the other designs' copies compare with, and with two changed designs open
+        every tick wrote both again (review finding F2, 2026-10-22)."""
+        from . import doc_epoch
+
+        return doc_epoch.value() - self._own_moves
 
     def key_of(self, doc):
         return _recovered.get(doc.Name) or core.recovery_key(doc.Name, doc.FileName)
@@ -1436,12 +1461,23 @@ class Recovery:
         tmp = copy[: -len(core.DESIGN_SUFFIX)] + ".tmp" + core.DESIGN_SUFFIX
         try:
             os.makedirs(self.folder, exist_ok=True)
-            doc.saveCopy(tmp)  # returns None in FreeCAD 1.1.4, raises when it fails
+            from . import doc_epoch
+
+            before = doc_epoch.value()
+            try:
+                doc.saveCopy(tmp)  # returns None in FreeCAD 1.1.4, raises when it fails
+            finally:
+                # (nothing in a design changes while FreeCAD writes it: only its save signals)
+                self._own_moves += doc_epoch.value() - before
             if not os.path.isfile(tmp):
                 raise RuntimeError("FreeCAD wrote no copy")
             os.replace(tmp, copy)
             core.write_recovery_sidecar(self.folder, key, doc.Label, doc.FileName, self.session)
             self.written += 1
+            try:
+                self._copied[doc.Name] = self._epoch()
+            except Exception:
+                pass
             log("recovery copy of %s written" % doc.Label)
             return True
         except Exception as exc:

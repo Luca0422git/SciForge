@@ -17,7 +17,8 @@ Path 3, Esc in the middle of picking: Ctrl+Z, Revolve, click an area, Esc: nothi
         nothing stays selected, no undo step is left open; Ctrl+Y still brings the undone
         revolve back (the Redo list survives a dialog closed without a change).
 Path 4, values while the preview runs: 30 then 60 typed back to back, 0 (said in the
-        dialog, OK waits), -90 (the other way), 400 (said), a formula, a parameter, the
+        dialog, OK waits), -90 (the other way), 400 (set to 360 and said: Luca's decision of
+        2026-10-21, Fusion refuses it), a formula, a parameter, the
         handle dragged far round and back past zero to a negative angle; OK. The revolve
         follows when the parameter changes.
 Path 5, edit from the timeline three times with a person's double-click (Two Sides, a
@@ -507,10 +508,23 @@ def p4_minus90():
     ui.type_into(p.angle.widget, "400")
 
 
-def p4_400():
-    h.check("P4 400 is explained", "⚠" in msg() and "360" in msg(), msg())
+def note():
     p = panel()
-    ui.type_into(p.angle.widget, "45*2")
+    return p.limit_label.text() if p is not None and p.limit_label.isVisible() else ""
+
+
+def p4_400():
+    # Luca's decision (2026-10-21): a typed angle past the limit is set to it and said (it
+    # used to be refused, "at most 360 degrees")
+    p = panel()
+    h.check(
+        "P4 400 is set to 360", p is not None and near(p.options["angle"], 360.0), p and p.options
+    )
+    h.check("P4 ...and said", note() == "400° does not fit: limited to 360.0°", note())
+    h.check("P4 no warning for 400", "⚠" not in msg(), msg())
+    h.check("P4 preview: a full turn", near(vol(), added(360)), (vol(), added(360)))
+    if p is not None:
+        ui.type_into(p.angle.widget, "45*2")
 
 
 def p4_formula():

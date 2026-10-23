@@ -4,6 +4,16 @@ This file is the project's memory across work sessions. **Read it first, every s
 `docs/sciforge/feature-outline.md` (the spec). Update it at the end of every session: what was
 done, what was learned, what is next. Newest session goes at the top of the log.
 
+**Branch `experimental` (Luca, 2026-10-20): Fusion workflows that do not work yet get fixed
+there, one at a time ("New branch time. Call it experimental"). First item done: Draft of
+curved / free-form faces (session log "Draft of curved faces"). Luca tests it; nothing from
+`experimental` goes to `develop` or `Release` until he says so.** Since then on `experimental`
+(2026-10-21/22): speed of edits, Fusion rollback while editing, and Luca's 8 approved ideas
+from CADCraft (session log "Eight features from the CADCraft study"): values stop at the
+limit, sketch messages naming culprits + padlock, export/import reports, 117 AI tools with
+verification tools and a full AI documentation library, headless CLI, parity script, speed
+with big designs, PDF layers/searchable text.
+
 **Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
 R0-R4 are built and merged on `develop` (2026-10-20, three parallel agents). What is left is R5: Luca's tests (quick update, dry-run build, Update now), then his green light for the release. Also: Luca must switch on GitHub Discussions and create the labels `idea` and `beta`.
 
@@ -94,6 +104,9 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | 2026-10-09 | Until the branding pass lands, CI's Windows build ships the portable 7z only, no installer | The FreeCAD NSIS installer would install over / clash with a real FreeCAD install |
 | 2026-10-10 | Repository made public by Luca | Free GitHub Actions minutes for tests and full builds (was the open question on cost) |
 | 2026-10-20 | First public release is **0.1.0-beta**; no code signing (Luca: no money for it), so the GitHub page and release notes explain Windows SmartScreen; update check with an easy install; a minimal welcome ("dont overdo it") | Brief `docs/sciforge/dev/briefs/beta-release.md` (milestones R0-R5) |
+| 2026-10-20 | Branch `experimental` (from develop `ae1d3768`) for fixing Fusion workflows that do not work in SciForge yet; the first is Draft of curved faces. This work is pushed to `experimental`, not `develop` | Luca: "some of the workflows that id regularly do on fusion dont exactly work ... New branch time. Call it experimental. thats where youll do your work" |
+| 2026-10-21 | A value past what fits (fillet radius, chamfer, draft angle, shell wall, press pull ...) stops at the largest value that works, with a note, instead of an error; formulas are not rewritten (they keep the error). Deliberately differs from Fusion | Luca: "limit edits to stop at that limit ... add the functionality to any tool that can give that sort of error" |
+| 2026-10-21 | AI: expose everything SciForge can do as tools, with all documentation an AI model could use | Luca: "go crazy with 3. give all the tools possible, with absolutely all the documentation available" |
 | 2026-10-20 | Branch `Release` (from develop `a6a5f7bd`): only tested `develop` commits, fast-forwarded and tagged `sciforge-v<version>` on Luca's green light; all work stays on `develop` | Luca: "everything goes on develop until i give the green light" |
 - **2026-10-13: full (compiled) builds only for releases or a real C++ change.** Luca asked why
   compile at all when SciForge is an add-on: all 7 core patches are housekeeping or FreeCAD bug
@@ -291,6 +304,15 @@ Quick updates come from green "SciForge tests" runs on `develop`.
       longer "too thick", arrows can always be grabbed, Draft's Pull Direction box and
       clickable pull arrow, Change Parameters lists Shell / Scale values. 4 QA scenarios
       (`shell_draft_qa_shell/_draft/_scale/_mix.py`, 25 paths), 4 golden models.
+- [x] Draft of curved and free-form faces (branch `experimental`, 2026-10-20, Luca's report "I
+      cant seem to select curved faces"): every face that runs along the pull direction is
+      taken (the side of an extruded spline or ellipse, round walls, tangent chains of flat,
+      round and spline walls), FreeCAD's Draft kept for the faces it can tilt, SciForge's new
+      `draft_walls.py` for the rest. Fixed Plane / Parting Line, One / Two Side / Symmetric,
+      flip, edits, followers in other bodies. Scenario `draft_curved` (50 checks), 6 golden
+      models (`sf_draft_ellipse_*`, `sf_draft_spline_*`, `sf_draft_tangent_chain`), unit
+      `test_draft_curved_schema.py`. **Not yet checked by Luca.** Gaps in
+      `parity/shell-draft-scale.md` (leaning free-form walls, sloped caps)
 - [x] Body tools, Fusion-style (branch `sf/bodies`): Combine (Target / Tool Bodies, Join /
       Cut / Intersect, New Body, Keep Tools; used-up tools hidden while the step is part of
       the design), Split Body (origin/construction plane, face with Extend Splitting Tool,
@@ -464,6 +486,69 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Known issues / findings
 
+- **Speed of live previews (2026-10-20/21, branch `experimental`, Luca: "efficiency. make
+  things run fast and smooth")**. Measure first (GUI probes under xvfb with cProfile around
+  the panel's `_recompute()`), then fix:
+  - FreeCAD recomputes every step that depends on a changed one, **wherever the history
+    marker stands**: rolling the marker (Body.Tip) does not stop later steps from being
+    rebuilt. `doc.recompute([objects])` rebuilds only those and what they depend on; the
+    others stay touched and one plain `doc.recompute()` later brings them up to date (tested:
+    1 object in 3 ms instead of 5 in 64 ms, the catch-up right). The Body depends on every
+    step (Group): it must wait too, so `body.Shape` is stale while a dialog holds steps.
+  - Fusion: editing a step rolls the timeline to it; later features are greyed out and not
+    computed; everything is computed when the edit ends (Autodesk University 2018 "Under the
+    Hood of Fusion 360"). SciForge now does the same: `edit_rollback.py` (via
+    `taskui.edit_object`) rolls the marker to the edited step and back; `preview.hold()`
+    (every `taskui.Panel` opening) makes the steps after the marker wait in
+    `preview.recompute`; `preview.catch_up()` rebuilds them when the dialog's undo step
+    closes (`end_transaction`, inside that step); timeline settle() waits meanwhile. The
+    dialog's own step is never held (`preview._waiting`). Dialogs that call
+    `doc.recompute()` themselves still rebuild everything (correct, just slower).
+  - FreeCAD's Freeze (Std_ToggleFreeze) is no way to hold steps: not in Python, and a frozen
+    object's properties turn read-only (SciForge repairs later steps' references).
+  - OpenCASCADE booleans in FreeCAD already run parallel (`SetRunParallel` in TopoShape.cpp).
+    A cut with a B-spline wall of degree ~11 costs ~0.1-0.15 s where a plane or cone costs
+    ~0.015 s; exactly coincident faces cost nothing extra.
+  - A shape's `hashCode()` is a cheap identity between rebuilds (`drafting.shape_key`);
+    counting its faces costs ~0.5 ms. Keep a reference to the shape while caching by it.
+- **Draft of curved faces (2026-10-20, branch `experimental`, `draft_walls.py`)**:
+  - OpenCASCADE's `BRepOffsetAPI_DraftAngle` (FreeCAD's Draft) tilts planes and cylinders /
+    cones about the pull direction only. Any other face (`SurfaceOfExtrusion` of a spline or
+    ellipse, B-splines, spheres, a cylinder lying across the pull) is skipped with "Failed to
+    add some face for drafting, skip" (TopoShapeExpansion.cpp) and the step stays unchanged.
+    SciForge used to filter those faces out of the selection, so they never lit up.
+  - A wall = a face whose normal is square to the pull direction everywhere (sampled 5 x 5):
+    then it is the side of a shape extruded along the pull, and its drafted form is the ruled
+    surface through its cross-section on the fixed plane with rulings leaning by the angle.
+    Its exact profile curve is `SurfaceOfExtrusion.BasisCurve`; a section of the surface is
+    an approximation with C0 knots, which `Part.OffsetCurve` refuses ("Offset on C0 curve").
+  - **OpenCASCADE booleans and offset-curve geometry**: a solid with a face built on an
+    `OffsetCurve` edge is split wrongly or not at all by `generalFuse`; convert offsets to
+    B-splines (`OffsetCurve.toBSpline(u0, u1)`; same parameters, so a ruled surface between
+    two offsets stays exact along its rulings). Lines and circles: build the exact offset.
+  - **`face.extrude()` against the face's own normal makes an inside-out prism** (valid,
+    positive volume): splits and booleans with it then silently go wrong. `draft_walls._prism`
+    reverses the face first.
+  - **`generalFuse([compound])` does not join the faces inside the compound to each other**: a
+    drafted wall plus its tangent strip passed as one compound leaked (the zone was not split
+    at all). Pass the faces as separate arguments (`list(tool.Faces)`).
+  - **A splitting tool exactly as tall as the solid it splits** (coincident top / bottom
+    edges) does not split it: make the solid shorter than the tool.
+  - **Fusing many thin overlapping wedges first (`multiFuse`) and then cutting** left a 270 mm^3
+    chunk of a part loose; `shape.cut([pieces])` (all pieces as tools of one boolean) is right.
+  - **`removeSplitter()` raises `OCCError(' ')` when several faces of one B-spline surface
+    should merge** (seen after slicing a drafted wall into three by a zone cut). Avoid cutting
+    the drafted wall into pieces: cut only the region that must go.
+  - **OpenCASCADE's volume (and face area) of B-spline geometry is off**: a drafted ellipse
+    prism 2122.30 by `Volume` against 2112.50 exact (+0.46 %); a spline-bounded flat face's
+    `Area` 7e-5 off. A mesh at 0.002 mm deflection is right to ~1e-5; golden models with
+    free-form faces use `"volume_by": "mesh"`. `BoundBox` of B-spline solids is loose (poles).
+  - Corner rule where a drafted wall ends (each region belongs to one wall): outside corner,
+    material to add stops at the next face as drafted (filled up to where the two drafted
+    surfaces meet, like a mitre), material to take away needs no trim (the part bounds it);
+    inside corner, material to take away stops at the next face as drafted, material to add
+    at the next face as it was. Only near the end (a full cone or an extended plane crosses
+    the wall again further on). A smooth join with a wall drafted with it needs nothing.
 - **Components (2026-10-13, branch `sf/components`)**: a component is an `App::Part`; the
   root is the document itself; the active component is the active body's container, else
   FreeCAD's `"part"` active-object slot (`components.active_component`); `find_body()` /
@@ -1694,6 +1779,186 @@ Control", `parity/timeline-browser.md` "The 3D view's hover lights the browser r
 - Not checked by Luca on Windows. Not built: Fusion's Active Component Visibility, People /
   sharing / locking (out of scope), a Drawings tab (drawings live inside the design), moving
   a whole folder. The CHANGELOG gets these in the next release's section.
+### Session log: CI red on `experimental` after the CADCraft/Draft push (2026-10-23)
+
+Luca: "the action for experimental failed. Is that something to be worried about? Seems like
+you aren't" - I had pushed without watching CI. **After every push, watch the GitHub run.**
+Three causes in the tests, and one small real bug (last bullet):
+
+- **Window size leaked between scenarios** (21 + 10 failures): `export_report_card` shrinks the
+  window to 1100 x 700 and "maximize" does nothing under xvfb (no window manager); FreeCAD
+  saves it (`MainWindow/Geometry`, `Maximized`) and every later scenario of the shard got a
+  838 x 470 3D view (normal 1538 x 769). run_tests.sh now resets those keys with
+  MainWindowState before each scenario; the scenario puts the window back by hand.
+- **Relative `--freecad`** (CI passes `.sciforge-cache/freecad`): the unit tests that start
+  FreeCAD run from the module folder, so the path pointed nowhere. Made absolute.
+- **Docs example get_drawing#1**: the title block's DrawnBy is the login name (root here,
+  runner on CI); masked like dates.
+- **Real bug, sciforge-cli only**: `tools` and `docs` lost a short answer whenever stdout was
+  a pipe (a script or an AI app reading it): the CLI ends with os._exit, which does not flush.
+  Hidden here because this sandbox sets PYTHONUNBUFFERED=1; reproduced as user `runner` with
+  `env -i`. Fixed (flush before os._exit); the unit test now strips PYTHONUNBUFFERED. The
+  FreeCAD-backed commands (unbuffered stream) and the MCP server (flush per message) were
+  never affected; the SciForge app itself does not use this code. run_tests.sh now prints
+  failing unit tests into the CI log (CI showed only the last 3 lines).
+- **To reproduce CI here**: a user `runner`, `env -i` (no PYTHONUNBUFFERED), python3.12, and
+  pwsh (PowerShell for Linux, from its GitHub release) on PATH: same 11 skips as CI.
+
+### Session log: Draft in real time, live pictures, safe sketch geometry (branch `experimental`, 2026-10-22/23)
+
+Luca: "draft is still extremely slow ... the angle dragger doesn't even update, it waits behind
+for the model ... 1-3 seconds" and "fix the sketch tools bug, the loose end". Then: timing and
+drag feel are tested by LUCA on real hardware with his mouse; agents do not tune or gate on
+sandbox timings (software OpenGL) - tests prove correctness only.
+
+- **Handles never wait for the model** (taskui.PollOnMove: every dialog's handle takes each
+  mouse move at once; Panel.schedule(settle=True)/REST_FIRST/_slow/_rest_needed/HEAVY_FACES:
+  a slow exact rebuild runs only when the mouse rests (0.2 s, longer while the button is held)
+  or on release (handle_released), never between two moves).
+- **Live pictures** while dragging, exact solid at the rest: Draft (draft_live*.py: the picked
+  faces' own triangles moved; every point checked on the exact solid), Fillet/Chamfer
+  (fillet_live*.py: rolling-ball bands; exact on planes/cylinders/extrusions, approximate on
+  doubly curved faces and 3-edge corners), Press Pull/Offset Face, Shell, Extrude (live_core.py,
+  live_shapes.py). Golden `live_blend_expect` checks pictures against exact results.
+- **Limit search in the background** (value_limits.Background, limit_refuse/limit_waits/
+  limit_accept): Draft, Shell, Press Pull, Fillet/Chamfer (own version), Thicken, Pipe, Torus,
+  Coil, Gear; not Extrude taper/thin and Revolve (their trials run in the document feature),
+  not the sketch fillet/chamfer. A local validity check instead of BRepCheck was measured and
+  rejected (no cheaper when safe). Draft past the limit: the held solid ~3 s after the rest
+  on a 179-face part (deferred).
+- Draft speed: undrafted() 0.52 s -> 13 ms, draft_shape results cached, scratch objects never
+  tessellated; FreeCAD's Draft past the steepest angle made a broken solid silently (now held).
+- **Sketch geometry kept** (sketch_geometry.py set_geometry/restore): assigning sketch.Geometry
+  lost construction flags and geometry ids; fixed everywhere (sketch_explain, scale, text,
+  derive, sketch Scale delete, projected edges following replaced steps).
+- Sketch entry: the Sketcher workbench switch costs ~100 ms each way (measured); not removed
+  (needs EditingWorkbench handling, probably a core patch); toolbars now hidden before layout.
+- Docs runner ignores dates in recorded answers (title blocks take today's date).
+- Luca to test on his PC: Draft/Fillet/Chamfer/Shell/Press Pull/Extrude drags on a big part.
+
+### Session log: Eight features from the CADCraft study (branch `experimental`, 2026-10-21/22)
+
+Luca asked to study github.com/storytold/cadcraft (an AutoCAD-like 2D app in Rust, MIT/Apache)
+and draft ideas (docs/sciforge/dev/cadcraft-lessons.md), then approved all of them plus one of
+his own ("limit edits to stop at that limit"), "in one go", with ultracode (multi-agent
+workflows). Built by 9 agents in separate git worktrees (branches wf/*), merged on a local
+`integration` branch, then 10 adversarial reviewers + 10 fixers (78 findings, all reproduced
+and fixed with regression tests; branches fix/*), then the full suite. Two machine restarts cut
+agents off; the workflow was made restart-proof (fixed worktrees, WIP commits). Each agent's
+detailed notes: docs/sciforge/sessions/2026-10-21-*.md (build) and 2026-10-22-*.md (fixes,
+integration). Summary:
+
+- **Values stop at the limit** (value_limits.py): Fillet (all kinds), Chamfer (Distance-and-
+  Angle now checked as the equivalent two-distance bevel: FreeCAD segfaulted), Draft, Shell,
+  Press Pull / Offset Face, Thicken, Extrude taper/thin, Revolve, Torus, Coil, Pipe, Gear,
+  sketch fillet/chamfer. Bisection once (time-budgeted), cached per inputs, rounded to the
+  box's precision and verified. Not held (errors as before): Hole/Thread, Sweep taper/twist,
+  Rib, Web, some surface tools, MESH shell (reasons in the parity docs). AI tools do NOT clamp:
+  they fail and state the largest value that fits (ai/value_fit.py).
+- **Sketch explains itself** (sketch_explain*.py): conflicts/repeats name the culprits in
+  Fusion terms with red rings; padlock for fully constrained sketches in browser + timeline,
+  "N left to define" in the Sketch Palette; inferred constraints added one by one in priority
+  order when the batch does not fit; Change Parameters and the dimension box refuse a value
+  that breaks a step (parameters.change_checked), naming it.
+- **Export/import reports** (export_report*.py): a card after every export lists what the
+  format does not keep (counted from the design, verified by round trips: e.g. STEP colours
+  only with the window open, IGES loses names, 3MF reader ignores the unit); imports say what
+  did not come in. Also in the AI export/import tools and the CLI.
+- **AI** (sciforge/ai/catalog, executor.py, actions/, headless.py, cli.py, docs_core.py,
+  render_core.py): one catalogue of 117 tools feeding MCP, bridge, chat and CLI (the original
+  16 unchanged); checking tools inspect_design / query_geometry / check_design / render (also
+  headless: own software renderer) / diff_design; MCP resources + prompts; honest retries;
+  `tools/sciforge/sciforge-cli` (info, convert, run, check, render, tools, docs, mcp
+  --headless). AI docs in src/Mod/SciForge/docs/ai (handbook, selectors cookbook, 12 tested
+  recipes, a generated page per tool with recorded examples, golden-model index, copy of the
+  user docs) via docs_search / docs_read / examples_search and MCP resources; regenerate with
+  `python3 tools/sciforge/make_ai_docs.py` (a unit test fails when stale). Tests: headless
+  runner calls every tool; docs_runner runs every documented call; agent end-to-end over MCP.
+- **Parity script**: tools/sciforge/parity.py + data/fusion-menus.txt (631 Fusion names from
+  memory, 125 marked "?", Luca can correct) -> docs/sciforge/parity-checklist.md: 457 / 631
+  (72%; 84% without the areas Luca left out). core-workflows.md (6 daily workflows with
+  evidence); remaining-gaps.md is the one ranked work list (G-xx).
+- **Speed with big designs**: doc_epoch.py (timeline/browser re-read only after changes: idle
+  cost 251 -> 38 ms/s), undo_fast.py (Undo/Redo without rebuild when FreeCAD restored the right
+  shapes: 15-19 s -> 0.7-1.7 s on a 1716-face part; drawings and other dependents without a
+  Shape are refreshed), refind cache (31 s -> <1 s), timeline button reuse, perf_big_model
+  scenario, perf_guard.py (warns at >2x baseline; SCIFORGE_PERF_STRICT=1 fails).
+- **Drawing PDFs** (drawing_pdf_*.py): same page pixel for pixel, plus 6 switchable layers,
+  searchable text for everything TechDraw draws as shapes (title block, parts list), links,
+  metadata; PDF/A gets no layers.
+- Full suite on the merge: 409 / 427 scenarios first time, 12 more alone (load timing), the
+  last 4 fixed: the circular pattern's 270 deg handle (a limits regression), Revolve notes
+  ("both sides together make one full turn"), and the largest sketch fillet/chamfer now uses
+  the curve up whole (kept as construction, no 0.003 mm sliver; `set_geometry` keeps
+  construction points). Open: sketch_explain.py, scale.py, text.py also reset sketch geometry
+  in the unsafe way (construction points become normal) - a suggested task.
+- Findings: Fusion menu names are from memory; FreeCAD's Coin/OCC cannot build the picture off
+  the main thread (no background tessellation); the RenderCache/VBO settings showed no effect
+  under software GL (measure on a real GPU).
+
+### Session log: speed all round (branch `experimental`, 2026-10-21)
+
+Luca: "draft is only one example of things being slow. Im thinking of optimizing everything all
+around." (after "make things run fast and smooth").
+
+- Edits roll back like Fusion (`edit_rollback.py`, `preview.hold`): while an earlier step is
+  edited, the later steps are rolled back (hidden, not rebuilt) and come back at OK. 19 GUI
+  scenarios had measured previews with the later steps in; updated to Fusion semantics (the
+  result after OK is still checked). The loft QA now drags its centerline sketch before the
+  loft first (Fusion cannot pick what comes later).
+- Bugs the rollback uncovered: a hardware part's own Hole step was rolled back with it (now
+  the marker goes past the part's hole too, `edit_rollback._companions`); the timeline click
+  left the step selected whole, and FreeCAD turns a click on a whole-selected object into its
+  parent (the body), so the first face click in the edit picked the body
+  (`taskui._unselect_whole`).
+- Benchmark `SciForgeTests/gui/scenarios/perf_benchmark.py` (run alone:
+  `run_tests.sh --scenario perf_benchmark`): writes perf-report.md/json with open / change /
+  finish times and cProfile tops. Per change, before -> after: Press Pull 267 -> ~160 ms,
+  Fillet 218 -> ~160, Chamfer 216 -> ~160. Fixes: Press Pull read `face.Surface` thousands of
+  times per preview (descriptors read once, unmoved faces cached per drag); Fillet/Chamfer
+  built the round twice (trial + feature): after a good preview the feature is changed
+  directly and checked, the trial runs first only after a failure; `isValid()` asked up to 3x
+  per preview (`shape_checks.is_valid` remembers it); blend recomputes honour held steps,
+  Fillet's OK rebuilds them and repairs later blends.
+- Found, not changed: entering a sketch costs ~200 ms switching to the Sketcher workbench and
+  back (ViewProviderSketch's EditingWorkbench); SciForge's sketch mode hangs on that switch
+  (`shell.on_workbench`), so changing it is a bigger job. Timeline marker: SciForge's own work
+  ~40 ms, the rest is drawing under xvfb. Edits opened by double-click in the 3D view do not
+  roll back (they nearly always open the last step).
+- Fixed: warnings "profile shading" / "sketch text" when a design closed with a sketch drawn.
+- Tests: the 19 rollback scenarios, 33 Fillet / Chamfer / Press Pull scenarios, all passing.
+
+### Session log: Draft of curved faces (branch `experimental`, 2026-10-20)
+
+Luca: "some of the workflows that id regularly do on fusion dont exactly work on SciForge. one of
+them is the draft tool. I cant seem to select curved faces ... New branch time. Call it
+experimental ... our first order of bisness is getting the draft tool to fusions standards".
+Then, asked by the session: Fusion's Draft "accepts freeform stuff. just confirmed it myself".
+(Autodesk's help site does not resolve from the sandbox; Luca's check is the source.)
+
+- Cause: `drafting.why_not` (the dialog's selection gate) refused every face but planes and
+  round faces about the pull direction, because FreeCAD's Draft cannot tilt the others.
+- Built `sciforge/draft_walls.py`: SciForge's own draft of walls (see the findings). Wired in
+  `drafting._scratch` (FreeCAD's Draft for the faces it can do, draft_walls for the rest and
+  the walls touching them); `why_not` takes any wall; `needs_own_feature` /
+  `needs_engine` make such a step SciForge's `DraftFeature` (edits switch kinds both ways).
+- Golden format: sketch curves `ellipse`, `spline_loop`, `segments`; `"volume_by": "mesh"`;
+  selector type `extrusion` and filter `along` (also in the AI tools' schema and help);
+  `sf_draft_edit` uses `drafting.update` (a step may have to change kind).
+- Tests, all passing: scenario `draft_curved` (50 checks: ribbon Draft, XY square, the spline
+  wall clicked takes its 8-wall tangent chain, live preview, 3 deg, Tangent Chain off / on,
+  OK, Ctrl+Z / Ctrl+Y, timeline edit, 40 deg refused with the reason, 5 deg, a leaning
+  free-form wall refused, Cancel); 6 new golden models (analytic: Steiner's offset area for
+  smooth outlines, slice integration for sharp corners); unit `test_draft_curved_schema.py`;
+  a 24-case geometry suite run by hand (ellipse in / out / hinge mid, spline wall alone,
+  sharp and tangent corners in and out, spline pocket, ledge, L-shape, window, sloped top,
+  hinge below the part, too tight a curve refused). Regression: `--only base` (unit 1795,
+  golden 446 + 2 known xfail, smoke, journey), scenarios `shell_draft_draft`,
+  `shell_draft_qa`, `shell_draft_qa_draft`, `shell_draft_qa_mix`, `modify2_draft`,
+  `modify2_bodies`.
+- Speed: 0.5 s (ellipse) to 0.9 s (8-wall tangent chain) per preview.
+- Open: leaning free-form walls (a tapered extrude's B-spline sides, a loft) are refused;
+  sloped caps leave a sliver; Fusion behaviour on both unconfirmed (parity doc's gaps).
 
 ### Session log: 0.1.0-beta, R1-R4 built by three parallel agents, merged (`develop`, 2026-10-20)
 

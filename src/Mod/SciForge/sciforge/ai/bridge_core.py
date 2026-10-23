@@ -256,3 +256,21 @@ def _pid_alive_windows(pid):
             kernel32.CloseHandle(handle)
     except Exception:
         return True
+
+
+# -- answers ------------------------------------------------------------------------------
+def compact_json(value, level=0, width=100):
+    """JSON indented one space per level, with every list or object that fits in `width`
+    characters on one line."""
+    flat = json.dumps(value, ensure_ascii=False, separators=(", ", ": "), default=str)
+    if not isinstance(value, (dict, list)) or len(flat) + level <= width or not value:
+        return flat
+    pad = " " * (level + 1)
+    if isinstance(value, dict):
+        items = [
+            "%s%s: %s" % (pad, json.dumps(str(k), ensure_ascii=False), compact_json(v, level + 1))
+            for k, v in value.items()
+        ]
+        return "{\n" + ",\n".join(items) + "\n" + " " * level + "}"
+    items = [pad + compact_json(v, level + 1) for v in value]
+    return "[\n" + ",\n".join(items) + "\n" + " " * level + "]"

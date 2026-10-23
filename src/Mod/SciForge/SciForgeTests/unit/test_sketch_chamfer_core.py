@@ -89,7 +89,46 @@ class Setbacks(unittest.TestCase):
         with self.assertRaises(core.ChamferError):
             core.check_fits(25.0, 5.0, 20.0, 40.0)
         with self.assertRaises(core.ChamferError):
-            core.check_fits(5.0, 20.0, 40.0, 20.0)
+            core.check_fits(5.0, 20.1, 40.0, 20.0)
+
+    def test_reaching_the_end_takes_the_line_whole(self):
+        # Luca's limits (2026-10-21): the largest chamfer runs to the far end of a line and
+        # takes it whole (no sliver of a line is left); it fits
+        core.check_fits(5.0, 20.0, 40.0, 20.0)
+        self.assertTrue(core.takes_whole(20.0, 20.0))
+        self.assertTrue(core.takes_whole(20.0 - 1e-9, 20.0))
+        self.assertFalse(core.takes_whole(19.99, 20.0))
+
+
+class Largest(unittest.TestCase):
+    def test_equal_the_shorter_line(self):
+        self.assertEqual(core.largest("equal", "distance", math.pi / 2, 40.0, 17.5), 17.5)
+
+    def test_two_distances_each_its_line(self):
+        self.assertEqual(core.largest("two_distances", "distance", math.pi / 2, 40.0, 20.0), 40.0)
+        self.assertEqual(core.largest("two_distances", "distance2", math.pi / 2, 40.0, 20.0), 20.0)
+
+    def test_distance_and_angle(self):
+        # square corner, 30 degrees on the first line: the second setback is d tan 30
+        a30 = math.radians(30)
+        d = core.largest("distance_angle", "distance", math.pi / 2, 40.0, 20.0, a30)
+        self.assertAlmostEqual(d, 20.0 / math.tan(a30))  # the second line runs out first
+        s1, s2 = core.setbacks("distance_angle", math.pi / 2, d, a30)
+        self.assertAlmostEqual(s2, 20.0)
+        d = core.largest("distance_angle", "distance", math.pi / 2, 30.0, 20.0, a30)
+        self.assertAlmostEqual(d, 30.0)  # the first line runs out first
+        # the default angle (45 in a square corner): both setbacks equal
+        d = core.largest("distance_angle", "distance", math.pi / 2, 40.0, 20.0)
+        self.assertAlmostEqual(d, 20.0)
+
+    def test_the_largest_fits_exactly(self):
+        point, u1, u2, r1, r2, angle = core.corner(BOTTOM, RIGHT)
+        d = core.largest("equal", "distance", angle, r1, r2)
+        s1, s2 = core.setbacks("equal", angle, d)
+        core.check_fits(s1, s2, r1, r2)
+        self.assertTrue(core.takes_whole(s2, r2))
+        p1, p2 = core.points(point, u1, u2, s1, s2)
+        self.assertAlmostEqual(p2[1], 20.0)  # the chamfer meets the right line's far end
 
 
 class Placing(unittest.TestCase):

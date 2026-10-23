@@ -425,7 +425,8 @@ d_pipe_editing.wait_ms = 1500
 
 
 def d_pipe_edit_ok():
-    h.check("d4: 40 pi + the coil", near(vol(), 40.0 * PI + 54.0 * PI * PI, 1e-5), vol())
+    # the coil (made after the pipe) waits while the pipe is edited (Fusion)
+    h.check("d4: 40 pi", near(vol(), 40.0 * PI, 1e-5), vol())
     h.task_button("OK")
 
 
@@ -433,6 +434,7 @@ d_pipe_edit_ok.wait_ms = 1500
 
 
 def d_delete_pipe():
+    h.check("d4 kept: 40 pi + the coil", near(vol(), 40.0 * PI + 54.0 * PI * PI, 1e-5), vol())
     ti.menu("Pipe 1", "Delete")
 
 

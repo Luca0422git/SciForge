@@ -52,9 +52,16 @@ def end_transaction(doc, abort=False):
 
     In a design without history (or for an open base feature's bodies) the steps the
     command made are first baked into the bodies, in this same undo step (direct.py)."""
-    if not abort and _bakes(doc):
-        return
+    from . import edit_rollback
+
+    if not abort:
+        edit_rollback.restore(doc)  # the marker back after an edit, in this undo step
+        catch_up(doc)  # the steps after the marker, in this undo step
+        if _bakes(doc):
+            return
     if abort:
+        edit_rollback.drop(doc)
+        release(doc)
         doc.abortTransaction()
     else:
         doc.commitTransaction()
@@ -78,9 +85,135 @@ def _bakes(doc):
 
 
 def recompute(doc):
-    """doc.recompute() without FreeCAD's failure messages in the Report view."""
+    """doc.recompute() without FreeCAD's failure messages in the Report view. While a
+    dialog holds the steps after the history marker (hold()), those wait."""
     with quiet():
-        doc.recompute()
+        names = _waiting(doc)
+        if names:
+            doc.recompute([o for o in doc.Objects if o.Name not in names])
+            _refresh_bodies(doc, names)
+        else:
+            doc.recompute()
+
+
+def _refresh_bodies(doc, names):
+    """A body waits with the steps after the marker (it depends on all its steps), but its
+    shape is only its Tip's: rebuilt alone (not its steps), so body.Shape is the design as
+    it is at the marker, as Fusion shows it while a step is edited."""
+    for name in names:
+        body = doc.getObject(name)
+        if body is None or body.TypeId != "PartDesign::Body":
+            continue
+        tip = body.Tip
+        if tip is not None and tip.Name in names:
+            continue
+        try:
+            body.recompute()  # this object only
+        except Exception:
+            pass
+
+
+# -- the steps after the history marker wait while a dialog is open ---------------------------
+# Fusion computes nothing after the history marker, and editing a step rolls the marker to it
+# (Autodesk: later features are greyed out and not computed; everything is computed on the way
+# forward when the edit ends). FreeCAD recomputes every step that depends on a changed one,
+# wherever the marker stands: a preview while editing the first of 30 steps rebuilt all 30 on
+# every change. While a SciForge dialog is open (taskui.Panel), its previews rebuild only what
+# is not after the marker; the steps after it, and what depends on them (the body), wait. They
+# are rebuilt once when the dialog's undo step closes (catch_up(), in that same undo step).
+# taskui.edit_object rolls the marker to the step being edited, so the steps after it wait.
+_HELD = {}  # document name -> names of the objects waiting
+
+
+def hold(doc):
+    """Make the steps after the history marker wait (a dialog opens)."""
+    try:
+        names = _after_marker(doc)
+    except Exception as exc:
+        from . import warn
+
+        warn("previews rebuild every step: %s" % exc)
+        names = set()
+    if names:
+        _HELD[doc.Name] = frozenset(names)
+    else:
+        _HELD.pop(doc.Name, None)
+
+
+def catch_up(doc):
+    """The dialog is done: the steps that waited are rebuilt now. True when some waited."""
+    try:
+        name = doc.Name
+    except Exception:
+        return False  # the document was closed
+    if _HELD.pop(name, None) is None:
+        return False
+    recompute(doc)
+    return True
+
+
+def release(doc):
+    """Forget the waiting steps without rebuilding them (the dialog was cancelled: they go
+    back to what they were with the undo step)."""
+    try:
+        _HELD.pop(doc.Name, None)
+    except Exception:
+        pass
+
+
+def holding(doc):
+    try:
+        return doc.Name in _HELD
+    except Exception:
+        return False
+
+
+def _after_marker(doc):
+    from . import timeline_ops
+
+    timeline = timeline_ops.timeline(doc, deps=False)
+    names = set()
+    for item in timeline.items:
+        if item.state != "rolled_back":
+            continue
+        obj = doc.getObject(item.name)
+        if obj is None:
+            continue
+        names.add(obj.Name)
+        names.update(o.Name for o in obj.InListRecursive)
+    return names
+
+
+def _waiting(doc):
+    """The objects that wait now: the held ones, except the open dialog's own step(s) and
+    what they are built on (a dialog may open on a step that is after the marker)."""
+    try:
+        names = _HELD.get(doc.Name)
+    except Exception:
+        return None
+    if not names:
+        return None
+    try:
+        from . import taskui
+
+        # the dialog being built or open (taskui.current() would forget a dialog that is
+        # not shown yet: its first preview runs before Gui.Control.showDialog)
+        panel = taskui._OPEN.get("dialog")
+        if panel is not None and getattr(panel, "_closed", False):
+            panel = None
+        own = [panel.feature()] if panel is not None else []
+        own += [getattr(m, "target", None) for m in getattr(panel, "members", [])]
+        keep = set()
+        for obj in own:
+            if obj is None or obj.Document is not doc:
+                continue
+            keep.add(obj.Name)
+            keep.update(o.Name for o in obj.OutListRecursive)
+        if keep & names:
+            names = names - keep
+    except Exception:
+        pass
+    return names
 
 
 class EscapeCancels:

@@ -2,10 +2,13 @@
 # Runs every SciForge test that does not need a full SciForge build:
 #   1. unit tests          (plain Python, no FreeCAD)
 #   2. golden models       (real FreeCAD, headless)
+#   2b. headless AI tools  (every AI tool once, real FreeCAD without a window, every tool
+#                           call of the documentation for AI models, and an AI agent
+#                           building and checking a part only through MCP)
 #   3. GUI smoke test      (real FreeCAD GUI on a virtual screen via xvfb-run)
 #
 #   tools/sciforge/run_tests.sh [--freecad DIR] [--out DIR]
-#                               [--only unit|golden|gui|scenarios|base]
+#                               [--only unit|golden|headless|gui|scenarios|base]
 #                               [--scenario NAME[,NAME...]]   (files of SciForgeTests/gui/
 #                                                   scenarios; several share one profile)
 #                               [--shard K/N]       (every N-th scenario, from the K-th)
@@ -14,7 +17,7 @@
 #            an unpacked SciForge AppImage, or a SciForge install prefix containing
 #            bin/SciForgeCmd (bin/FreeCADCmd for a build before the branding pass)
 # --out      where reports and the screenshot go (default .sciforge-cache/test-output)
-# --only     base = everything but the scenarios (unit, golden, smoke, journey)
+# --only     base = everything but the scenarios (unit, golden, headless, smoke, journey)
 # --shard    splits the scenarios over N runs (CI runs them side by side): 1/4 runs the
 #            1st, 5th, 9th... scenario in name order, 2/4 the 2nd, 6th... (N runs cover all)
 #
@@ -46,6 +49,10 @@ while [ $# -gt 0 ]; do
 done
 
 MODULE="${REPO}/src/Mod/SciForge"
+# An absolute FreeCAD folder: the unit tests run from the module folder and start FreeCAD
+# themselves (SCIFORGE_FC_CMD), so a relative --freecad (CI passes .sciforge-cache/freecad)
+# pointed nowhere there
+if [ -d "${FREECAD_DIR}" ]; then FREECAD_DIR="$(cd "${FREECAD_DIR}" && pwd)"; fi
 mkdir -p "${OUT}"
 OUT="$(cd "${OUT}" && pwd)"
 FAILED=()
@@ -84,13 +91,22 @@ export LANG=C.UTF-8
 # No test goes online: the update check (sciforge/update_core.py) refuses every address but
 # this computer's own (the tests' fake GitHub), and does not even start by itself.
 export SCIFORGE_NO_INTERNET=1
+# The unit tests that check geometry against FreeCAD's exact solids run FreeCAD headless
+# themselves (SciForgeTests/unit/test_live_shapes_freecad.py); skipped without it.
+if [ ${#FC_CMD[@]} -gt 0 ]; then
+    export SCIFORGE_FC_CMD="$(printf '%q ' "${FC_CMD[@]}")"
+fi
 
 run_unit() {
     echo "== [SciForge] unit tests"
     (cd "${MODULE}" && python3 -m unittest discover -s SciForgeTests/unit -v) > "${OUT}/unit.log" 2>&1
     local rc=$?
     tail -3 "${OUT}/unit.log"
-    [ $rc -eq 0 ] || FAILED+=("unit")
+    if [ $rc -ne 0 ]; then
+        # The failures themselves, so a CI log says which test failed and why
+        sed -n '/^======/,/^Ran [0-9]* tests/p' "${OUT}/unit.log" | head -200
+        FAILED+=("unit")
+    fi
 }
 
 need_freecad() {
@@ -115,6 +131,44 @@ except Exception as exc:
     print("no golden report: %s" % exc); sys.exit(1)
 sys.exit(0 if report.get("passed") else 1)
 EOF
+}
+
+# Every AI tool called once in real FreeCAD without a window (SciForgeTests/headless).
+run_headless() {
+    echo "== [SciForge] headless AI tools"
+    need_freecad headless || return
+    SCIFORGE_HEADLESS_OUT="${OUT}" timeout 1200 "${FC_CMD[@]}" -c \
+        "from SciForgeTests.headless import runner; runner.main()" > "${OUT}/headless.log" 2>&1
+    grep -aoE "\[SciForge\] headless (FAIL|MISSING|summary).*" "${OUT}/headless.log"
+    python3 - "${OUT}/headless-report.json" <<'EOF2' || FAILED+=("headless")
+import json, sys
+try:
+    report = json.load(open(sys.argv[1]))
+except Exception as exc:
+    print("no headless report: %s" % exc); sys.exit(1)
+sys.exit(0 if report.get("passed") else 1)
+EOF2
+    # Every tool call shown in the documentation for AI models, and every tool's reference
+    # example, run in real FreeCAD (SciForgeTests/headless/docs_runner.py).
+    echo "== [SciForge] documentation examples (headless)"
+    SCIFORGE_HEADLESS_OUT="${OUT}" timeout 1200 "${FC_CMD[@]}" -c \
+        "from SciForgeTests.headless import docs_runner; docs_runner.main()" > "${OUT}/docs.log" 2>&1
+    grep -aoE "\[SciForge\] docs (FAIL|summary).*" "${OUT}/docs.log"
+    python3 - "${OUT}/docs-report.json" <<'EOF3' || FAILED+=("docs examples")
+import json, sys
+try:
+    report = json.load(open(sys.argv[1]))
+except Exception as exc:
+    print("no docs report: %s" % exc); sys.exit(1)
+sys.exit(0 if report.get("passed") else 1)
+EOF3
+    # An AI agent builds a part and checks it only through MCP, as an AI app does
+    # (tools/sciforge/sciforge-cli mcp --headless; SciForgeTests/headless/agent_e2e.py).
+    echo "== [SciForge] AI agent end to end (MCP, headless)"
+    SCIFORGE_FREECAD="${FREECAD_DIR}" SCIFORGE_CLI_PROFILE="${PROFILE}" timeout 900 python3 \
+        "${MODULE}/SciForgeTests/headless/agent_e2e.py" --out "${OUT}" \
+        > "${OUT}/agent-e2e.log" 2>&1 || FAILED+=("agent e2e")
+    grep -aoE "\[SciForge\] agent (FAIL|summary).*" "${OUT}/agent-e2e.log"
 }
 
 # run_gui_script NAME SCRIPT LOG RESULT: one GUI test in a real FreeCAD window.
@@ -182,13 +236,18 @@ run_scenarios() {
         # Each scenario starts from FreeCAD's own window layout: one left behind in the shared
         # profile (CI #135: with the Data Panel docked, the next scenario's browser came out
         # wider and FreeCAD sent a press on a browser row to the 3D view) is not this one's.
+        # Its window size too: export_report_card shrinks the window to 1100 x 700, and
+        # without a window manager (xvfb) "maximize" does not bring it back, so every later
+        # scenario of the shard ran in a 838 x 470 3D view.
         if [ -f "${PROFILE}/user.cfg" ]; then
             python3 - "${PROFILE}/user.cfg" <<'PYEOF' || true
 import re, sys
 path = sys.argv[1]
 text = open(path, encoding="utf-8").read()
-clean = re.sub(r'\s*<FCText Name="MainWindowState"[^>]*>[^<]*</FCText>', "", text)
-clean = re.sub(r'\s*<FCText Name="MainWindowState"[^>]*/>', "", clean)
+clean = text
+for kind, name in (("FCText", "MainWindowState"), ("FCText", "Geometry"), ("FCBool", "Maximized")):
+    clean = re.sub(r'\s*<%s Name="%s"[^>]*>[^<]*</%s>' % (kind, name, kind), "", clean)
+    clean = re.sub(r'\s*<%s Name="%s"[^>]*/>' % (kind, name), "", clean)
 if clean != text:
     open(path, "w", encoding="utf-8").write(clean)
 PYEOF
@@ -231,11 +290,12 @@ EOF
 case "${ONLY}" in
     unit) run_unit ;;
     golden) run_golden ;;
+    headless) run_headless ;;
     gui) run_gui ;;
     scenarios) run_scenarios ;;
-    base) run_unit; run_golden; run_gui_base ;;
-    "") run_unit; run_golden; run_gui ;;
-    *) echo "--only must be unit, golden, gui, scenarios or base" >&2; exit 2 ;;
+    base) run_unit; run_golden; run_headless; run_gui_base ;;
+    "") run_unit; run_golden; run_headless; run_gui ;;
+    *) echo "--only must be unit, golden, headless, gui, scenarios or base" >&2; exit 2 ;;
 esac
 
 echo "== [SciForge] reports in ${OUT}"

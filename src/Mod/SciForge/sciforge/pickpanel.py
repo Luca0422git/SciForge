@@ -490,9 +490,9 @@ class PickPanel(Panel):
         self.remember_later(base)
 
     # -- preview ------------------------------------------------------------------------
-    def schedule(self):
+    def schedule(self, settle=False):
         if not self._closed:
-            super().schedule()
+            super().schedule(settle)
 
     def _recompute(self):
         if self._closed:

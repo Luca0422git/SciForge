@@ -16,7 +16,7 @@ import os
 
 
 from . import drawing
-from . import drawing_pdf, log, warn
+from . import log, warn
 
 SHEET_TYPE = "DrawingSheet"
 
@@ -234,30 +234,13 @@ def set_title_everywhere(page, values):
 
 # ------------------------------------------------------------------ export
 def export_pdf(page, path, which="all"):
-    """Fusion's Export PDF: all sheets in one PDF (which="all") or the given sheet."""
+    """Fusion's Export PDF: all sheets in one PDF (which="all") or the given sheet, each
+    page its sheet's size, with layers, searchable text, links and metadata
+    (drawing_pdf_export.py)."""
+    from . import drawing_pdf_export
+
     pages = sheets(page) if which == "all" else [page]
-    if len(pages) == 1:
-        return drawing.export_pdf(pages[0], path)
-    folder = os.path.dirname(path)
-    if folder:
-        os.makedirs(folder, exist_ok=True)
-    parts = []
-    stem, _ext = os.path.splitext(path)
-    try:
-        for i, sheet in enumerate(pages):
-            part = "%s.sheet%d.tmp.pdf" % (stem, i + 1)
-            drawing.export_pdf(sheet, part)
-            parts.append(part)
-        drawing_pdf.merge_files(parts, path)
-    finally:
-        for part in parts:
-            try:
-                os.remove(part)
-            except OSError:
-                pass
-    if not os.path.isfile(path) or os.path.getsize(path) == 0:
-        raise drawing.DrawingError("The PDF could not be written to %s." % path)
-    return path
+    return drawing_pdf_export.export(pages, path)
 
 
 def dxf_paths(page, path, which="all"):

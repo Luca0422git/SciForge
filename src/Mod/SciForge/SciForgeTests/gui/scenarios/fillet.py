@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Fillet (F) the way a Fusion user does it, only real input: ribbon button with nothing
-selected, click edges (again to drop one), type a radius, drag the blue arrow, an
-impossible radius (the dialog says why, OK waits, nothing in the Report view), OK,
+selected, click edges (again to drop one), type a radius, drag the blue arrow, a radius
+too big (held at the largest that fits and said: Luca's decision of 2026-10-21, Fusion
+refuses it; nothing in the Report view), OK,
 Ctrl+Z / Ctrl+Y, edit by double-clicking the timeline, Cancel, and a second fillet
 started with F on edges selected beforehand. Geometry checked with hand-derived
 formulas (see blend_steps)."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
@@ -132,37 +134,27 @@ def type_impossible():
 
 
 def impossible_reported():
+    """Luca, 2026-10-21: a radius past what fits is held at the largest that works (it was
+    refused, with the largest radius in the message, and OK waited)."""
     p = b.blend_panel()
-    text = p.message.text() if p else ""
-    h.check("too-big radius explained in the dialog", "too big" in text, text)
+    note = p.limit_label.text() if p and p.limit_label.isVisible() else ""
+    r = p.options.get("radius", 0) if p else 0
+    h.check("50 is held just under 10 mm (the front face)", 9.0 < r <= 10.0, r)
+    h.check("the dialog says so", note == "50 mm does not fit: limited to %.2f mm" % r, note)
+    h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
     h.check(
-        "preview keeps the last good result", b.close(h.solid_volume(), s["good"]), h.solid_volume()
+        "the preview shows that round", b.close(h.solid_volume(), one_edge(r)), h.solid_volume()
     )
     h.check(
         "nothing about it in the Report view",
         not b.report_has_kernel_errors(),
         b.report_has_kernel_errors(),
     )
-    b.no_popups("an impossible radius")
+    b.no_popups("a radius too big")
     h.shot("5-too-big")
 
 
-impossible_reported.wait_ms = 1500  # the "largest radius that fits" hint is worked out
-
-
-def hint_shown():
-    p = b.blend_panel()
-    text = p.message.text() if p else ""
-    h.check("dialog suggests the largest radius that fits", "largest radius" in text, text)
-
-
-def ok_refused():
-    h.task_button("OK")
-
-
-def still_open():
-    p = b.blend_panel()
-    h.check("OK waits while the radius does not fit", p is not None and Gui.Control.activeDialog())
+impossible_reported.wait_ms = 1500  # the largest radius that fits is worked out
 
 
 def type_radius_2():
@@ -434,9 +426,6 @@ h.run(
         dragged,
         type_impossible,
         impossible_reported,
-        hint_shown,
-        ok_refused,
-        still_open,
         type_radius_2,
         ok,
         after_ok,

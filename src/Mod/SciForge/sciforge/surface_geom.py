@@ -1862,6 +1862,16 @@ def thicken(faces, thickness, direction="one_side", thicken_type="sharp"):
         raise NeedsPick("Drag the arrow or type a thickness.")
     solids = []
     for piece in shells_or_faces(sew(faces)):
+        depths = (t / 2.0, -t / 2.0) if direction == "symmetric" else (t,)
+        for depth in depths:
+            radius = folds_at(piece, depth)
+            if radius is not None:
+                # OpenCASCADE builds a "valid" solid through the axis (a round wall of radius
+                # 10 thickened 50 inward came out 47124 mm3): refuse it, as a limit
+                raise SurfaceError(
+                    "The thickness is too big for these faces: a curved face (radius %.4g mm) "
+                    "would fold over itself. Use a smaller thickness." % radius
+                )
         try:
             solid = _thick_sharp(piece, t, direction)
             if thicken_type == "rounded":
@@ -1887,6 +1897,39 @@ def thicken(faces, thickness, direction="one_side", thicken_type="sharp"):
     if not solids:
         raise SurfaceError("Nothing could be thickened. Check the faces.")
     return compound(solids)
+
+
+def folds_at(piece, depth, samples=5):
+    """The radius of the tightest curve of `piece` that an offset by `depth` (along the faces'
+    normals, negative: against them) would fold over (it passes the centre of curvature), or
+    None when it does not. The curvature is sampled on a grid of each curved face."""
+    if abs(depth) < 1e-12:
+        return None
+    worst = None
+    for face in piece.Faces:
+        try:
+            if face.Surface.TypeId == "Part::GeomPlane":
+                continue
+            # curvatureAt() is the surface's (its own normal); the face may be reversed
+            sign = -1.0 if face.Orientation == "Reversed" else 1.0
+            u0, u1, v0, v1 = face.ParameterRange
+        except Exception:
+            continue
+        for i in range(samples):
+            for j in range(samples):
+                u = u0 + (u1 - u0) * (i + 0.5) / samples
+                v = v0 + (v1 - v0) * (j + 0.5) / samples
+                try:
+                    curvatures = face.curvatureAt(u, v)
+                except Exception:
+                    continue
+                for k in curvatures:
+                    k = sign * float(k)
+                    # positive k: the centre of curvature lies on the normal's side
+                    if abs(k) > 1e-12 and depth * k >= 1.0 - 1e-9:
+                        radius = 1.0 / abs(k)
+                        worst = radius if worst is None else min(worst, radius)
+    return worst
 
 
 def _offset_solid(piece, depth):

@@ -204,24 +204,29 @@ def baked(shape):
     return out
 
 
-def global_shape(obj):
+def global_shape(obj, copy=True):
     """The solid of a feature (or a body: its Tip) in design coordinates, as a copy.
 
     A body's Shape carries the body's own placement but not that of the component
     (App::Part) it sits in; a feature's carries neither (its parent is the body). Both get
-    their parent's global placement, so a body in a moved component is where it shows."""
+    their parent's global placement, so a body in a moved component is where it shows.
+
+    copy=False, for a caller that only reads the shape (measures, booleans): a shape that
+    needs no move is handed back as FreeCAD gives it, not copied (a copy of a part of 1700
+    faces took 0.2 s, for each body, on every check of what an extrusion runs into)."""
     shape = obj.Shape
     if shape.isNull():
-        return shape.copy()
-    out = baked(shape)
+        return shape.copy() if copy else shape
     try:
         parent = obj.getParentGeoFeatureGroup()
     except Exception:
         parent = None
-    if parent is not None:
-        place = parent.getGlobalPlacement()
-        if not place.isIdentity():
-            out.transformShape(place.toMatrix(), True)
+    place = parent.getGlobalPlacement() if parent is not None else None
+    if not copy and shape.Placement.isIdentity() and (place is None or place.isIdentity()):
+        return shape
+    out = baked(shape)
+    if place is not None and not place.isIdentity():
+        out.transformShape(place.toMatrix(), True)
     return out
 
 

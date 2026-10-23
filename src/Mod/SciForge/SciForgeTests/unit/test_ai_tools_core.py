@@ -1,7 +1,9 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""The AI tool registry (sciforge/ai/tools_core.py): well-formed schemas, plain-sentence
-validation, and design steps in exactly the golden models' language (checked with the
-golden format checker and against real model files). Runs without FreeCAD."""
+"""The first sixteen AI tools through sciforge/ai/tools_core.py (the names older code and
+installed extensions import; the tools live in the catalogue, sciforge/ai/catalog, whose own
+tests are in test_ai_catalog.py): well-formed schemas, plain-sentence validation, and design
+steps in exactly the golden models' language (checked with the golden format checker and
+against real model files). Runs without FreeCAD."""
 
 import ast
 import copy
@@ -117,8 +119,11 @@ class SchemaShape(unittest.TestCase):
             "get_design screenshot measure create_sketch extrude revolve fillet chamfer hole "
             "pattern shell set_parameter undo redo save export"
         ).split()
-        self.assertEqual(sorted(wanted), sorted(tools_core.TOOL_NAMES))
-        read_only = {t["name"] for t in tools_core.TOOLS if not t["changes_design"]}
+        # they keep their names, and come first (in the brief's order) in tools/list
+        self.assertEqual(sorted(wanted), sorted(tools_core.TOOL_NAMES[:16]))
+        read_only = {
+            t["name"] for t in tools_core.TOOLS if not t["changes_design"] and t["name"] in wanted
+        }
         self.assertEqual(read_only, {"get_design", "screenshot", "measure", "save", "export"})
 
     def test_schemas_use_only_the_supported_subset(self):
@@ -139,7 +144,7 @@ class SchemaShape(unittest.TestCase):
             json.dumps(tool["input_schema"])
 
     def test_valid_examples_cover_every_tool_and_pass(self):
-        self.assertEqual(set(VALID), set(tools_core.TOOL_NAMES))
+        self.assertEqual(list(VALID), list(tools_core.TOOL_NAMES[:16]))
         for name, args in VALID.items():
             self.assertEqual(tools_core.validate(name, args), [], name)
 
@@ -152,7 +157,8 @@ class SchemaShape(unittest.TestCase):
             )
             self.assertEqual(item["inputSchema"], source["input_schema"])
             self.assertIsNot(item["inputSchema"], source["input_schema"])
-            self.assertFalse(item["annotations"]["destructiveHint"])
+            if item["name"] in VALID:  # none of the first sixteen destroys anything
+                self.assertFalse(item["annotations"]["destructiveHint"])
         hints = {t["name"]: t["annotations"]["readOnlyHint"] for t in tools}
         self.assertTrue(hints["get_design"])
         self.assertTrue(hints["screenshot"])
@@ -584,7 +590,8 @@ class Titles(unittest.TestCase):
         self.assertEqual(title("undo", {}), "AI: Undo")
         self.assertEqual(title("fillet", None), "AI: Fillet")
         for name in tools_core.TOOL_NAMES:
-            self.assertTrue(title(name, VALID[name]).startswith("AI: "))
+            args = VALID.get(name) or tools_core.tool(name)["examples"][0]["arguments"]
+            self.assertTrue(title(name, args).startswith("AI: "), name)
 
 
 if __name__ == "__main__":

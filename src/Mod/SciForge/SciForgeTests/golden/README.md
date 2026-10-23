@@ -61,7 +61,9 @@ itself.
 ```
 
 Tolerances: `rel_tol` (default 1e-6, relative, for volume/area) and `abs_tol` (default 1e-4 mm,
-bounding box). Face, edge and solid counts must match exactly. Every result must be a valid solid.
+bounding box). `"volume_by": "mesh"` measures the volume on a fine triangle mesh (0.002 mm
+deflection, about 1e-5 of the volume, so pair it with `rel_tol` 1e-4) instead of OpenCASCADE's
+own integration, which is up to about 1 % off on B-spline faces (drafted free-form walls). Face, edge and solid counts must match exactly. Every result must be a valid solid.
 
 ### Steps
 
@@ -119,6 +121,10 @@ bounding box). Face, edge and solid counts must match exactly. Every result must
 
 | `sf_surface` | `id`, `kind` (extrude/revolve/sweep/loft/patch/ruled/offset/boundary_fill/thicken/trim/untrim/extend/stitch/unstitch/reverse_normal), `refs` / `refs2` / `refs3` (the dialog's boxes in order: `{"sketch", "at": [x, y]}` a sketch curve, chained; `{"sketch"}` all its curves; `{"plane"}`; `{"axis"}`; `{"step"}` that step's body; `{"step", "faces" / "edges": selector}`), `options` (the dialog's fields, `surface_core.KINDS`), `remove` [{`step`, `at`: [x, y, z]}] (Trim's pieces), `cells` [[x, y, z]] (Boundary Fill), `bodies` (Reverse Normal), `target` (a Join / Cut body) | the SURFACE tab's tools (`sciforge/ai/ops/surface_ops.py`, `sciforge/surface.py`: the dialogs' code). A surface result is measured by its area and faces (no volume) |
 | `sf_surface_edit` | `target`, `set` {options} | double-click a surface step in the timeline and change its fields |
+| `export_report_expect` | `format` (STEP/IGES/STL (Binary)/STL (ASCII)/3MF/OBJ/DXF), `target` (none = the whole design; [step ids] = their bodies; a component step; a sketch for DXF), `expect` {item key: count}, `unit`, `per_body`, `roundtrip` (default true) | what File > Export / Save As DXF says the file leaves out (`sciforge/export_report.py`); with `roundtrip` the file is written and read back to prove it (`golden/export_checks.py`) |
+| `import_report_expect` | `file` (open_box.stl / two_objects_inch.3mf / mixed.step / faces.igs / extras.dxf / extras.svg, made on the spot), `expect` {item key: count} | what Insert Mesh / Insert DXF / SVG / Open STEP say did not come in |
+| `hide_bodies` | `bodies` [step ids] | test setup: the bodies hidden (the browser's eye icon) |
+| `sketch_extras` | `target` (a sketch), `points` [[x, y]], `construction` [[x0, y0, x1, y1]] | test setup: points and construction lines added to a sketch |
 
 Conventions:
 - Sketch planes: the sketch normal is +Z for XY, **-Y for XZ** and +X for YZ (FreeCAD's origin).
@@ -131,7 +137,11 @@ Conventions:
 
 `rect [x0, y0, x1, y1]`, `center_rect [cx, cy, w, h]`, `circle [cx, cy, r]`,
 `polyline [[x, y], ...]` (closed), `polygon {center, radius, sides, rotation}`,
-`slot [x1, y1, x2, y2, width]`, `line [x0, y0, x1, y1]` (one open line).
+`slot [x1, y1, x2, y2, width]`, `line [x0, y0, x1, y1]` (one open line),
+`ellipse [cx, cy, major, minor]` (major along X), `spline_loop [[x, y], ...]` (a closed smooth
+B-spline through the points), `segments [...]` (a closed chain of `{"line": [x0, y0, x1, y1]}`,
+`{"arc": [cx, cy, r, a0, a1]}` in degrees, `{"spline": [[x, y], ...], "tangents": [[tx, ty],
+[tx, ty]]}`).
 
 Give geometry a `name` to get Fusion-style dimensions you can `edit` later:
 `<name>.width`, `<name>.height`, `<name>.x`, `<name>.y` for rectangles, and `<name>.diameter`,

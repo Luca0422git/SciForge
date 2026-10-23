@@ -1,0 +1,59 @@
+{
+  "id": "sf_draft_ellipse_wall_edit",
+  "title": "The ellipse wall drafted 3 degrees, then the step edited to 6 degrees",
+  "tags": [
+    "draft",
+    "sciforge-draft",
+    "free-form",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "ellipse": [
+            0,
+            0,
+            12.0,
+            6.0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10.0
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "type": "extrusion",
+        "count": 1
+      },
+      "angle": 3
+    },
+    {
+      "op": "sf_draft_edit",
+      "target": "d1",
+      "set": {
+        "angle": 6
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1968.025915157,
+    "faces": 3,
+    "solids": 1,
+    "source": "analytic",
+    "volume_by": "mesh",
+    "rel_tol": 0.0001,
+    "note": "As sf_draft_ellipse_wall with 6 degrees: V = A0 H - P tan6 H^2/2 + pi tan6^2 H^3/3."
+  }
+}

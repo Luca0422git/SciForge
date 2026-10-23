@@ -47,6 +47,7 @@ _STOPS = {
 class Adapter:
     name = NAME
     display_name = DISPLAY_NAME
+    max_tools = 48  # (a model on this computer has a small context: the most useful 48)
     needs_key = NEEDS_KEY
     base_url = BASE_URL
     default_model = DEFAULT_MODEL

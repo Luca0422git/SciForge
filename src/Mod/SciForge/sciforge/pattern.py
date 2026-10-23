@@ -816,7 +816,10 @@ def _swapped(value, old, new, old_shape, new_shape, cache):
 
 def relink_dependents(old, new):
     """Point every object that links to `old` (except the body's own history chain) at `new`,
-    with its faces/edges/vertices found again on `new`'s shape. Returns the objects changed."""
+    with its faces/edges/vertices found again on `new`'s shape (a sketch's projected edges
+    are projected again: sketch_external). Returns the objects changed."""
+    from . import sketch_external
+
     if old is None or new is None or old is new:
         return []
     users = [o for o in old.InList if o is not new and o.TypeId != "PartDesign::Body"]
@@ -830,9 +833,24 @@ def relink_dependents(old, new):
     new_shape = new.Shape if _computed(new) else None
     cache = {}
     changed = []
+
+    def rename(name):  # a projected edge of a sketch, found again on `new` (None: gone)
+        if old_shape is None:
+            return None
+        try:
+            return twin_element(new.Shape, old_shape.getElement(name))
+        except Exception:
+            return None
+
     for user in users:
         for prop in user.PropertiesList:
             if prop in _CHAIN:
+                continue
+            if prop == "ExternalGeometry" and sketch_external.is_sketch(user):
+                # read-only in FreeCAD 1.1 (the setattr below failed in silence and the
+                # projected edges froze when `old` went): projected again from `new`
+                if sketch_external.relink(user, old, new, rename) and user not in changed:
+                    changed.append(user)
                 continue
             try:
                 kind = user.getTypeIdOfProperty(prop)

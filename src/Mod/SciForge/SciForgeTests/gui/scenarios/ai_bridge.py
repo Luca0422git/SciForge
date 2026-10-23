@@ -4,7 +4,8 @@ real MCP server (sciforge/ai/sciforge_mcp.py) is started as an AI app starts it,
 scenario speaks MCP to it over stdin / stdout like Claude Desktop does. SciForge's questions
 are answered with real clicks.
 
-Path 1, the server starts: initialize names SciForge; tools/list has the 16 tools.
+Path 1, the server starts: initialize names SciForge; tools/list has every tool of the
+  catalogue (sciforge/ai/catalog), the first 16 first.
 Path 2, AI control off (the default): a call answers that SciForge is not reachable.
 Path 3, switched on in Preferences > AI: the first call asks the person; Allow.
 Path 4, "make a 40 x 30 x 10 box with 3 mm rounded edges": create_sketch, extrude (12000
@@ -166,9 +167,19 @@ def initialized():
 
 def tools_listed():
     res = result(s["list"]) or {}
+    from sciforge.ai import catalog
+
     names = [t["name"] for t in res.get("tools", [])]
-    h.check("tools/list has the 16 tools", len(names) == 16, names)
-    h.check("... extrude and screenshot among them", "extrude" in names and "screenshot" in names)
+    h.check(
+        "tools/list has every tool of the catalogue",
+        names == list(catalog.TOOL_NAMES) and len(names) > 100,
+        (len(names), names[:5]),
+    )
+    h.check(
+        "... the first 16 among them, first",
+        names[:16] == list(catalog.LEGACY_NAMES),
+        names[:16],
+    )
     s["off"] = mcp().call("get_design", {})
 
 

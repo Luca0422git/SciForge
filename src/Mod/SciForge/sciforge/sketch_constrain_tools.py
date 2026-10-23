@@ -19,6 +19,7 @@ FreeCAD's forms (checked in FreeCAD 1.1.4, docs/sciforge/parity/sketch.md):
 from . import log, warn
 from . import sketch_build as build
 from . import sketch_draw as draw
+from . import sketch_explain as explain
 from . import sketch_infer_core as icore
 
 LINE = ("Part::GeomLineSegment",)
@@ -131,16 +132,30 @@ class PickConstraint(draw.DrawTool):
         doc = self.doc
         sketch = self.sketch
         first = len(sketch.Constraints)
+        refused = None  # (message, the constraints to highlight)
         doc.openTransaction(self.title)
         try:
             note = self.constrain(self.picks)
-            sketch.solve()
-            conflicting = set(sketch.ConflictingConstraints)
-            if any(i + 1 in conflicting for i in range(first, len(sketch.Constraints))):
-                raise ValueError("it does not fit the sketch's other constraints")
+            new = list(range(first, len(sketch.Constraints)))
+            # what it fights is named and highlighted (sketch_explain.py), Fusion-style
+            finding = explain.check_new(sketch, new, probe=False)
+            if finding.kind == "conflict":
+                refused = (explain.refusal(sketch, self.title, finding), finding.culprits)
+                explain.log_finding(self.title, sketch, finding)
+                raise ValueError("conflicts with constraints %s" % finding.culprits)
             # what the sketch says already is dropped (FreeCAD would warn about it)
-            redundant = set(sketch.RedundantConstraints)
-            ours = [i for i in range(first, len(sketch.Constraints)) if i + 1 in redundant]
+            ours = finding.bad if finding.kind == "redundant" else []
+            if ours and len(ours) == len(new):
+                # nothing of it is new: say what already makes it so
+                if not finding.culprits:
+                    culprits = explain.redundant_culprits(
+                        sketch, ours[0], exclude=new, solved=True
+                    )
+                    finding.culprits = list(culprits)
+                    finding.partial = bool(getattr(culprits, "partial", False))
+                refused = (explain.refusal(sketch, self.title, finding), finding.culprits)
+                explain.log_finding(self.title, sketch, finding)
+                raise ValueError("it is so already")
             for i in reversed(ours):
                 sketch.delConstraint(i)
             if ours:
@@ -153,7 +168,11 @@ class PickConstraint(draw.DrawTool):
                 sketch.solve()
             except Exception:
                 pass
-            self.say("%s: could not be added (%s)." % (self.title, _plain(exc)))
+            if refused is not None:
+                self.say(refused[0])
+                explain.highlight(sketch, refused[1])
+            else:
+                self.say("%s: could not be added (%s)." % (self.title, _plain(exc)))
             log("%s: refused: %s" % (self.title, exc))
             return False
         doc.commitTransaction()

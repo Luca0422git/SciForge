@@ -7,10 +7,13 @@ Path 2, wrong order: Direction and distance chosen before any profile, then the
         extrude leaves nothing behind and the sketch visible.
 Path 3, values while the preview runs: two distances typed back to back, the arrow
         dragged far up and far down through the part (auto Cut and back to Join), a
-        zero distance and an impossible taper (message in the dialog, OK refused).
+        zero distance (message in the dialog, OK refused) and a taper too steep for the
+        column (held at the steepest that fits and said: Luca's decision of 2026-10-21,
+        value_limits.py; a taper that stops fitting is explained: limits_extrude_other).
 Path 4, another command's key while a dialog is open: Q in Extrude, E in Press
         Pull, Ctrl+Z in a dialog with a preview.
-Path 5, editing from the timeline twice, then undo / redo of both edits.
+Path 5, editing from the timeline twice, then undo / redo of both edits (while a step is
+        edited the timeline is rolled to it, as in Fusion: the Press Pull after it waits).
 Path 6, save, close, reopen, edit the extrude and the Press Pull again.
 
 Numbers by hand: 40 x 30 x 10 block (a ring around an r5 disc), a 10 x 10 column.
@@ -436,14 +439,15 @@ def p3_five_mm():
 
 def p3_steep_taper():
     p = xpanel()
-    h.check(
-        "a taper that closes the profile is explained", "⚠" in p.message.text(), p.message.text()
-    )
-    h.task_button("OK")
+    t = p.options["taper"]
+    h.check("a taper that closes the profile is held at the steepest that fits", -60 < t < -40, t)
+    note = p.limit_label.text() if p.limit_label.isVisible() else ""
+    h.check("and said", note == "-60° does not fit: limited to %.1f°" % t, note)
+    h.check("no error", "⚠" not in p.message.text(), p.message.text())
 
 
 def p3_steep_ok():
-    h.check("OK refused for the impossible taper", dialog_open() and not xpanel()._closed)
+    h.check("the dialog stays open", dialog_open() and not xpanel()._closed)
     h.fit()
 
 
@@ -583,7 +587,13 @@ def p5_editing():
 def p5_ok():
     from PySide6 import QtTest
 
-    h.check("preview +300", near(h.solid_volume(), s["volume"] + 300.0), h.solid_volume())
+    # While Extrude 2 is edited the timeline is rolled to it (Fusion): the Press Pull after
+    # it (+2200) waits until OK (edit_rollback / preview.hold).
+    h.check(
+        "preview +300, the Press Pull waits",
+        near(h.solid_volume(), s["volume"] - 2200.0 + 300.0),
+        h.solid_volume(),
+    )
     field = xpanel().distance.widget
     field.setFocus()
     QtTest.QTest.keyClick(field, QtCore.Qt.Key_Return)  # Enter in the field: OK
@@ -612,7 +622,11 @@ def p5_two_sides():
 
 def p5_two_ok():
     # Side two goes down into the block: it joins nothing new.
-    h.check("side two inside the block", near(h.solid_volume(), s["volume"] + 300.0))
+    h.check(
+        "side two inside the block (the Press Pull waits)",
+        near(h.solid_volume(), s["volume"] - 2200.0 + 300.0),
+        h.solid_volume(),
+    )
     h.task_button("OK")
 
 
@@ -687,7 +701,11 @@ def p6_editing():
 
 
 def p6_ok():
-    h.check("preview 4", near(h.solid_volume(), s["volume"] - 400.0), h.solid_volume())
+    h.check(
+        "preview 4 (the Press Pull waits)",
+        near(h.solid_volume(), s["volume"] - 2200.0 - 400.0),
+        h.solid_volume(),
+    )
     h.task_button("OK")
 
 

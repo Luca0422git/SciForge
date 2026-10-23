@@ -1,0 +1,1971 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""Calls EVERY AI tool of the catalogue (sciforge/ai/catalog) at least once, in real FreeCAD
+without a window, through the headless backend (sciforge/ai/headless.py: the same executor
+the app's AI bridge uses), and checks each answer: what was made, the volumes, the files
+written, the plain-sentence errors. The tools that need the SciForge window are called too
+and must answer that they need it.
+
+    freecadcmd -c "from SciForgeTests.headless import runner; runner.main()"
+
+tools/sciforge/run_tests.sh runs it with --only base (and --only headless). It writes
+headless-report.json / .md to SCIFORGE_HEADLESS_OUT (default: FreeCAD's user data folder);
+SCIFORGE_HEADLESS_FILTER runs only the calls whose label contains that text (the calls
+before them still run, they build what the later ones need).
+
+A session is a list of calls, each {"tool", "args", "save": a name for the id the answer
+reports, "expect": "ok" | "error", "contains": [texts], "check": function(answer, run)}.
+"$name" in the arguments is replaced by the id saved under that name.
+"""
+
+import json
+import math
+import os
+import platform
+import re
+import tempfile
+import time
+import traceback
+
+TOP = {"normal": [0, 0, 1], "at": {"axis": "z", "value": "max"}, "count": 1}
+TOP4 = {"type": "line", "at": {"axis": "z", "value": "max"}, "count": 4}
+BOTTOM4 = {"type": "line", "at": {"axis": "z", "value": "min"}, "count": 4}
+SIDES4 = {"along": [0, 0, 1], "type": "plane", "count": 4}
+
+
+class Run:
+    """The state of one session: saved ids, the temporary folder, results."""
+
+    def __init__(self, folder):
+        from sciforge.ai import headless
+
+        self.folder = folder
+        self.host = headless.HeadlessHost(allow_overwrite=False)
+        self.ids = {}
+        self.called = set()
+        self.results = []
+        self.broken = set()
+
+    def path(self, name):
+        return os.path.join(self.folder, name)
+
+    # helpers the checks use
+    def doc(self):
+        import FreeCAD as App
+
+        return App.ActiveDocument
+
+    def obj(self, name):
+        doc = self.doc()
+        ident = self.ids.get(name, name)
+        found = doc.getObject(ident) if doc is not None else None
+        if found is None and doc is not None:
+            labels = [o for o in doc.Objects if o.Label == ident]
+            found = labels[0] if labels else None
+        return found
+
+    def body_volume(self, name):
+        from sciforge import bodies
+
+        obj = self.obj(name)
+        body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+        return body.Shape.Volume if body is not None and not body.Shape.isNull() else None
+
+
+def json_of(answer):
+    text = answer["text"]
+    start = text.find("{")
+    return json.loads(text[start:]) if start >= 0 else None
+
+
+def _substitute(value, ids):
+    if isinstance(value, str) and value.startswith("$"):
+        return ids.get(value[1:], value[1:])
+    if isinstance(value, str) and "{tmp}" in value:
+        return value
+    if isinstance(value, dict):
+        return {k: _substitute(v, ids) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_substitute(v, ids) for v in value]
+    return value
+
+
+def _paths(value, folder):
+    if isinstance(value, str) and "{tmp}" in value:
+        return value.replace("{tmp}", folder)
+    if isinstance(value, dict):
+        return {k: _paths(v, folder) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_paths(v, folder) for v in value]
+    return value
+
+
+def close(expected, rel=1e-6):
+    def check(got):
+        if got is None or abs(got - expected) > rel * max(1.0, abs(expected)):
+            return "expected %.9g, got %s" % (expected, got)
+        return None
+
+    return check
+
+
+# -- the session ------------------------------------------------------------------------------
+def _volume(name, expected, rel=1e-6):
+    def check(answer, run):
+        return close(expected, rel)(run.body_volume(name))
+
+    return check
+
+
+def _volume_between(name, low, high):
+    def check(answer, run):
+        got = run.body_volume(name)
+        if got is None or not low < got < high:
+            return "volume %s not between %g and %g" % (got, low, high)
+        return None
+
+    return check
+
+
+def _sketch_state(sketch):
+    """[(type, construction, geometry id, internal role)] of every curve of a sketch."""
+    return [
+        (f.Geometry.TypeId, bool(f.Construction), f.Id, f.InternalType)
+        for f in sketch.GeometryFacadeList
+    ]
+
+
+def _remember_sketch(name):
+    """Keep the sketch's curves (type, construction flag, id) for _sketch_kept."""
+
+    def check(answer, run):
+        sketch = run.obj(name)
+        if sketch is None:
+            return "no sketch %s" % name
+        state = _sketch_state(sketch)
+        if not any(c for _t, c, _i, _r in state):
+            return "the sketch has no construction curve to watch: %s" % state
+        run.kept_sketches = getattr(run, "kept_sketches", {})
+        run.kept_sketches[name] = state
+        return None
+
+    return check
+
+
+def _sketch_kept(name):
+    """The sketch's curves kept their construction flags and geometry ids (sketch_geometry:
+    assigning sketch.Geometry made construction points normal points with new ids)."""
+
+    def check(answer, run):
+        sketch = run.obj(name)
+        want = getattr(run, "kept_sketches", {}).get(name)
+        if sketch is None or want is None:
+            return "no sketch %s remembered" % name
+        now = _sketch_state(sketch)
+        if now != want:
+            return "curves changed: %s -> %s" % (want, now)
+        return None
+
+    return check
+
+
+def _json_check(fn):
+    def check(answer, run):
+        data = json_of(answer)
+        if data is None:
+            return "no JSON in the answer"
+        return fn(data, run)
+
+    return check
+
+
+def _file(name, min_size=1):
+    def check(answer, run):
+        path = run.path(name)
+        if not os.path.isfile(path) or os.path.getsize(path) < min_size:
+            return "%s was not written" % path
+        return None
+
+    return check
+
+
+def _all(*checks):
+    def check(answer, run):
+        for fn in checks:
+            problem = fn(answer, run)
+            if problem:
+                return problem
+        return None
+
+    return check
+
+
+def _inspected(data, run):
+    body = data["bodies"][0] if data.get("bodies") else {}
+    if not body.get("valid") or body.get("solids") != 1:
+        return "the plate is not one valid solid: %s" % body
+    if body["bbox_mm"]["size"] != [40.0, 30.0, 10.0]:
+        return "the plate is %s" % body["bbox_mm"]["size"]
+    if not any(s.get("definition") for s in data["timeline"]):
+        return "detail full gave no step definitions"
+    if data["summary"]["failed_steps"]:
+        return "failed steps %s" % data["summary"]["failed_steps"]
+    run.ids["snapshot"] = data["snapshot"]
+    return None
+
+
+def _hole_face(data, run):
+    if data["count"] != 1:
+        return "%d faces of radius 3" % data["count"]
+    row = data["elements"][0]
+    if row["type"] != "cylinder" or abs(row["radius_mm"] - 3) > 1e-9 or not row.get("ref"):
+        return "the hole's face: %s" % row
+    run.ids["hole_pick"] = row["pick"]
+    return None
+
+
+def _every_ref(data, run):
+    missing = [r["name"] for r in data["elements"] if not r.get("ref")]
+    return "no ref for %s" % missing if missing or not data["elements"] else None
+
+
+def _later_steps(data, run):
+    later = [s["id"] for s in data["later_steps"]]
+    if run.ids["hole"] not in later or "volume_mm3" not in data["changes"]:
+        return "later steps %s, changes %s" % (later, data["changes"])
+    return None
+
+
+def _picture(width, height):
+    def check(answer, run):
+        import base64
+
+        from sciforge.ai import render_core
+
+        if not answer.get("image_png_base64"):
+            return "no picture"
+        size = render_core.png_info(base64.b64decode(answer["image_png_base64"]))
+        return None if size == (width, height) else "the picture is %s" % (size,)
+
+    return check
+
+
+HOLE = 12000.0 - math.pi * 9.0 * 10.0  # 40 x 30 x 10 plate, a 6 mm hole through it
+
+SESSION = [
+    # -- before any design ------------------------------------------------------------------------
+    {
+        "tool": "list_tools",
+        "args": {},
+        "check": _json_check(
+            lambda d, r: None if d["count"] >= 100 else "only %d tools" % d["count"]
+        ),
+    },
+    {"tool": "get_help", "args": {"topic": "selectors"}, "contains": ["selector"]},
+    {"tool": "get_help", "args": {}, "contains": ["SciForge"]},
+    {"tool": "get_help", "args": {"topic": "docs"}, "contains": ["docs_search"]},
+    {
+        "tool": "docs_search",
+        "args": {"query": "fillet radius too big", "limit": 3},
+        "check": _json_check(lambda d, r: None if d["results"] else "docs_search found nothing"),
+    },
+    {
+        "tool": "docs_read",
+        "args": {"path": "handbook.md", "section": "units-and-coordinates"},
+        "contains": ["Units and coordinates", "millimetres"],
+    },
+    {
+        "tool": "docs_read",
+        "args": {"path": "nothing.md"},
+        "expect": "error",
+        "contains": ["There is no document"],
+    },
+    {
+        "tool": "examples_search",
+        "args": {"query": "flange bolt circle", "limit": 3},
+        "contains": ["flange-bolt-pattern"],
+    },
+    {"tool": "get_design", "args": {}, "contains": ["No design is open"]},
+    {"tool": "inspect_design", "args": {}, "contains": ["No design is open"]},
+    {"tool": "list_designs", "args": {}},
+    {"tool": "list_materials", "args": {}, "contains": ["aluminium", "plastic_red"]},
+    {
+        "tool": "fillet",
+        "args": {"edges": TOP4, "radius": 1},
+        "expect": "error",
+        "contains": ["No design is open"],
+    },
+    {
+        "tool": "extrude",
+        "args": {"profile": "x"},
+        "expect": "error",
+        "contains": ["distance is missing"],
+    },
+    {"tool": "new_design", "args": {"name": "HeadlessTools"}, "contains": ["HeadlessTools"]},
+    # -- a plate with a hole, rounded and chamfered --------------------------------------------------
+    {
+        "tool": "create_sketch",
+        "save": "s_plate",
+        "args": {"plane": "XY", "geometry": [{"rect": [0, 0, 40, 30], "name": "base"}]},
+    },
+    {
+        "tool": "extrude",
+        "save": "plate",
+        "args": {"profile": "$s_plate", "distance": 10},
+        "check": _volume("plate", 12000.0),
+    },
+    {
+        "tool": "create_sketch",
+        "save": "s_hole",
+        "args": {"plane": "XY", "offset": 10, "geometry": [{"circle": [20, 15, 3]}]},
+    },
+    {
+        "tool": "hole",
+        "save": "hole",
+        "args": {"sketch": "$s_hole", "diameter": 6, "through_all": True},
+        "check": _volume("plate", HOLE),
+    },
+    {
+        "tool": "fillet",
+        "save": "fillet",
+        "args": {"edges": TOP4, "radius": 2},
+        "check": _volume_between("plate", HOLE - 200, HOLE - 1),
+    },
+    {"tool": "chamfer", "save": "chamfer", "args": {"edges": BOTTOM4, "distance": 1}},
+    {
+        "tool": "get_design",
+        "args": {},
+        "check": _json_check(
+            lambda d, r: (
+                None if len(d["bodies"]) == 1 and d["timeline"] else "bodies %s" % d["bodies"]
+            )
+        ),
+    },
+    {
+        "tool": "get_timeline",
+        "args": {},
+        "check": _json_check(
+            lambda d, r: (
+                None
+                if any(s["id"] == r.ids["hole"] for s in d["steps"])
+                else "the hole is not in the timeline"
+            )
+        ),
+    },
+    {"tool": "get_step", "args": {"step": "$plate"}, "contains": ["definition", "distance"]},
+    {
+        "tool": "edit_step",
+        "args": {"step": "$plate", "set": {"distance": 12}},
+        "check": _volume_between("plate", HOLE, 15000),
+    },
+    {"tool": "edit_step", "args": {"step": "$plate", "set": {"distance": 10}}},
+    {"tool": "edit_step", "args": {"step": "$fillet", "set": {"radius": 1.5}}},
+    {"tool": "set_parameter", "args": {"name": "width", "value": 40, "unit": "mm"}},
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_plate", "constraint": "base.width", "expression": "width"},
+    },
+    {"tool": "set_parameter", "args": {"name": "width", "value": 50}},
+    {
+        "tool": "get_sketch",
+        "args": {"sketch": "$s_plate"},
+        "check": _json_check(
+            lambda d, r: (
+                None
+                if abs(d["geometry"][0]["length"] - 50) < 1e-6
+                else "the rectangle is %s long" % d["geometry"][0]["length"]
+            )
+        ),
+    },
+    {"tool": "set_parameter", "args": {"name": "width", "value": 40}},
+    {"tool": "list_parameters", "args": {}, "contains": ["width", "Distance"]},
+    {"tool": "set_model_parameter", "args": {"step": "$plate", "label": "Distance", "value": 10}},
+    {"tool": "set_parameter", "args": {"name": "unused", "value": "width / 4"}},
+    {"tool": "delete_parameter", "args": {"name": "unused"}},
+    {
+        "tool": "delete_parameter",
+        "args": {"name": "width"},
+        "expect": "error",
+        "contains": ["used by"],
+    },
+    {
+        "tool": "measure",
+        "args": {"a": {"face": TOP}, "b": {"plane": "XY"}},
+        "contains": ["distance 10 mm"],
+    },
+    {
+        "tool": "physical_properties",
+        "args": {},
+        "check": _json_check(lambda d, r: None if d["bodies"][0]["valid"] else "not valid"),
+    },
+    {
+        "tool": "physical_material",
+        "args": {"body": "$plate", "material": "aluminium"},
+        "contains": ["Aluminium"],
+    },
+    {"tool": "appearance", "args": {"body": "$plate", "look": "plastic_red"}},
+    {"tool": "appearance", "args": {"faces": TOP, "color": [0.1, 0.3, 0.8]}},
+    {"tool": "center_of_mass", "args": {}, "contains": ["Centre of mass"]},
+    {
+        "tool": "section_analysis",
+        "args": {"plane": {"plane": "XZ"}, "distance": -15},
+        "check": _json_check(
+            lambda d, r: (
+                None
+                if d["bodies"][0]["cut_area_mm2"] > 100 and d["plane_point_mm"][1] == 15
+                else "the cut through the middle of the plate: %s" % d
+            )
+        ),
+    },
+    # -- the checking tools (sciforge/ai/actions/verify_actions.py) --------------------------------
+    {"tool": "inspect_design", "args": {"detail": "full"}, "check": _json_check(_inspected)},
+    {
+        "tool": "query_geometry",
+        "args": {"select": {"type": "cylinder", "radius": 3}},
+        "check": _json_check(_hole_face),
+    },
+    {
+        "tool": "measure",
+        "args": {"a": "$hole_pick"},
+        "contains": ["Measured a (face)", "radius 3 mm"],
+    },
+    {
+        "tool": "query_geometry",
+        "args": {"element": "edges", "select": {"at": {"axis": "z", "value": "max"}}},
+        "check": _json_check(_every_ref),
+    },
+    {
+        "tool": "query_geometry",
+        "args": {
+            "of": "$plate",
+            "element": "vertices",
+            "select": {"at": {"axis": "z", "value": "min"}},
+        },
+        "check": _json_check(
+            lambda d, r: None if d["count"] == 4 else "%d corners at the bottom" % d["count"]
+        ),
+    },
+    {
+        "tool": "query_geometry",
+        "args": {"select": {"type": "torus", "count": 1}},
+        "expect": "error",
+        "contains": ["does not fit"],
+    },
+    {
+        "tool": "check_design",
+        "args": {},
+        "check": _json_check(lambda d, r: None if d["ok"] else "not ok: %s" % d["problems"]),
+    },
+    {"tool": "diff_design", "args": {"since": "$snapshot"}, "contains": ["nothing changed"]},
+    {
+        "tool": "diff_design",
+        "args": {"since": "$plate"},
+        "check": _json_check(_later_steps),
+    },
+    {
+        "tool": "diff_design",
+        "args": {"since": "S999"},
+        "expect": "error",
+        "contains": ["no snapshot"],
+    },
+    {
+        "tool": "render",
+        "args": {
+            "width": 320,
+            "height": 240,
+            "highlight": {"faces": {"type": "cylinder", "radius": 3}},
+        },
+        "check": _picture(320, 240),
+        "contains": ["software renderer", "in orange"],
+    },
+    {
+        "tool": "render",
+        "args": {"view": "top", "renderer": "window"},
+        "expect": "error",
+        "contains": ["needs the SciForge window"],
+    },
+    {"tool": "undo", "args": {}, "contains": ["Undo"]},
+    {"tool": "redo", "args": {}, "contains": ["Redo"]},
+    {"tool": "suppress_step", "args": {"steps": ["$chamfer"]}, "contains": ["Suppressed"]},
+    {
+        "tool": "suppress_step",
+        "args": {"steps": ["$chamfer"], "suppress": False},
+        "contains": ["Unsuppressed"],
+    },
+    {"tool": "roll_timeline", "args": {"after": "$plate"}, "contains": ["after"]},
+    {"tool": "roll_timeline", "args": {"to": "end"}, "contains": ["at the end"]},
+    {"tool": "move_step", "args": {"step": "$fillet", "after": "$chamfer"}, "contains": ["Moved"]},
+    {
+        "tool": "rename",
+        "args": {"target": "$plate", "name": "Base plate"},
+        "contains": ["Base plate"],
+    },
+    {
+        "tool": "group_steps",
+        "save_group": "group",
+        "args": {"steps": ["$chamfer", "$fillet"], "name": "Edges"},
+        "contains": ["Grouped"],
+    },
+    {
+        "tool": "group_steps",
+        "args": {"ungroup": True, "group": "$group"},
+        "contains": ["Ungrouped"],
+    },
+    {
+        "tool": "pattern",
+        "save": "pattern",
+        "args": {
+            "kind": "rectangular",
+            "features": ["$hole"],
+            "direction": "Y",
+            "count": 2,
+            "spacing": 8,
+        },
+    },
+    {
+        "tool": "rectangular_pattern",
+        "save": "rpattern",
+        "args": {
+            "features": ["$hole"],
+            "direction": "X",
+            "quantity": 2,
+            "distance": 8,
+            "distribution": "spacing",
+        },
+    },
+    {
+        "tool": "create_curve_sketch",
+        "save": "path_line",
+        "args": {"plane": "XY", "offset": 10, "curves": [{"line": [20, 15, 8, 15]}]},
+    },
+    {
+        "tool": "pattern_on_path",
+        "save": "ppattern",
+        "args": {
+            "features": ["$hole"],
+            "path": {"sketch": "$path_line"},
+            "quantity": 2,
+            "distance": 10,
+            "distribution": "spacing",
+        },
+    },
+    {
+        "tool": "create_sketch",
+        "save": "s_label",
+        "args": {"plane": "XY", "offset": 15, "geometry": [{"center_rect": [30, 8, 6, 3]}]},
+    },
+    {
+        "tool": "emboss",
+        "save": "emboss",
+        "args": {"sketch": "$s_label", "faces": TOP, "depth": 0.5},
+    },
+    {
+        "tool": "insert_hardware",
+        "save": "screw",
+        "args": {"face": TOP, "at": [8, 22, 10], "standard": "iso4762", "size": "3", "length": 8},
+    },
+    {"tool": "delete_step", "args": {"steps": ["$screw"]}, "contains": ["Deleted"]},
+    # -- sketch editing -------------------------------------------------------------------------------
+    {
+        "tool": "create_sketch",
+        "save": "s_edit",
+        "args": {"plane": "XY", "offset": -20, "geometry": [{"line": [0, 0, 10, 1]}]},
+    },
+    {
+        "tool": "sketch_constraint",
+        "args": {"sketch": "$s_edit", "kind": "horizontal", "items": [{"curve": 0}]},
+    },
+    {
+        "tool": "sketch_constraint",
+        "expect": "error",
+        "args": {"sketch": "$s_edit", "kind": "vertical", "items": [{"curve": 0}]},
+        "contains": ["Vertical: not added"],
+    },
+    {
+        "tool": "sketch_dimension",
+        "args": {
+            "sketch": "$s_edit",
+            "kind": "distance",
+            "items": [{"curve": 0}],
+            "value": 12,
+            "name": "len",
+        },
+    },
+    {
+        "tool": "add_to_sketch",
+        "args": {
+            "sketch": "$s_edit",
+            "geometry": [{"circle": [30, 0, 4]}, {"circle": [30, 0, 2]}],
+            "curves": [{"line": [40, -5, 40, 5]}, {"line": [35, 0, 45, 0]}],
+        },
+    },
+    {
+        "tool": "sketch_constraint",
+        "expect": "error",
+        "args": {"sketch": "$s_edit", "kind": "concentric", "items": [{"curve": 1}, {"curve": 2}]},
+        # both centres are already pinned to (30, 0): FreeCAD flags the old dimensions as the
+        # redundant ones, and the refusal names them (sketch_explain.check_new)
+        "contains": ["Concentric: not added", "already make it so"],
+    },
+    {
+        "tool": "add_to_sketch",
+        "args": {"sketch": "$s_edit", "curves": [{"circle": [70, 30, 4]}, {"circle": [71, 31, 2]}]},
+    },
+    {
+        "tool": "sketch_constraint",
+        "args": {"sketch": "$s_edit", "kind": "concentric", "items": [{"curve": 5}, {"curve": 6}]},
+    },
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_edit", "constraint": "len", "value": 15},
+        "contains": ["15"],
+    },
+    {"tool": "sketch_trim", "args": {"sketch": "$s_edit", "points": [[44, 0]]}},
+    {
+        "tool": "sketch_polygon",
+        "args": {
+            "sketch": "$s_edit",
+            "center": [60, 0],
+            "point": [65, 0],
+            "sides": 6,
+            "diameter": 10,
+            "name": "nut",
+        },
+    },
+    {"tool": "get_sketch", "args": {"sketch": "$s_edit"}, "contains": ["nut.diameter"]},
+    {
+        "tool": "sketch_delete",
+        "args": {"sketch": "$s_edit", "constraints": [0]},
+        "contains": ["deleted"],
+    },
+    {
+        "tool": "sketch_text",
+        "save": "text",
+        "args": {"sketch": "$s_edit", "text": "SF", "height": 5, "corner": [0, 20]},
+    },
+    # -- more solids, each in a body of its own ----------------------------------------------------------
+    {
+        "tool": "primitive",
+        "save": "box2",
+        "args": {
+            "kind": "box",
+            "plane": "XY",
+            "x": 100,
+            "y": 0,
+            "length": 20,
+            "width": 20,
+            "height": 20,
+            "operation": "new_body",
+        },
+        "check": _volume("box2", 8000.0),
+    },
+    {
+        "tool": "press_pull",
+        "args": {"faces": TOP, "distance": 5},
+        "check": _volume("box2", 10000.0),
+    },
+    {
+        "tool": "fillet_sets",
+        "args": {
+            "sets": [{"edges": {"type": "line", "parallel": [0, 0, 1], "count": 4}, "radius": 2}]
+        },
+    },
+    {
+        "tool": "shell",
+        "args": {"faces": TOP, "inside": 1.5, "shell_type": "sharp"},
+        "check": _volume_between("box2", 1000, 4000),
+    },
+    {
+        "tool": "primitive",
+        "save": "cyl",
+        "args": {
+            "kind": "cylinder",
+            "plane": "XY",
+            "x": -60,
+            "y": 0,
+            "diameter": 20,
+            "height": 30,
+            "operation": "new_body",
+        },
+    },
+    {"tool": "thread", "args": {"faces": {"type": "cylinder", "count": 1}}},
+    {
+        "tool": "construct_axis",
+        "save": "axis",
+        "args": {"preset": "AxisCylinder", "refs": [{"face": {"type": "cylinder", "count": 1}}]},
+    },
+    {
+        "tool": "construct_point",
+        "save": "point",
+        "args": {
+            "preset": "PointCenter",
+            "refs": [{"edge": {"type": "circle", "at": {"axis": "z", "value": "max"}, "count": 1}}],
+        },
+    },
+    {
+        "tool": "split_face",
+        "args": {"faces": {"type": "cylinder", "count": 1}, "of": "$cyl", "tool": "XZ"},
+    },
+    {
+        "tool": "construct_plane",
+        "save": "plane",
+        "args": {"preset": "OffsetPlane", "refs": [{"plane": "XY"}], "distance": 40},
+    },
+    {
+        "tool": "create_sketch",
+        "save": "s_on_plane",
+        "args": {"on": "$plane", "geometry": [{"circle": [-60, 0, 3]}]},
+    },
+    {
+        "tool": "primitive",
+        "save": "wall",
+        "args": {
+            "kind": "box",
+            "plane": "XY",
+            "x": 0,
+            "y": 100,
+            "length": 4,
+            "width": 20,
+            "height": 10,
+            "operation": "new_body",
+        },
+    },
+    {
+        "tool": "full_round_fillet",
+        "args": {"faces": [{"normal": [0, 1, 0], "count": 1}]},
+        "check": _volume("wall", 800.0 - 10.0 * (8.0 - math.pi * 2.0)),
+    },
+    {
+        "tool": "primitive",
+        "save": "block",
+        "args": {
+            "kind": "box",
+            "plane": "XY",
+            "x": 50,
+            "y": 100,
+            "length": 20,
+            "width": 20,
+            "height": 10,
+            "operation": "new_body",
+        },
+    },
+    {
+        "tool": "rule_fillet",
+        "args": {"radius": 0.5, "features": ["$block"]},
+        "check": _volume_between("block", 3900, 3999.9),
+    },
+    {
+        "tool": "primitive",
+        "save": "block2",
+        "args": {
+            "kind": "box",
+            "plane": "XY",
+            "x": 50,
+            "y": 150,
+            "length": 20,
+            "width": 20,
+            "height": 10,
+            "operation": "new_body",
+        },
+    },
+    {
+        "tool": "draft",
+        "args": {"plane": "XY", "faces": SIDES4, "angle": 3},
+        "check": _volume_between("block2", 3000, 3999.9),
+    },
+    {"tool": "scale", "args": {"factor": 1.5}},
+    {
+        "tool": "create_sketch",
+        "save": "s_keep",
+        "args": {"plane": "XY", "geometry": [{"center_rect": [600, 0, 10, 6]}]},
+        "check": _remember_sketch("s_keep"),
+    },
+    {
+        "tool": "scale",  # (a sketch with a construction centre point)
+        "args": {"sketch": "$s_keep", "factor": 2},
+        "check": _sketch_kept("s_keep"),
+    },
+    {
+        "tool": "create_sketch",
+        "save": "s_ring",
+        "args": {"plane": "XZ", "geometry": [{"rect": [10, 0, 15, 10]}]},
+    },
+    {
+        "tool": "revolve",
+        "save": "ring",
+        "args": {"profile": "$s_ring", "axis": "Z", "operation": "new_body"},
+        "check": _volume("ring", math.pi * (225 - 100) * 10),
+    },
+    {"tool": "interference", "args": {}, "contains": ["overlap"]},
+    {
+        "tool": "create_sketch",
+        "save": "s_swp",
+        "args": {"plane": "XY", "geometry": [{"circle": [200, 0, 2]}]},
+    },
+    {
+        "tool": "create_curve_sketch",
+        "save": "s_path",
+        "args": {"plane": "XZ", "curves": [{"line": [200, 0, 200, 30]}]},
+    },
+    {
+        "tool": "sweep",
+        "save": "sweep",
+        "args": {"profile": "$s_swp", "path": "$s_path", "operation": "new_body"},
+        "check": _volume("sweep", math.pi * 4 * 30, 1e-4),
+    },
+    {
+        "tool": "create_sketch",
+        "save": "s_loft1",
+        "args": {"plane": "XY", "geometry": [{"center_rect": [300, 0, 20, 20]}]},
+    },
+    {
+        "tool": "create_sketch",
+        "save": "s_loft2",
+        "args": {"plane": "XY", "offset": 20, "geometry": [{"circle": [300, 0, 8]}]},
+    },
+    {
+        "tool": "loft",
+        "save": "loft",
+        "args": {
+            "profiles": [{"profile": "$s_loft1"}, {"profile": "$s_loft2"}],
+            "operation": "new_body",
+        },
+    },
+    {
+        "tool": "create_sketch",
+        "save": "s_tray",
+        "args": {"plane": "XY", "geometry": [{"rect": [380, -20, 420, 20]}]},
+    },
+    {
+        "tool": "extrude",
+        "save": "tray",
+        "args": {"profile": "$s_tray", "distance": 10, "operation": "new_body"},
+    },
+    {
+        "tool": "create_sketch",
+        "save": "s_pocket",
+        "args": {"plane": "XY", "offset": 10, "geometry": [{"rect": [382, -18, 418, 18]}]},
+    },
+    {
+        "tool": "extrude",
+        "args": {"profile": "$s_pocket", "distance": 8, "flip": True, "operation": "cut"},
+    },
+    {
+        "tool": "create_curve_sketch",
+        "save": "s_web",
+        "args": {
+            "plane": "XY",
+            "offset": 10,
+            "curves": [{"line": [390, 0, 410, 0]}, {"line": [400, -10, 400, 10]}],
+        },
+    },
+    {"tool": "web", "args": {"curves": "$s_web"}},
+    {
+        "tool": "create_sketch",
+        "save": "s_gusset",
+        "args": {
+            "plane": "XZ",
+            "geometry": [
+                {"polyline": [[450, 0], [490, 0], [490, 5], [455, 5], [455, 40], [450, 40]]}
+            ],
+        },
+    },
+    {
+        "tool": "extrude",
+        "save": "gusset",
+        "args": {"profile": "$s_gusset", "distance": 20, "operation": "new_body"},
+    },
+    {
+        "tool": "create_curve_sketch",
+        "save": "s_rib",
+        "args": {"plane": "XZ", "offset": 10, "curves": [{"line": [455, 25, 475, 5]}]},
+    },
+    {
+        "tool": "rib",
+        "args": {"curves": "$s_rib", "thickness": 2},
+        "check": _volume_between(
+            "gusset", 20 * (40 * 5 + 5 * 35) + 1, 20 * (40 * 5 + 5 * 35) + 400
+        ),
+    },
+    {
+        "tool": "coil",
+        "save": "coil",
+        "args": {
+            "plane": "XY",
+            "x": 500,
+            "y": 0,
+            "diameter": 20,
+            "revolutions": 3,
+            "height": 15,
+            "section_size": 2,
+            "operation": "new_body",
+        },
+    },
+    {
+        "tool": "create_curve_sketch",
+        "save": "s_pipe",
+        "args": {"plane": "XY", "curves": [{"line": [600, 0, 600, 40]}]},
+    },
+    {
+        "tool": "pipe",
+        "save": "pipe",
+        "args": {
+            "path": {"sketch": "$s_pipe", "edge": 1},
+            "section_size": 4,
+            "operation": "new_body",
+        },
+        "check": _volume("pipe", math.pi * 4 * 40, 1e-4),
+    },
+    {
+        "tool": "gear",
+        "save": "gear",
+        "args": {"x": 700, "module": 1, "teeth": 20, "thickness": 5, "hole": 5},
+    },
+    {
+        "tool": "move_copy",
+        "args": {"bodies": ["$gear"], "move_type": "translate", "dx": 10},
+        "contains": ["Done"],
+    },
+    {
+        "tool": "primitive",
+        "save": "sphere",
+        "args": {
+            "kind": "sphere",
+            "plane": "XY",
+            "x": 800,
+            "y": 0,
+            "diameter": 20,
+            "operation": "new_body",
+        },
+    },
+    {
+        "tool": "silhouette_split",
+        "args": {"body": "$sphere", "direction": "Z", "operation": "body"},
+    },
+    {
+        "tool": "primitive",
+        "save": "low",
+        "args": {
+            "kind": "box",
+            "plane": "XY",
+            "x": 900,
+            "y": 0,
+            "length": 20,
+            "width": 20,
+            "height": 10,
+            "operation": "new_body",
+        },
+    },
+    {
+        "tool": "primitive",
+        "save": "high",
+        "args": {
+            "kind": "box",
+            "plane": "XY",
+            "x": 930,
+            "y": 0,
+            "length": 20,
+            "width": 20,
+            "height": 15,
+            "operation": "new_body",
+        },
+    },
+    {
+        "tool": "replace_face",
+        "args": {"faces": TOP, "of": "$low", "target": {"face": TOP, "of": "$high"}},
+        "check": _volume("low", 6000.0),
+    },
+    {
+        "tool": "move_copy",
+        "args": {"faces": {"normal": [1, 0, 0], "count": 1}, "dx": 2},
+        "check": _volume("low", 22 * 20 * 15),
+    },
+    {
+        "tool": "align",
+        "args": {
+            "from": {"face": {"normal": [0, 0, -1], "count": 1}, "of": "$low"},
+            "to": {"face": TOP, "of": "$high"},
+        },
+    },
+    {
+        "tool": "primitive",
+        "save": "plate2",
+        "args": {
+            "kind": "box",
+            "plane": "XY",
+            "x": 1000,
+            "y": 0,
+            "length": 20,
+            "width": 20,
+            "height": 10,
+            "operation": "new_body",
+        },
+    },
+    {
+        "tool": "hole",
+        "save": "hole2",
+        "args": {"face": TOP, "at": [1010, 10, 10], "diameter": 5, "extent": "all"},
+        "check": _volume("plate2", 4000 - math.pi * 6.25 * 10),
+    },
+    {
+        "tool": "delete_face",
+        "args": {"faces": {"type": "cylinder", "count": 1}},
+        "check": _volume("plate2", 4000.0),
+    },
+    {"tool": "split_body", "args": {"body": "$ring", "tool": "YZ"}},
+    {"tool": "circular_pattern", "args": {"body": True, "axis": "Z", "quantity": 2}, "check": None},
+    {"tool": "activate", "args": {"target": "$plate"}, "contains": ["active body"]},
+    {"tool": "mirror", "args": {"body": True, "plane": "YZ", "operation": "new_body"}},
+    {
+        "tool": "combine",
+        "args": {"target": "$cyl", "tools": ["$sweep"], "operation": "join", "keep_tools": True},
+        "expect": "any",
+    },
+    {"tool": "new_body", "args": {"label": "Spare"}, "contains": ["Spare"]},
+    {"tool": "remove_bodies", "args": {"bodies": ["$loft"]}},
+    {"tool": "delete_bodies", "args": {"bodies": ["$gear"]}},
+    {"tool": "show_hide", "args": {"targets": ["$s_plate"], "visible": False}, "contains": ["Hid"]},
+    # -- surfaces -------------------------------------------------------------------------------------
+    {
+        "tool": "create_curve_sketch",
+        "save": "s_surf",
+        "args": {"plane": "XY", "offset": 50, "curves": [{"line": [0, -50, 30, -50]}]},
+    },
+    {
+        "tool": "surface",
+        "save": "surf",
+        "args": {
+            "kind": "extrude",
+            "refs": [{"sketch": "$s_surf", "at": [15, -50]}],
+            "options": {"distance": 10},
+        },
+    },
+    {
+        "tool": "surface",
+        "args": {"kind": "thicken", "refs": [{"step": "$surf"}], "options": {"thickness": 1}},
+    },
+    # -- assembly ---------------------------------------------------------------------------------------
+    {
+        "tool": "new_component",
+        "save_component": "comp",
+        "args": {"label": "Bracket"},
+        "contains": ["Bracket"],
+    },
+    {
+        "tool": "create_sketch",
+        "save": "s_br",
+        "args": {"plane": "XY", "offset": 100, "geometry": [{"circle": [0, 0, 10]}]},
+    },
+    {"tool": "extrude", "save": "br", "args": {"profile": "$s_br", "distance": 5}},
+    {
+        "tool": "components_from_bodies",
+        "save": "cup",
+        "args": {"bodies": ["$box2"], "label": "Cup"},
+    },
+    {"tool": "copy_component", "save": "cup2", "args": {"component": "$cup", "dx": 60}},
+    {"tool": "ground", "args": {"component": "Bracket"}, "contains": ["grounded"]},
+    {
+        "tool": "joint",
+        "save_joint": "joint",
+        "args": {
+            "type": "revolute",
+            "first": {
+                "component": "$cup",
+                "face": {"normal": [0, 0, -1], "count": 1},
+                "snap": "centre",
+            },
+            "second": {"component": "Bracket", "face": TOP, "snap": "centre"},
+        },
+    },
+    {"tool": "drive_joint", "args": {"joint": "$joint", "angle": 30}, "contains": ["angle"]},
+    {
+        "tool": "pattern_components",
+        "args": {
+            "component": "$cup",
+            "kind": "rectangular",
+            "direction": "Y",
+            "quantity": 2,
+            "distance": 40,
+        },
+    },
+    {
+        "tool": "move_copy",
+        "args": {"components": ["$cup2"], "move_type": "translate", "dz": 5},
+        "expect": "any",
+    },
+    # -- drawings ---------------------------------------------------------------------------------------
+    {
+        "tool": "create_drawing",
+        "save_drawing": "drawing",
+        "args": {"bodies": ["$plate"], "base_view": "Front", "projected": ["Top", "Right"]},
+        "contains": ["drawing"],
+    },
+    {"tool": "get_drawing", "args": {"edges": True}, "contains": ["views", "elements"]},
+    {
+        "tool": "add_drawing_view",
+        "args": {"kind": "projected", "parent": "BaseView", "direction": "FrontTopRight"},
+    },
+    {
+        "tool": "add_drawing_view",
+        "args": {"kind": "section", "parent": "BaseView", "line": [[-30, 0], [30, 0]]},
+        "expect": "any",
+    },
+    {
+        "tool": "add_drawing_dimension",
+        "args": {"view": "BaseView", "picks": [{"kind": "line", "near": [0, 5]}]},
+        "contains": ["dimension"],
+    },
+    {
+        "tool": "add_drawing_annotation",
+        "args": {"kind": "text", "text": "Break sharp edges", "at": [30, 30]},
+    },
+    {
+        "tool": "export_drawing",
+        "args": {"format": "dxf", "path": "{tmp}/drawing.dxf"},
+        "check": _file("drawing.dxf"),
+        # what the DXF leaves out (export_report, as the drawing's Export message)
+        "contains": ["Not kept in this file:", "as plain lines and text"],
+    },
+    {
+        "tool": "export_drawing",
+        "args": {"format": "pdf", "path": "{tmp}/drawing.pdf"},
+        "expect": "error",
+        "contains": ["window"],
+    },
+    # -- the window's tools say they need it --------------------------------------------------------
+    {"tool": "screenshot", "args": {}, "expect": "error", "contains": ["window"]},
+    {"tool": "set_view", "args": {"orientation": "top"}, "expect": "error", "contains": ["window"]},
+    {"tool": "get_view", "args": {}, "expect": "error", "contains": ["window"]},
+    {"tool": "named_view", "args": {"action": "list"}},
+    {
+        "tool": "named_view",
+        "args": {"action": "save", "name": "Top"},
+        "expect": "error",
+        "contains": ["3D view"],
+    },
+    # -- files ------------------------------------------------------------------------------------------
+    {"tool": "save", "args": {}, "expect": "error", "contains": ["never been saved"]},
+    {"tool": "save_as", "args": {"path": "{tmp}/tools.FCStd"}, "check": _file("tools.FCStd")},
+    {"tool": "save", "args": {}, "contains": ["Saved"]},
+    {"tool": "save", "args": {"path": "{tmp}/tools.FCStd"}, "contains": ["Saved"]},
+    {
+        "tool": "export",
+        "args": {"format": "step", "path": "{tmp}/all.step"},
+        "check": _file("all.step"),
+        "contains": ["Not kept in this file:", "- the timeline ("],
+    },
+    {
+        "tool": "export",
+        "args": {"format": "step", "path": "{tmp}/all.step"},
+        "expect": "error",
+        "contains": ["already exists"],
+    },
+    {
+        "tool": "export",
+        "args": {"format": "stl", "path": "{tmp}/plate.stl", "bodies": ["$plate"]},
+        "check": _file("plate.stl"),
+        "contains": ["Not kept in this file:", "- the timeline ("],
+    },
+    {
+        "tool": "export",
+        "args": {"format": "3mf", "path": "{tmp}/plate.3mf", "bodies": ["$plate"]},
+        "check": _file("plate.3mf"),
+    },
+    {
+        "tool": "export",
+        "args": {"format": "obj", "path": "{tmp}/plate.obj", "bodies": ["$plate"]},
+        "check": _file("plate.obj"),
+    },
+    {
+        "tool": "export",
+        "args": {"format": "iges", "path": "{tmp}/plate.igs", "bodies": ["$plate"]},
+        "check": _file("plate.igs"),
+    },
+    {
+        "tool": "export",
+        "args": {"format": "brep", "path": "{tmp}/plate.brep", "bodies": ["$plate"]},
+        "check": _file("plate.brep"),
+        "contains": ["BREP holds unnamed shapes"],
+    },
+    {
+        "tool": "export",
+        "args": {"format": "dxf", "path": "{tmp}/sketch.dxf", "sketch": "$s_plate"},
+        "check": _file("sketch.dxf"),
+    },
+    {"tool": "list_designs", "args": {}, "contains": ["HeadlessTools"]},
+    {"tool": "new_design", "args": {"name": "Imports"}},
+    {"tool": "import_file", "args": {"path": "{tmp}/plate.stl"}, "contains": ["mesh body"]},
+    {"tool": "import_file", "args": {"path": "{tmp}/sketch.dxf"}, "contains": ["curves"]},
+    {"tool": "import_file", "args": {"path": "{tmp}/plate.igs"}, "contains": ["Inserted"]},
+    {
+        "tool": "import_file",
+        "args": {"path": "{tmp}/tools.FCStd"},
+        "expect": "error",
+        "contains": ["Save this design first"],
+    },
+    {"tool": "save_as", "args": {"path": "{tmp}/imports.FCStd"}},
+    {"tool": "import_file", "args": {"path": "{tmp}/tools.FCStd"}, "contains": ["linked"]},
+    {"tool": "capture_design_history", "args": {"on": False}},
+    {"tool": "capture_design_history", "args": {"on": True}},
+    {"tool": "switch_design", "args": {"design": "tools"}, "contains": ["tools"]},
+    {
+        "tool": "close_design",
+        "args": {"design": "imports"},
+        "expect": "error",
+        "contains": ["unsaved changes"],
+    },
+    {
+        "tool": "close_design",
+        "args": {"design": "imports", "discard_changes": True},
+        "contains": ["Closed"],
+    },
+    {"tool": "open_design", "args": {"path": "{tmp}/all.step"}, "contains": ["Opened"]},
+    {"tool": "open_design", "args": {"path": "{tmp}/tools.FCStd"}, "contains": ["Opened"]},
+    # A circle drawn at the origin gets offsets of 0 ('g0.x', 'g0.y'): they are no broken
+    # dimension, so Change Parameters still refuses a value that breaks the sketch, and the
+    # AI can put an offset back to 0 (review of the merged branches, X2)
+    {"tool": "new_design", "args": {"name": "OriginSketch"}},
+    {"tool": "set_parameter", "args": {"name": "d", "value": 10}},
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"circle": [0, 0, 5]}]},
+        "save": "s_origin",
+    },
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_origin", "constraint": "g0.diameter", "expression": "d"},
+        "check": lambda a, r: _change_parameters_refuses(r, "d", "-4"),
+    },
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_origin", "constraint": "g0.x", "value": 5},
+        "contains": ["g0.x = 5"],
+    },
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_origin", "constraint": "g0.x", "value": 0},
+        "contains": ["g0.x = 0"],
+        "check": lambda a, r: _old_problem_hides_nothing(r),
+    },
+    {
+        "tool": "set_sketch_dimension",
+        "args": {"sketch": "$s_origin", "constraint": "g0.diameter", "value": 0},
+        "expect": "error",
+        "contains": ["more than 0"],
+    },
+    # A refused call changes nothing, but trying it empties the Redo list: the answer says so
+    # (review X5)
+    {"tool": "extrude", "args": {"profile": "$s_origin", "distance": 5}},
+    {
+        "tool": "fillet",
+        "args": {"edges": {"type": "circle", "at": {"axis": "z", "value": "max"}, "count": 1},
+                 "radius": 1},
+    },
+    {"tool": "undo", "args": {}, "contains": ["Fillet 1 mm"]},
+    {
+        "tool": "fillet",
+        "args": {"edges": {"type": "circle", "at": {"axis": "z", "value": "max"}, "count": 1},
+                 "radius": 50},
+        "expect": "error",
+        "contains": ["that fits here", "emptied the Redo list: 'AI: Fillet 1 mm'"],
+    },
+]
+
+
+# -- the review fixes of 2026-10-22 (docs/sciforge/sessions/2026-10-22-fix-aitools.md) --------
+def _undo_mark(answer, run):
+    """Remember how many Undo steps the active design has (_undo_same checks it later)."""
+    doc = run.doc()
+    run.ids["undo_count"] = len(doc.UndoNames) if doc is not None else 0
+    return None
+
+
+def _undo_same(answer, run):
+    doc = run.doc()
+    now = len(doc.UndoNames) if doc is not None else 0
+    if now != run.ids.get("undo_count"):
+        return "the Undo steps went from %s to %d: %s" % (
+            run.ids.get("undo_count"),
+            now,
+            list(doc.UndoNames[:3]) if doc is not None else None,
+        )
+    return None
+
+
+def _value(name, prop, expected):
+    def check(answer, run):
+        obj = run.obj(name)
+        got = getattr(obj, prop, None) if obj is not None else None
+        got = getattr(got, "Value", got)
+        return close(expected)(got)
+
+    return check
+
+
+# -- the checking tools on two bodies, one in a moved component (fix-aiverify F3, F4, F8, F9) -----
+BOX = 30.0 * 30.0 * 20.0  # the box body, 30 x 30 x 20 at x 100..130, moved 100 mm in X
+FILLETED_BOX = BOX - (4.0 - math.pi) * 20.0  # one vertical edge rounded r 2
+
+
+def _two_bodies(data, run):
+    rows = {b["id"]: b for b in data["bodies"]}
+    others = [name for name in rows if name != run.ids["v_box_body"]]
+    run.ids["v_plate_body"] = others[0] if others else None
+    plate, box = rows.get(run.ids["v_plate_body"]), rows.get(run.ids["v_box_body"])
+    if not plate or not box or len(rows) != 2:
+        return "two bodies expected: %s" % sorted(rows)
+    if box["bbox_mm"]["min"][0] != 200.0 or plate["bbox_mm"]["min"][0] != 0.0:
+        return "the box is not where the moved component shows it: %s" % box["bbox_mm"]
+    if box.get("component") != run.ids["v_comp"]:
+        return "the box's component: %s" % box.get("component")
+    run.ids["v_snapshot"] = data["snapshot"]
+    return None
+
+
+def _box_edge(data, run):
+    row = data["elements"][0] if data["count"] == 1 else None
+    ref = (row or {}).get("ref") or {}
+    if ref.get("body") != run.ids["v_box_body"]:
+        return "the ref does not name its body: %s" % row
+    if (
+        data.get("active_body") != run.ids["v_plate_body"]
+        or "not the active body" not in data["note"]
+    ):
+        return "no word that another body is active: %s" % data.get("note")
+    run.ids["v_edge_ref"] = ref
+    return None
+
+
+def _volumes(plate, box):
+    def check(answer, run):
+        rows = {b["id"]: b for b in json_of(answer)["bodies"]}
+        got = (
+            rows[run.ids["v_plate_body"]]["volume_mm3"],
+            rows[run.ids["v_box_body"]]["volume_mm3"],
+        )
+        if abs(got[0] - plate) > 1e-6 or abs(got[1] - box) > 1e-6:
+            return "volumes (plate, box) %s, expected %s" % (got, (plate, box))
+        return None
+
+    return check
+
+
+def _diff_two(data, run):
+    changed = {b["id"]: b for b in data["bodies"]["changed"]}
+    added = [s["id"] for s in data["steps"]["added"]]
+    if run.ids["v_fillet"] not in added:
+        return "the fillet is not among the added steps: %s" % added
+    if run.ids["v_plate_body"] in changed or run.ids["v_box_body"] not in changed:
+        return "only the box changed: %s" % sorted(changed)
+    return None
+
+
+def _orange_right_of(fraction, minimum=200):
+    """A rendered picture whose orange pixels are many and all right of x = fraction * width
+    (the box at x 200..230 is right of the plate at 0..60 in a top view)."""
+
+    def check(answer, run):
+        import base64
+
+        from sciforge.ai import render_core
+
+        rows = render_core.png_pixels(base64.b64decode(answer["image_png_base64"]))
+        xs = [
+            x
+            for row in rows
+            for x, (r, g, b) in enumerate(row)
+            if r > 200 and 90 < g < 180 and b < 80
+        ]
+        width = len(rows[0])
+        if len(xs) < minimum or min(xs) < fraction * width:
+            return "%d orange pixels from x %s of %d" % (len(xs), min(xs) if xs else None, width)
+        return None
+
+    return check
+
+
+def _designs_open(*names):
+    def check(answer, run):
+        import FreeCAD as App
+
+        missing = [n for n in names if n not in App.listDocuments()]
+        return "closed by mistake: %s" % missing if missing else None
+
+    return check
+
+
+def _active_design(answer, run):
+    """After a close the answer names the design that is active, as the window does."""
+    import FreeCAD as App
+
+    doc = App.ActiveDocument
+    if doc is None:
+        return "no design is active after the close"
+    if "The active design is now %s (id %r)" % (doc.Label, doc.Name) not in answer["text"]:
+        return "the answer does not name the active design %s: %s" % (doc.Name, answer["text"])
+    return None
+
+
+def _tilde_path(answer, run):
+    """~ in a path is the home folder (here: the test folder), never a folder named "~"."""
+    from sciforge.ai import headless
+
+    home = os.environ.get("HOME")
+    os.environ["HOME"] = run.folder
+    try:
+        got = headless.call("export", {"format": "stl", "path": "~/tilde.stl"}, run.host)
+    finally:
+        if home is None:
+            os.environ.pop("HOME", None)
+        else:
+            os.environ["HOME"] = home
+    if got["is_error"] or not os.path.isfile(run.path("tilde.stl")):
+        return "export to ~/tilde.stl: %s" % got["text"][:300]
+    if os.path.exists(os.path.join(os.getcwd(), "~")):
+        return "a folder named ~ was made in %s" % os.getcwd()
+    return None
+
+
+def _command_line_paths(answer, run):
+    """sciforge-cli's host: a relative path is read from where the command was typed, and a
+    file that exists is refused with the command's own option (--force)."""
+    from sciforge.ai import headless
+
+    host = headless.HeadlessHost(overwrite_option="--force", relative_base=run.folder)
+    got = headless.call("export", {"format": "step", "path": "cli-relative.step"}, host)
+    if got["is_error"] or not os.path.isfile(run.path("cli-relative.step")):
+        return "relative path on the command line: %s" % got["text"][:300]
+    got = headless.call("export", {"format": "step", "path": "cli-relative.step"}, host)
+    if not got["is_error"] or "add --force" not in got["text"] or "allow-overwrite" in got["text"]:
+        return "an existing file on the command line: %s" % got["text"][:300]
+    return None
+
+
+FIX_SESSION = [
+    # F1: a design's name that is another design's id is refused, not closed blindly
+    {"tool": "new_design", "args": {"name": "Part"}},
+    {"tool": "create_sketch", "args": {"plane": "XY", "geometry": [{"rect": [0, 0, 40, 20]}]}},
+    {"tool": "extrude", "args": {"profile": "Sketch1", "distance": 10}, "save": "fx_pad"},
+    {"tool": "save_as", "args": {"path": "{tmp}/housing.FCStd"}},
+    {"tool": "fillet", "args": {"edges": TOP4, "radius": 1}, "save": "fx_fillet"},
+    {"tool": "new_design", "args": {"name": "Part"}, "contains": ["(id 'Part1')"]},
+    {
+        "tool": "close_design",
+        "args": {"design": "Part", "discard_changes": True},
+        "expect": "error",
+        "contains": ["could mean 2 open designs", "give 'housing'", "give 'Part1'"],
+    },
+    {
+        "tool": "switch_design",
+        "args": {"design": "Part"},
+        "expect": "error",
+        "contains": ["could mean 2 open designs"],
+    },
+    {
+        "tool": "switch_design",
+        "args": {"design": "housing"},
+        "contains": ["now housing"],
+        "check": _designs_open("Part", "Part1"),
+    },
+    {"tool": "switch_design", "args": {"design": "id:Part1"}, "contains": ["now Part"]},
+    {"tool": "switch_design", "args": {"design": "housing.FCStd"}, "contains": ["now housing"]},
+    # F3: edit_step refuses option names the step does not have, takes get_step's spellings
+    # and says when it changed nothing (no Undo step)
+    {"tool": "get_design", "args": {}, "check": _undo_mark},
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_fillet", "set": {"size": 1.5}},
+        "expect": "error",
+        "contains": ["no option 'size'", "radius"],
+    },
+    {"tool": "get_design", "args": {}, "check": _undo_same},
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_fillet", "set": {"Radius": 1.5}},
+        "contains": ["Done"],
+        "check": _all(_value("fx_fillet", "Radius", 1.5), _undo_mark),
+    },
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_fillet", "set": {"radius": 1.5}},
+        "contains": ["No change", "no Undo step"],
+        "check": _undo_same,
+    },
+    {"tool": "new_design", "args": {"name": "Names"}},
+    {
+        "tool": "primitive",
+        "args": {"kind": "box", "plane": "XY", "length": 40, "width": 20, "height": 10},
+        "save": "fx_box",
+    },
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_box", "set": {"lenght": 60}},
+        "expect": "error",
+        "contains": ["no option 'lenght'", "length"],
+    },
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_box", "set": {"Length": 60}},
+        "check": _volume("fx_box", 12000),
+    },
+    {"tool": "shell", "args": {"faces": TOP, "thickness": 2}, "save": "fx_shell"},
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_shell", "set": {"thickness": 1}},
+        "check": _volume("fx_shell", 2604),
+    },
+    {
+        "tool": "edit_step",
+        "args": {"step": "$fx_shell", "set": {"Thickness": 1}},
+        "contains": ["No change"],
+    },
+    # F7: a step named as get_timeline shows it ("Sketch 1") is taken by the step tools too
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"rect": [80, 0, 100, 20]}]},
+        "save": "fx_sketch",
+    },
+    {
+        "tool": "extrude",
+        "args": {"profile": "Sketch 1", "distance": 5, "operation": "new_body"},
+        "save": "fx_pad2",
+        "check": _volume("fx_pad2", 2000),
+    },
+    # F2: One File Per Body never replaces the files it writes without asking
+    {
+        "tool": "export",
+        "args": {"format": "stl", "path": "{tmp}/parts.stl", "one_file_per_body": True},
+        "contains": ["parts-"],
+    },
+    {
+        "tool": "export",
+        "args": {"format": "stl", "path": "{tmp}/parts.stl", "one_file_per_body": True},
+        "expect": "error",
+        "contains": ["already exist", "parts-"],
+    },
+    # F5 / F6: ~ is the home folder, a relative path is refused (the command line reads it
+    # from its folder), and the command line names its own option
+    {
+        "tool": "export",
+        "args": {"format": "step", "path": "relative.step"},
+        "expect": "error",
+        "contains": ["not a full path"],
+    },
+    {
+        "tool": "save_as",
+        "args": {"path": "relative.FCStd"},
+        "expect": "error",
+        "contains": ["not a full path"],
+    },
+    {"tool": "get_design", "args": {}, "check": _all(_tilde_path, _command_line_paths)},
+    # F4: closing a design makes another one active (command-line FreeCAD leaves none)
+    {
+        "tool": "close_design",
+        "args": {"design": "Names", "discard_changes": True},
+        "check": _active_design,
+    },
+    {
+        "tool": "close_design",
+        "args": {"design": "housing", "discard_changes": True},
+        "check": _active_design,
+    },
+    {"tool": "get_design", "args": {}},
+]
+
+
+def _snapshot_then_close(data, run):
+    """Keep the snapshot id, then close the design the way the window's File > Close does
+    (FreeCAD gives the next design of that name the same internal name)."""
+    import FreeCAD as App
+
+    run.ids["r_snapshot"] = data["snapshot"]
+    App.closeDocument(data["id"])
+    return None
+
+
+def _close_active(answer, run):
+    import FreeCAD as App
+
+    App.closeDocument(App.ActiveDocument.Name)
+    return None
+
+
+def _refs_round_trip(data, run):
+    """Every ref picks its own element when the real selector code runs it."""
+    from sciforge import bodies
+    from sciforge.ai.ops import selectors
+
+    obj = run.obj(data["shape_of"])
+    for row in data["elements"]:
+        if row["ref"] is None or selectors.select(obj.Shape, row["ref"], data["element"]) != [
+            row["name"]
+        ]:
+            return "the ref of %s does not pick it: %s" % (row["name"], row["ref"])
+    return None if data["elements"] else "no elements"
+
+
+VERIFY_SESSION = [
+    {"tool": "new_design", "args": {"name": "VerifyTwoBodies"}},
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"rect": [0, 0, 60, 40]}]},
+        "save": "v_sk1",
+    },
+    {"tool": "extrude", "args": {"profile": "$v_sk1", "distance": 10}, "save": "v_plate"},
+    {
+        "tool": "query_geometry",
+        "args": {"element": "edges", "limit": 500},
+        "check": _json_check(_refs_round_trip),
+    },
+    {"tool": "new_body", "args": {"label": "Box"}, "save": "v_box_body"},
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"rect": [100, 0, 130, 30]}]},
+        "save": "v_sk2",
+    },
+    {"tool": "extrude", "args": {"profile": "$v_sk2", "distance": 20}, "save": "v_box"},
+    {
+        "tool": "components_from_bodies",
+        "args": {"bodies": ["$v_box_body"], "label": "C1"},
+        "save": "v_comp",
+    },
+    {"tool": "move_copy", "args": {"components": ["$v_comp"], "move_type": "translate", "dx": 100}},
+    {"tool": "activate", "args": {"target": "Body"}},
+    {"tool": "inspect_design", "args": {}, "check": _json_check(_two_bodies)},
+    {
+        "tool": "check_design",
+        "args": {},
+        "check": _json_check(lambda d, r: None if d["ok"] else "not ok: %s" % d["problems"]),
+    },
+    {
+        "tool": "query_geometry",
+        "args": {
+            "of": "$v_box_body",
+            "element": "edges",
+            "select": {
+                "type": "line",
+                "parallel": [0, 0, 1],
+                "at": [{"axis": "x", "value": "min"}, {"axis": "y", "value": "min"}],
+            },
+        },
+        "check": _json_check(_box_edge),
+    },
+    {  # the plate is active: the box's ref must not round the plate's matching edge
+        "tool": "fillet",
+        "args": {"edges": "$v_edge_ref", "radius": 2},
+        "expect": "error",
+        "contains": ["made for body", "activate"],
+    },
+    {"tool": "inspect_design", "args": {"snapshot": False}, "check": _volumes(24000.0, BOX)},
+    {"tool": "activate", "args": {"target": "$v_box_body"}},
+    {"tool": "fillet", "args": {"edges": "$v_edge_ref", "radius": 2}, "save": "v_fillet"},
+    {
+        "tool": "inspect_design",
+        "args": {"snapshot": False},
+        "check": _volumes(24000.0, FILLETED_BOX),
+    },
+    {"tool": "diff_design", "args": {"since": "$v_snapshot"}, "check": _json_check(_diff_two)},
+    {
+        "tool": "render",
+        "args": {
+            "view": "top",
+            "width": 400,
+            "height": 200,
+            "highlight": {"of": "$v_box_body", "faces": {"normal": [0, 0, 1], "count": 1}},
+        },
+        "check": _orange_right_of(0.6),
+        "contains": ["in orange"],
+    },
+    {  # an earlier step of the moved box: drawn where the box is, not 100 mm away
+        "tool": "render",
+        "args": {
+            "view": "top",
+            "width": 400,
+            "height": 200,
+            "highlight": {"of": "$v_box", "faces": {"normal": [0, 0, 1], "count": 1}},
+        },
+        "check": _orange_right_of(0.6),
+        "contains": ["step"],
+    },
+    {"tool": "roll_timeline", "args": {"before": "$v_fillet"}},
+    {
+        "tool": "diff_design",
+        "args": {"since": "$v_fillet"},
+        "expect": "error",
+        "contains": ["rolled back"],
+    },
+    {"tool": "roll_timeline", "args": {"to": "end"}},
+    {"tool": "diff_design", "args": {"since": "$v_fillet"}, "contains": ["the solid is the same"]},
+    # snapshots belong to their design: one closed in the window (not with close_design) and
+    # a new one under the same name must not be compared with it (F6)
+    {"tool": "new_design", "args": {"name": "VerifyReuse"}},
+    {
+        "tool": "create_sketch",
+        "args": {"plane": "XY", "geometry": [{"rect": [0, 0, 60, 40]}]},
+        "save": "r_sk",
+    },
+    {"tool": "extrude", "args": {"profile": "$r_sk", "distance": 10}},
+    {"tool": "inspect_design", "args": {}, "check": _json_check(_snapshot_then_close)},
+    {"tool": "new_design", "args": {"name": "VerifyReuse"}, "contains": ["(id 'VerifyReuse')"]},
+    {"tool": "primitive", "args": {"kind": "cylinder", "plane": "XY", "diameter": 10, "height": 5}},
+    {
+        "tool": "diff_design",
+        "args": {"since": "$r_snapshot"},
+        "expect": "error",
+        "contains": ["no snapshot"],
+    },
+    {"tool": "diff_design", "args": {"since": "last_change"}, "contains": ["Cylinder"]},
+    {"tool": "get_timeline", "args": {}, "check": _close_active},
+    {"tool": "new_design", "args": {"name": "VerifyReuse"}},
+    {
+        "tool": "diff_design",
+        "args": {"since": "last_change"},
+        "expect": "error",
+        "contains": ["No AI change"],
+    },
+]
+
+
+def _old_problem_hides_nothing(run):
+    """A sketch already broken one way (a line's own width of 0, written by a script) is
+    still checked for new breakages: Change Parameters refuses d = -4 (the circle's
+    diameter), then the line is taken out again."""
+    import FreeCAD as App
+    import Part
+    import Sketcher
+
+    from sciforge import parameters
+
+    sketch = run.obj("s_origin")
+    doc = run.doc()
+    geo = sketch.addGeometry(Part.LineSegment(App.Vector(30, 0, 0), App.Vector(30, 10, 0)))
+    sketch.addConstraint(Sketcher.Constraint("DistanceX", geo, 1, geo, 2, 0.0))
+    doc.recompute()
+    try:
+        if not parameters.broken_steps(doc):
+            return "the line's width of 0 is not seen as broken"
+        message = parameters.change_checked(
+            doc,
+            parameters.container(doc),
+            "d",
+            lambda: parameters.set_user(doc, "d", "-4"),
+            "d = -4",
+        )
+        if "diameter" not in message:
+            return "d = -4 was not refused for the circle: %r" % message
+        return None
+    finally:
+        sketch.delGeometry(geo)
+        doc.recompute()
+
+
+def _change_parameters_refuses(run, name, value):
+    """What the Change Parameters dialog does with `name` = `value` (parameters.change_checked):
+    None when it is refused and nothing changed, else the problem."""
+    from sciforge import parameters
+
+    doc = run.doc()
+    if parameters.broken_steps(doc):
+        return "broken before any change: %s" % parameters.broken_steps(doc)
+    before = {p["name"]: p.get("value") for p in parameters.user_parameters(doc)}
+    message = parameters.change_checked(
+        doc,
+        parameters.container(doc),
+        name,
+        lambda: parameters.set_user(doc, name, value),
+        "%s = %s" % (name, value),
+    )
+    after = {p["name"]: p.get("value") for p in parameters.user_parameters(doc)}
+    if "would break" not in message:
+        return "%s = %s was not refused (%r), %s is now %s" % (name, value, message, name, after)
+    if after != before:
+        return "refused, but the parameters changed: %s -> %s" % (before, after)
+    return None
+
+
+def _ids_from(answer):
+    match = re.search(r"Its id is '([^']+)'", answer["text"])
+    if match:
+        return match.group(1)
+    match = re.search(r"\(id '([^']+)'\)", answer["text"])
+    return match.group(1) if match else None
+
+
+def run_session(run, session=SESSION, text_filter=""):
+    from sciforge.ai import headless
+
+    for i, entry in enumerate(session):
+        tool = entry["tool"]
+        args = _paths(_substitute(entry.get("args", {}), run.ids), run.folder)
+        label = "%03d %s" % (i, tool)
+        start = time.time()
+        problems = []
+        try:
+            answer = headless.call(tool, args, run.host)
+        except Exception as exc:  # executor.run never raises: this would be a bug
+            answer = {
+                "text": "raised: %s\n%s" % (exc, traceback.format_exc()),
+                "is_error": True,
+                "image_png_base64": None,
+            }
+            problems.append("the call raised")
+        run.called.add(tool)
+        expect = entry.get("expect", "ok")
+        if expect == "ok" and answer["is_error"]:
+            problems.append("failed: %s" % answer["text"][:600])
+        if expect == "error" and not answer["is_error"]:
+            problems.append("should have failed: %s" % answer["text"][:300])
+        if expect in ("ok", "error"):
+            for text in entry.get("contains", []):
+                if text not in answer["text"]:
+                    problems.append("the answer lacks %r: %s" % (text, answer["text"][:400]))
+        made = _ids_from(answer)
+        for key in ("save", "save_component", "save_drawing", "save_joint", "save_group"):
+            if key in entry and not answer["is_error"]:
+                if key == "save_group":
+                    match = re.search(r"group id '([^']+)'", answer["text"])
+                    made = match.group(1) if match else None
+                if made:
+                    run.ids[entry[key]] = made
+                else:
+                    problems.append("no id in the answer: %s" % answer["text"][:200])
+        check = entry.get("check")
+        if check is not None and not problems and not answer["is_error"]:
+            try:
+                problem = check(answer, run)
+            except Exception as exc:
+                problem = "check raised %s" % exc
+            if problem:
+                problems.append(problem)
+        if answer["is_error"] and expect == "error" and not answer["text"].strip():
+            problems.append("an error without words")
+        broken = _broken_objects(run)
+        newly = sorted(set(broken) - run.broken)
+        run.broken = set(broken)
+        if text_filter and text_filter not in label:
+            continue
+        run.results.append(
+            {
+                "newly_broken": newly,
+                "label": label,
+                "tool": tool,
+                "status": "fail" if problems else "pass",
+                "problems": problems,
+                "answer": answer["text"][:1000],
+                "is_error": answer["is_error"],
+                "seconds": round(time.time() - start, 3),
+            }
+        )
+
+
+def _broken_objects(run):
+    """Every object of the active design whose state is Invalid / Error (helpers too)."""
+    doc = run.doc()
+    if doc is None:
+        return []
+    found = []
+    for obj in doc.Objects:
+        try:
+            state = list(obj.State)
+        except Exception:
+            continue
+        if "Invalid" in state or "Error" in state:
+            found.append("%s/%s" % (doc.Name, obj.Label))
+    return found
+
+
+def missing_tools(run):
+    from sciforge.ai import catalog
+
+    return sorted(set(catalog.TOOL_NAMES) - run.called)
+
+
+def markdown(report):
+    lines = [
+        "# Headless AI tools report",
+        "",
+        "FreeCAD %s, %s. %d calls, %d tools: %s"
+        % (
+            report["freecad"],
+            report["platform"],
+            len(report["results"]),
+            report["tools_called"],
+            "PASS" if report["passed"] else "FAIL",
+        ),
+        "",
+    ]
+    if report["missing"]:
+        lines += ["Tools never called: %s" % ", ".join(report["missing"]), ""]
+    lines += ["| Call | Result | Time (s) | Details |", "|---|---|---|---|"]
+    for r in report["results"]:
+        detail = (
+            "; ".join(r["problems"]) or r["answer"].splitlines()[0][:160] if r["answer"] else ""
+        )
+        lines.append(
+            "| %s | %s | %.2f | %s |"
+            % (
+                r["label"],
+                r["status"].upper(),
+                r["seconds"],
+                detail.replace("|", "/").replace("\n", " "),
+            )
+        )
+    return "\n".join(lines) + "\n"
+
+
+def main():
+    import FreeCAD as App
+
+    out_dir = os.environ.get("SCIFORGE_HEADLESS_OUT") or App.getUserAppDataDir()
+    os.makedirs(out_dir, exist_ok=True)
+    folder = tempfile.mkdtemp(prefix="sciforge-headless-")
+    report = {
+        "freecad": ".".join(App.Version()[:3]),
+        "platform": platform.platform(),
+        "folder": folder,
+        "results": [],
+    }
+    try:
+        run = Run(folder)
+        run_session(run, SESSION + FIX_SESSION, os.environ.get("SCIFORGE_HEADLESS_FILTER", ""))
+        run_session(run, VERIFY_SESSION, os.environ.get("SCIFORGE_HEADLESS_FILTER", ""))
+        report["results"] = run.results
+        report["missing"] = [] if os.environ.get("SCIFORGE_HEADLESS_FILTER") else missing_tools(run)
+        report["tools_called"] = len(run.called)
+    except Exception as exc:
+        report["results"].append(
+            {
+                "label": "session",
+                "tool": "",
+                "status": "fail",
+                "problems": ["%s\n%s" % (exc, traceback.format_exc())],
+                "answer": "",
+                "is_error": True,
+                "seconds": 0,
+            }
+        )
+        report["missing"] = []
+        report["tools_called"] = 0
+    report["passed"] = not report["missing"] and all(
+        r["status"] == "pass" for r in report["results"]
+    )
+    for r in report["results"]:
+        App.Console.PrintMessage(
+            "[SciForge] headless %s %s %s\n"
+            % (r["status"].upper(), r["label"], "; ".join(r["problems"])[:800])
+        )
+    if report["missing"]:
+        App.Console.PrintMessage("[SciForge] headless MISSING %s\n" % ", ".join(report["missing"]))
+    with open(os.path.join(out_dir, "headless-report.json"), "w", encoding="utf-8") as handle:
+        json.dump(report, handle, indent=2)
+    with open(os.path.join(out_dir, "headless-report.md"), "w", encoding="utf-8") as handle:
+        handle.write(markdown(report))
+    App.Console.PrintMessage(
+        "[SciForge] headless summary: %d calls, %d failed, %d tools called, %d missing\n"
+        % (
+            len(report["results"]),
+            len([r for r in report["results"] if r["status"] != "pass"]),
+            report["tools_called"],
+            len(report["missing"]),
+        )
+    )
+    return report

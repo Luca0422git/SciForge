@@ -264,6 +264,10 @@ class RecomputeGuard:
                 self._pending.add(name)
                 self.defer(lambda: self._settle(name), 100)
                 return
+            from . import preview
+
+            if preview.holding(doc):
+                return  # a dialog's preview: the steps after the marker wait (settled after)
             settle(doc)
         except Exception as exc:
             from . import _remember
@@ -660,7 +664,12 @@ def _body_pattern_uses(obj, names):
 def problem(obj, broken_before=None):
     """("error"|"warning"|"", reason) for one step."""
     state = list(getattr(obj, "State", []))
+    sketch = obj.TypeId == "Sketcher::SketchObject"
     if "Invalid" in state or "Error" in state:
+        if sketch:
+            said = _sketch_conflict(obj)
+            if said:
+                return "error", said
         try:
             text = obj.getStatusString()
         except Exception:
@@ -669,12 +678,14 @@ def problem(obj, broken_before=None):
     note = getattr(obj, WARNING, "")
     if note:
         return "warning", note
-    if obj.TypeId == "Sketcher::SketchObject":
+    if sketch:
         try:
             if obj.MalformedConstraints:
                 return "warning", "The sketch has broken constraints."
             if obj.RedundantConstraints:
-                return "warning", "The sketch has redundant constraints."
+                return "warning", "The sketch has redundant constraints%s." % _named(
+                    obj, [i - 1 for i in obj.RedundantConstraints]
+                )
         except Exception:
             pass
     for prop, kind in _link_props(obj):
@@ -688,6 +699,33 @@ def problem(obj, broken_before=None):
         if lost:
             return "warning", "Lost a reference to %s." % ", ".join(s[1:] for s in lost)
     return "", ""
+
+
+def _named(sketch, indices):
+    """The end of a sketch's message that names constraints `indices` in Fusion's terms,
+    like ": the Horizontal on Line 2 and the 30 mm dimension" (sketch_explain); "" when
+    they cannot be named."""
+    try:
+        from . import sketch_explain
+
+        text, _count = sketch_explain.words(sketch, indices)
+        return (": " + text) if text else ""
+    except Exception:
+        return ""
+
+
+def _sketch_conflict(sketch):
+    """A sketch that failed because its constraints conflict: which ones (the solver's last
+    diagnosis, no solve)."""
+    try:
+        conflicting = [i - 1 for i in sketch.ConflictingConstraints]
+    except Exception:
+        return ""
+    if not conflicting:
+        return ""
+    return "Its constraints conflict%s. Edit the sketch and remove one of them." % _named(
+        sketch, conflicting
+    )
 
 
 def _friendly(obj, text):
@@ -801,6 +839,8 @@ def snapshot(doc, deps=True):
                 "own_label": component,
                 # Outside the bodies, these roll back with the marker (timeline_core.build).
                 "rolls": rolls_back(obj),
+                # Fusion's padlock on a fully constrained sketch (read, not solved)
+                "locked": _locked(obj),
             }
         )
     tips = {}
@@ -808,6 +848,14 @@ def snapshot(doc, deps=True):
         tip = _step_at_or_before(body, getattr(body, "Tip", None))
         tips[body.Name] = tip.Name if tip is not None else None
     return features, tips
+
+
+def _locked(obj):
+    if obj.TypeId != "Sketcher::SketchObject":
+        return False
+    from . import sketch_explain
+
+    return sketch_explain.fully_constrained(obj)
 
 
 # -- multi-body steps (an extrude that acts on several bodies) ----------------------------
@@ -931,10 +979,36 @@ def _set_marker_note(doc, name):
 
 
 # -- helpers for operations ------------------------------------------------------------
+class undo_title:
+    """While it is entered, the undo steps these operations make are named `title` instead
+    of their own name ("Suppress Fillet 1"). The AI tools name every undo step after the
+    call ("AI: Suppress"), which the AI panel's Undo last AI step looks for
+    (sciforge/ai/executor.py)."""
+
+    titles = []
+
+    def __init__(self, title):
+        self.title = title
+
+    def __enter__(self):
+        undo_title.titles.append(self.title)
+        return self
+
+    def __exit__(self, *exc):
+        undo_title.titles.pop()
+        return False
+
+
+def transaction_title(title):
+    """The name an undo step this module (or direct.py) opens gets: `title`, or the name
+    undo_title asked for."""
+    return undo_title.titles[-1] if undo_title.titles else title
+
+
 def _transaction(doc, title):
     if not doc.UndoMode:
         doc.UndoMode = 1  # headless documents: a refused move must be able to roll back
-    doc.openTransaction(title)
+    doc.openTransaction(transaction_title(title))
 
 
 def _set_tips(doc, tips):

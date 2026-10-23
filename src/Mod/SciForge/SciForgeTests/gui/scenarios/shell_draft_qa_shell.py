@@ -12,7 +12,8 @@ Path 3, Esc while the blue arrow is being dragged (the mouse button still down),
 Path 4, values while the preview runs: 3 mm and Both and 1.5 mm out typed in a row;
         "abc" (explained, OK waits); 0 (explained); Delete does nothing; the arrow
         dragged far through the surface (a thin wall, never below zero) and far into the
-        part (too thick: explained, the last good preview stays); Esc.
+        part (it stops at the thickest wall that fits and says so: Luca's decision of
+        2026-10-21); Esc.
 Path 5, another command's key while the dialog is open: E keeps the shell (like any
         command start) and opens Extrude; Esc. Shell with nothing picked, then F: no
         shell is made, Fillet opens; Esc.
@@ -26,6 +27,7 @@ Path 8, save, close, reopen; the shell edited to Both (FreeCAD's shell swapped f
 Volumes by hand (shell_draft_steps): open box 12000 - (40-2t)(30-2t)(10-t); Both with
 the top taken away (40+2o)(30+2o)(10+o) - (40-2i)(30-2i)(10-i); a boss pi r^2 h.
 """
+
 import math
 import os
 import tempfile
@@ -332,22 +334,16 @@ def p4_dragged_out():
 
 
 def p4_dragged_in():
+    """Luca, 2026-10-21: dragged far into the part, the wall stops at the thickest that fits
+    (about 9.99 mm here; it was refused, with the thickest wall in the message)."""
     p = sd.shell_panel()
     t = p.inside.value() if p else 0
-    h.check("P4 dragged far into the part", t > 10, t)
-    h.check(
-        "P4 too thick is explained, with the thickest that fits",
-        ("too thick" in msg(p) or "cannot be made" in msg(p)) and "thickest" in msg(p),
-        msg(p),
-    )
-    # The preview follows the drag while the wall fits (like Fusion), so the last good one is
-    # a wall between the thin one and the thickest that fits (about 9.99 mm here).
+    note = p.limit_label.text() if p is not None and p.limit_label.isVisible() else ""
+    h.check("P4 dragged far into the part: the wall stops just under 10 mm", 9.0 < t < 10.0, t)
+    h.check("P4 the note says so", note == "Largest that fits here: %.2f mm" % t, note)
+    h.check("P4 no error", msg(p) == "", msg(p))
     v = h.solid_volume()
-    h.check(
-        "P4 the last good preview stays (a wall that fits)",
-        s["thin"] - 1e-6 <= v <= sd.open_top(10.0) + 1e-6,
-        (v, s["thin"], sd.open_top(10.0)),
-    )
+    h.check("P4 the preview is that wall", sd.close(v, sd.open_top(t)), (v, t))
     h.check("P4 nothing in the Report view", not sd.report_errors(), sd.report_errors())
 
 
@@ -578,7 +574,9 @@ def p7_edit():
 
 def p7_edit_preview():
     v = h.solid_volume()
-    h.check("P7 the preview carries the boss along", sd.close(v, sd.open_top(3) + boss()), v)
+    # the shell is edited with the timeline rolled to it (Fusion): the boss after it waits
+    # until OK (edit_rollback / preview.hold), then follows the floor (p7_followed)
+    h.check("P7 the preview: the shell alone, the boss waits", sd.close(v, sd.open_top(3)), v)
     p = sd.shell_panel()
     h.check("P7 no message", msg(p) == "", msg(p))
     h.task_button("OK")
@@ -652,8 +650,8 @@ def p8_edit():
 
 def p8_both():
     v = h.solid_volume()
-    expect = both_open(3, 1) + boss() + 42 * 11 * 2
-    h.check("P8 Both previews under the boss and the Press Pull", sd.close(v, expect), (v, expect))
+    expect = both_open(3, 1)  # the boss and the Press Pull wait until OK (rolled back)
+    h.check("P8 Both previews, the later steps wait", sd.close(v, expect), (v, expect))
     p = sd.shell_panel()
     h.check("P8 no message", msg(p) == "", msg(p))
     h.task_button("OK")

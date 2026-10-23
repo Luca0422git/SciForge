@@ -20,6 +20,8 @@ then measures the volume of curved NURBS faces only approximately (to about 1 %)
 """
 import FreeCAD as App
 
+from . import log, warn
+
 TYPE = "PartDesign::FeaturePython"
 KIND = "Scale"
 MIN_FACTOR = 1e-3
@@ -493,14 +495,16 @@ def scale_sketch(sketch, factor, center=None):
     """Scale every curve of `sketch` by `factor` about `center` (sketch coordinates, None
     the sketch origin); its dimensions are scaled with it. Returns the names of dimensions
     that follow a parameter (they keep their value)."""
+    from . import sketch_geometry
+
     factor = float(factor)
     check_factors((factor, factor, factor), True)
     center = App.Vector(center) if center is not None else App.Vector(0, 0, 0)
-    geometry = []
-    for geo in sketch.Geometry:
+    changes = {}
+    for index, geo in enumerate(sketch.Geometry):
         copy = geo.copy()
         copy.scale(center, factor)
-        geometry.append(copy)
+        changes[index] = copy
     dims = []
     kept = []
     for i, con in enumerate(sketch.Constraints):
@@ -512,7 +516,9 @@ def scale_sketch(sketch, factor, center=None):
     # The curves first, then each dimension: FreeCAD solves after every new value, and
     # with the curves already scaled each solve only confirms them (setting the curves
     # with the dimensions as references and solving moved the corners half way).
-    sketch.Geometry = geometry
+    # (sketch_geometry: assigning sketch.Geometry made construction points normal ones
+    # with new ids)
+    sketch_geometry.set_geometry(sketch, changes)
     for i, value in dims:
         sketch.setDatum(i, App.Units.Quantity(value * factor, App.Units.Unit("mm")))
     try:
@@ -548,6 +554,10 @@ class SketchScaleFeature:
         if add("App::PropertyBool", "AtOrigin", "Scaled about each sketch's origin"):
             obj.AtOrigin = True
         add("App::PropertyString", "PointLabel", "What the point is (shown in the dialog)")
+        # each sketch's curves before and after the scale (kept_curves / put_back)
+        add("Part::PropertyGeometryList", "Before", "The sketches' curves before the scale", 4)
+        add("Part::PropertyGeometryList", "After", "The sketches' curves after the scale", 4)
+        add("App::PropertyIntegerList", "Counts", "How many curves each sketch has", 4)
         if "SciForgeType" not in obj.PropertiesList:
             obj.addProperty("App::PropertyString", "SciForgeType", "Base", "", 4)
             obj.SciForgeType = SKETCH_KIND
@@ -574,6 +584,76 @@ def _center_of(record, sketch):
     return sketch_point(sketch, record.Center)
 
 
+def _scale_all(record, factor):
+    """Scale the record's sketches by `factor` and keep each one's curves before and after
+    (put_back uses them). Returns the dimensions that kept their value."""
+    kept, before, after = [], [], []
+    for sketch in list(record.Sketches):
+        if not is_sketch(sketch):
+            before.append([])
+            after.append([])
+            continue
+        before.append(list(sketch.Geometry))
+        kept += scale_sketch(sketch, factor, _center_of(record, sketch))
+        after.append(list(sketch.Geometry))
+    try:
+        record.Before = [g for curves in before for g in curves]
+        record.After = [g for curves in after for g in curves]
+        record.Counts = [len(curves) for curves in before]
+    except Exception as exc:
+        warn("scale: the sketches' curves are not kept for a delete (%s)" % exc)
+    return kept
+
+
+def _kept_curves(record):
+    """[(curves before, curves after)] per sketch of the record ([] when not kept: a step
+    from an older SciForge)."""
+    try:
+        counts = list(record.Counts)
+        before, after = list(record.Before), list(record.After)
+    except Exception:
+        return []
+    if sum(counts) != len(before) or len(before) != len(after):
+        return []
+    out, at = [], 0
+    for count in counts:
+        out.append((before[at : at + count], after[at : at + count]))
+        at += count
+    return out
+
+
+def _unscale_all(record, applied):
+    """Each sketch back as it was before the step. A dimension that follows a parameter
+    keeps its value while the curves are scaled, so the solve moves the sketch's free
+    curves: scaling back by 1/applied does not bring them back where they were (7 mm off,
+    more with every factor change in an edit). The curves kept before the scale are put
+    back, when nothing changed the sketch since (else the plain scale back)."""
+    from . import sketch_geometry
+
+    kept = _kept_curves(record)
+    for k, sketch in enumerate(list(record.Sketches)):
+        if not is_sketch(sketch):
+            continue
+        before, after = kept[k] if k < len(kept) else (None, None)
+        now = list(sketch.Geometry)
+        exact = (
+            bool(before)
+            and len(now) == len(after) == len(before)
+            and all(sketch_geometry.same_curve(a, b, 1e-6) for a, b in zip(now, after))
+            and all(a.TypeId == b.TypeId for a, b in zip(now, before))
+        )
+        scale_sketch(sketch, 1.0 / applied, _center_of(record, sketch))  # the dimensions
+        if not exact:
+            if before:
+                log("scale: %s was changed after the scale; scaled back" % sketch.Label)
+            continue
+        try:
+            sketch_geometry.set_geometry(sketch, dict(enumerate(before)))
+            sketch.solve()
+        except Exception as exc:
+            warn("scale: %s not put back exactly (%s)" % (sketch.Label, exc))
+
+
 def make_sketch_scale(doc, sketches, factor, point=None, label="", name="Scale"):
     """Scale `sketches` by `factor` about `point` (design coordinates; None: each sketch's
     origin) and record it as a Scale step. Returns (step, dimensions that kept their value)."""
@@ -589,46 +669,38 @@ def make_sketch_scale(doc, sketches, factor, point=None, label="", name="Scale")
     record.AtOrigin = point is None
     record.Center = App.Vector(point) if point is not None else App.Vector()
     record.PointLabel = label or ""
-    kept = []
-    for sketch in sketches:
-        kept += scale_sketch(sketch, factor, _center_of(record, sketch))
+    kept = _scale_all(record, factor)
     record.Applied = factor
     _attach_sketch_view_provider(record)
     return record, kept
 
 
 def edit_sketch_scale(record, factor, point=None, label=None, move_point=False):
-    """Change a sketch Scale step: the sketches are scaled back and by the new factor (about
-    the new point when move_point)."""
+    """Change a sketch Scale step: the sketches are put back as they were before it, then
+    scaled by the new factor (about the new point when move_point)."""
     factor = float(factor)
     check_factors((factor, factor, factor), True)
     applied = float(record.Applied) or 1.0
-    kept = []
-    for sketch in list(record.Sketches):
-        if is_sketch(sketch):
-            scale_sketch(sketch, 1.0 / applied, _center_of(record, sketch))
+    if abs(applied - 1.0) > 1e-12:
+        _unscale_all(record, applied)
     record.Applied = 1.0
     if move_point:
         record.AtOrigin = point is None
         record.Center = App.Vector(point) if point is not None else App.Vector()
         if label is not None:
             record.PointLabel = label
-    for sketch in list(record.Sketches):
-        if is_sketch(sketch):
-            kept += scale_sketch(sketch, factor, _center_of(record, sketch))
+    kept = _scale_all(record, factor)
     record.Factor = factor
     record.Applied = factor
     return kept
 
 
 def unscale_sketches(record):
-    """The sketches back to their size before the step (it is being deleted)."""
+    """The sketches back as they were before the step (it is being deleted)."""
     applied = float(getattr(record, "Applied", 1.0)) or 1.0
     if abs(applied - 1.0) < 1e-12:
         return
-    for sketch in list(getattr(record, "Sketches", []) or []):
-        if is_sketch(sketch):
-            scale_sketch(sketch, 1.0 / applied, _center_of(record, sketch))
+    _unscale_all(record, applied)
     record.Applied = 1.0
 
 

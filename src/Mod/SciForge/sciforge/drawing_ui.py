@@ -2806,6 +2806,22 @@ class ExportDialog(QtWidgets.QDialog):
         self.path = None
         self.paths = []
 
+    def _report(self, which):
+        """What the PDF / DXF leaves out of the drawing (export_report_ui: a short message,
+        nothing when nothing is lost). Never raises."""
+        try:
+            from . import export_report_ui, export_ui
+
+            export_report_ui.report_losses(
+                self.page.Document,
+                self.page,
+                "drawing_" + self.kind,
+                export_ui.files_label(self.paths),
+                which=which,
+            )
+        except Exception as exc:
+            warn("drawing export report: %s" % exc)
+
     def _browse(self):
         try:
             folder = QtWidgets.QFileDialog.getExistingDirectory(
@@ -2844,6 +2860,7 @@ class ExportDialog(QtWidgets.QDialog):
                 OPENER["open"](path)
             self.accept()
             commands.tell("Exported %s" % path)
+            self._report(which)
         except Exception as exc:
             self.message.setText("Could not export: %s" % exc)
             warn("export %s: %s" % (self.kind, exc))

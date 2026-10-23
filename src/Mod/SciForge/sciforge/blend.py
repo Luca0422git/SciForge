@@ -734,8 +734,11 @@ def recompute_keeping(doc, keep, rounds=4):
     """Recompute; later blends that lost their edges are put back on them (a repaired step
     can uncover the next one, hence the rounds). Quiet: what still fails afterwards is
     reported by the caller (the dialog says which later steps no longer work)."""
+    from . import preview
+
+    # preview.recompute: while a dialog is open the steps after the marker wait
     with quiet():
-        doc.recompute()
+        preview.recompute(doc)
         if keep is None:
             return []
         changed = []
@@ -744,7 +747,7 @@ def recompute_keeping(doc, keep, rounds=4):
             if not fixed:
                 break
             changed.extend(fixed)
-            doc.recompute()
+            preview.recompute(doc)
     return changed
 
 
@@ -802,6 +805,12 @@ def trial(kind, info, refs, options):
     result shape (None when it can only be checked by the feature), raises BlendError
     with a plain-language reason when it does not work."""
     names = blended_edges(info, refs)
+    if not names and refs:  # only smooth edges picked (an AI's selector, or a click)
+        raise BlendError(
+            "The picked edges are smooth: the faces on both sides already meet without a "
+            "corner (the edges of an earlier fillet, for example), so there is nothing to "
+            "%s. Pick sharp edges." % ("round" if kind == "fillet" else "chamfer")
+        )
     if not names:
         raise BlendError(
             "Select the edges or faces to %s (click them in the view)." % kind
@@ -844,9 +853,48 @@ def trial(kind, info, refs, options):
         raise BlendError(
             "This %s would cut the part into pieces. Use a smaller %s." % (kind, label)
         )
+    # An open shell first: a solid with one is never valid, and OpenCASCADE's validity check
+    # crashed FreeCAD on such results of a shell (shelling._closed); a search tries sizes
+    # nobody typed.
+    if not all(sh.isClosed() for so in result.Solids for sh in so.Shells):
+        raise BlendError(too_big(kind, label, size))
     if not result.isValid():
         raise BlendError(too_big(kind, label, size))
     return result
+
+
+def check_build(kind, info, refs, options):
+    """Raise BlendError if the blend does not work: trial(), and for a Distance and Angle
+    chamfer (Part has no Python call for it, trial() cannot build it) the same bevel built
+    as a Two Distances chamfer: the second distance is where a bevel leaving the measured
+    face at the angle meets the other face (law of sines in the corner's triangle). Used to
+    explain a refused chamfer and to find the largest size that fits (value_limits). Not
+    FreeCAD's own Distance and Angle builder: OpenCASCADE crashed FreeCAD in it (segfault in
+    ChFi3d_Builder) for some sizes where the bevel runs into a fillet, and a search tries
+    sizes nobody typed."""
+    if trial(kind, info, refs, options) is not None:
+        return
+    names = blended_edges(info, refs)
+    label, size = _size_name(kind, options)
+    angle = math.radians(float(options.get("angle", 45.0)))
+    groups = {}  # the second distance -> the edges with that corner angle
+    for name in names:
+        frame = info.frame(name)
+        gamma = frame["gamma"] if frame else math.pi / 2.0
+        far = math.sin(angle + gamma)
+        if far <= 1e-9:
+            raise BlendError(too_big(kind, label, size))
+        groups.setdefault(round(size * math.sin(angle) / far, 9), []).append(name)
+    # Each edge gets its own second distance (FreeCAD's Distance and Angle chamfer does that
+    # too): Part's chamfer takes one pair of distances for all its edges, so the edges are
+    # checked in groups of the same corner angle. One bevel with the largest second distance
+    # on every edge refused chamfers FreeCAD builds (a 90 and a 135 degree edge together).
+    for second, group in groups.items():
+        two = dict(options, chamfer_type="two", distance=size, distance2=second)
+        try:
+            trial(kind, info, group, two)
+        except BlendError:
+            raise BlendError(too_big(kind, label, size))
 
 
 def too_big(kind, label, size, exc=None):

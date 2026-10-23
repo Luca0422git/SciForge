@@ -28,7 +28,7 @@ SOURCES = ("analytic", "baseline-freecad-1.1.4", "fusion")
 
 # op -> (required keys, optional keys)
 STEP_KEYS = {
-    "sketch": ({"id", "geometry"}, {"plane", "face", "auto_project", "offset", "comment"}),
+    "sketch": ({"id", "geometry"}, {"plane", "face", "on", "auto_project", "offset", "comment"}),
     "extrude": (
         {"id"},
         {
@@ -102,7 +102,18 @@ STEP_KEYS["blend_chamfer"] = (
     {"chamfer_type", "distance2", "angle", "flip", "edges", "faces", "features", "comment"},
 )
 
-GEOMETRY_KINDS = ("rect", "center_rect", "circle", "polyline", "polygon", "slot", "line")
+GEOMETRY_KINDS = (
+    "rect",
+    "center_rect",
+    "circle",
+    "polyline",
+    "polygon",
+    "slot",
+    "line",
+    "ellipse",
+    "spline_loop",
+    "segments",
+)
 EXPECT_KEYS = {
     "volume",
     "area",
@@ -114,6 +125,7 @@ EXPECT_KEYS = {
     "source",
     "rel_tol",
     "abs_tol",
+    "volume_by",
     "note",
 }
 AXES = ("X", "Y", "Z")
@@ -159,6 +171,8 @@ def _check_expect(where, expect):
     for key in ("volume", "area"):
         if key in expect:
             _check_number(where + "." + key, expect[key], positive=True)
+    if expect.get("volume_by", "brep") not in ("brep", "mesh"):
+        _fail(where, "'volume_by' must be 'brep' (default) or 'mesh'")
     for key in ("faces", "edges", "solids"):
         if key in expect and (not isinstance(expect[key], int) or expect[key] < 0):
             _fail(where, "'%s' must be a non-negative integer" % key)
@@ -195,6 +209,24 @@ def _check_geometry(where, geometry):
         elif kind == "line":
             if not isinstance(value, list) or len(value) != 4:
                 _fail(here, "'line' takes [x0, y0, x1, y1]")
+        elif kind == "ellipse":
+            if not isinstance(value, list) or len(value) != 4:
+                _fail(here, "'ellipse' takes [cx, cy, major, minor]")
+            _check_number(here + ".minor", value[3], positive=True)
+            if value[2] < value[3]:
+                _fail(here, "'ellipse': the major radius (along X) must be the larger")
+        elif kind == "spline_loop":
+            if not isinstance(value, list) or len(value) < 3:
+                _fail(here, "'spline_loop' takes at least 3 [x, y] points (it is always closed)")
+        elif kind == "segments":
+            if not isinstance(value, list) or len(value) < 2:
+                _fail(here, "'segments' takes a closed chain of at least 2 pieces")
+            for j, segment in enumerate(value):
+                if (
+                    not isinstance(segment, dict)
+                    or len({"line", "arc", "spline"} & set(segment)) != 1
+                ):
+                    _fail("%s.segments[%d]" % (here, j), "must be one 'line', 'arc' or 'spline'")
 
 
 def _check_ref(where, spec):
@@ -303,8 +335,12 @@ def validate(model):
             seen[step["id"]] = op
 
         if op == "sketch":
-            if ("plane" in step) == ("face" in step):
-                _fail(here, "sketch needs exactly one of 'plane' or 'face' (a selector)")
+            if len([k for k in ("plane", "face", "on") if k in step]) != 1:
+                _fail(
+                    here,
+                    "sketch needs exactly one of 'plane', 'face' (a selector) or 'on' (a "
+                    "construction plane step)",
+                )
             if "plane" in step and step["plane"] not in PLANES:
                 _fail(here, "'plane' must be one of %s" % (PLANES,))
             if step.get("auto_project") and "face" not in step:
@@ -1783,3 +1819,6 @@ from . import flatpattern_schema  # noqa: E402,F401  (SHEET METAL flat: Unfold, 
 from . import plastic_schema  # noqa: E402,F401  (PLASTIC: rules, Boss, Rest)
 from . import plastic2_schema  # noqa: E402,F401  (PLASTIC: Snap Fit, Lip)
 from . import surface3_schema  # noqa: E402,F401  (SURFACE part 3)
+from . import export_schema  # noqa: E402,F401  (export report checks; it wraps validate)
+# Fillet / Chamfer live picture on the exact result (live_checks.py)
+STEP_KEYS["live_blend_expect"] = ({"target"}, {"tol", "sizes", "min_points", "comment"})

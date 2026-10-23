@@ -3,7 +3,8 @@
 its own edges and radius, one timeline step, one undo step, each set's arrow and value box
 on the canvas. Only real input: F, clicks on edges, "+", typing, dragging set 1's arrow,
 a value typed into set 2's value box, OK, Ctrl+Z / Ctrl+Y, double-click in the timeline,
-picking a set's row, a radius too big for its set (the dialog says so, OK waits), Esc, save,
+picking a set's row, a radius too big for its set (held at the largest that fits it, and
+said: Luca's decision of 2026-10-21), Esc, save,
 close, reopen and edit. Volumes by hand: a round of radius r on a 40 mm box edge removes
 40 r^2 (1 - pi/4) (blend_steps)."""
 
@@ -179,20 +180,21 @@ def edit_row():
 
 
 def too_big():
+    """Luca, 2026-10-21: a radius past what fits its set is held at the largest that works
+    (it was refused, and OK waited)."""
     p = b.blend_panel()
-    text = p.message.text() if p else ""
-    h.check("a radius too big for set 2 is explained", "too big" in text or "fit" in text, text)
-    h.check(
-        "the preview keeps the last good result",
-        b.close(h.solid_volume(), s["v"]),
-        h.solid_volume(),
-    )
-    h.task_button("OK")
+    note = p.limit_label.text() if p and p.limit_label.isVisible() else ""
+    r = p.spec["sets"][1]["radius"] if p else 0
+    h.check("a radius too big for set 2 is held at the largest that fits it", 2.0 < r < 40.0, r)
+    h.check("and said", note == "40 mm does not fit: limited to %.2f mm" % r, note)
+    h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
+
+
+too_big.wait_ms = 2500
 
 
 def ok_refused():
     p = b.blend_panel()
-    h.check("OK waits while a set does not fit", p is not None)
     if p:
         b.type_into(p.radius.widget, "2.5")
 

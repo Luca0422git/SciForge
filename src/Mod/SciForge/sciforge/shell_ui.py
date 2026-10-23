@@ -9,18 +9,22 @@ Pressing Shell with nothing selected opens the dialog, which waits for a pick:
   * faces (or the body) selected before pressing Shell are taken at once.
 Inside Thickness / Outside Thickness with Direction Inside, Outside or Both, Shell Type
 Sharp or Rounded (how walls meet outside the part). The blue arrows on the opening's rim
-drag the thicknesses. The result is previewed solid inside the see-through part; a wall
-that does not fit is explained in the dialog (with the thickest one that does) and OK
-waits for a fix. Fields take parameters and formulas ("wall", "wall * 2").
+drag the thicknesses. The result is previewed solid inside the see-through part. A wall
+dragged or typed thicker than fits stops at the thickest one that works and the dialog says
+so (Luca, 2026-10-21; Fusion refuses it: value_limits.py); a wall from a formula that does
+not fit is explained (with the thickest one that does) and OK waits for a fix. Fields take
+parameters and formulas ("wall", "wall * 2").
 
 Built on FreeCAD's PartDesign::Thickness, or SciForge's ShellFeature for what that cannot
 do (hollow body, Both): see shelling.py. Double-click the step in the timeline to edit.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
-from . import bodies, commands, hole_common, log, modify_bodies, pickpanel, preview, shelling
-from . import ui_icon_path, warn
+from . import bodies, commands, hole_common, live_shapes, log, modify_bodies, pickpanel, preview
+from . import shelling
+from . import ui_icon_path, value_limits, warn
 from . import plastic  # plastic rule defaults (plastic-1)
 from .compat import QtWidgets
 from .taskui import DistanceField, ValueBoxes
@@ -90,9 +94,12 @@ def start_body(preferred=None):
     return (candidates[0] if candidates else None), None
 
 
-class ShellPanel(pickpanel.PickPanel):
+class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues, live_shapes.LivePanel):
     title = "Shell"
     icon = "shell"
+    # While a wall arrow is dragged the walls follow it as a picture (live_shapes) and the
+    # exact shell is built once the mouse rests or is let go (taskui.Panel.schedule(settle))
+    LIVE_NAME = "Shell live picture"
     last = None  # the most recent panel (tests and diagnostics)
 
     def __init__(self, doc, feature=None, picks=None, body=None):
@@ -108,6 +115,7 @@ class ShellPanel(pickpanel.PickPanel):
         self.arrows = []  # (pickpanel.Arrow, spot, origin, direction) in global coordinates
         self.value_boxes = ValueBoxes(self, default="inside#0")  # the box next to each arrow
         self._chains = {}
+        self.limit_init()  # a wall past what fits stops at the thickest that works
         if feature is not None:
             self.body = shelling.owner_body(feature)
             base, names, options, formulas = shelling.read(feature)
@@ -128,6 +136,8 @@ class ShellPanel(pickpanel.PickPanel):
             plastic.apply_defaults(self.options, self.body, "shell")
         self._build()
         self.finish_layout()
+        self.limit_label = value_limits.note_label()  # "Largest that fits here: ..."
+        self.layout.addRow(self.limit_label)
         try:
             self._start(picks or [])
         except Exception as exc:  # never leave a half-open dialog without a reason
@@ -412,6 +422,7 @@ class ShellPanel(pickpanel.PickPanel):
             self._picks_updated()
 
     def _picks_updated(self, schedule=True):
+        self.limits.note = ""  # a limit found for the old picks no longer applies
         if self.whole:
             text = "Body"
         else:
@@ -451,6 +462,12 @@ class ShellPanel(pickpanel.PickPanel):
         self._typed("outside", value)
 
     def _typed(self, what, value):
+        field = self.inside if what == "inside" else self.outside
+        source = "formula" if self.formulas.get(what) else "typed"
+        held = self.limit_edit(what, value, source)
+        if held != value:
+            value_limits.show_held(self.limit_shower, what, field, value, held)
+            value = held
         self.options[what] = value
         found = False
         for dragger, spot, _origin, _direction in self.arrows:
@@ -463,18 +480,130 @@ class ShellPanel(pickpanel.PickPanel):
 
     def _dragged(self, what, distance, released=False):
         value = max(0.01, round(distance, 2))
-        if released and abs(value - distance) > 1e-9:
+        held = self.limit_edit(what, value, "dragged")
+        if held != value:
+            value = held
+            self._arrow_to(what, value)  # the arrow stops at the thickest wall that fits
+        elif released and abs(value - distance) > 1e-9:
             # dragged through the surface: the arrow goes back to the thinnest wall
             for dragger, spot, _origin, _direction in self.arrows:
                 if spot["what"] == what:
                     dragger.set_distance(value)
+        changed = abs(float(self.options.get(what, -1.0)) - value) > 1e-12
         self.options[what] = value
         field = self.inside if what == "inside" else self.outside
         field.set_value(value)
         if self.formulas.get(what):
             self.formulas[what] = ""  # a drag gives a plain number
             self._show_formulas()
-        self.schedule()
+            changed = True
+        if changed:
+            self.schedule(settle=self.live_show())  # with a picture: the shell at the rest
+        elif self.limits.note and not self.error:
+            self.show_status()  # held at the limit: nothing to rebuild
+
+    # -- the live picture (live_shapes.ShellPicture) ---------------------------------------------
+    def live_key(self):
+        if self.base is None or self.formula_errors or not self.has_picks():
+            return None
+        return value_limits.make_key(
+            "shell-live",
+            self.base.Shape,
+            list(self.names()),
+            bool(self.whole),
+            self.options.get("direction"),
+            [(m.body.Name, m.base.Shape, list(self.member_names(m))) for m in self.members],
+        )
+
+    def live_make(self):
+        direction = self.options.get("direction", "inside")
+        pictures = [
+            live_shapes.ShellPicture(
+                self.base.Shape, list(self.names()), direction, self._placement(self.body)
+            )
+        ]
+        for member in self.members:
+            if member.base is None:
+                continue
+            pictures.append(
+                live_shapes.ShellPicture(
+                    member.base.Shape,
+                    list(self.member_names(member)),
+                    direction,
+                    self._placement(member.body),
+                )
+            )
+        return pictures
+
+    @staticmethod
+    def _placement(body):
+        return body.getGlobalPlacement() if body is not None else None
+
+    def live_values(self):
+        return {
+            "inside": float(self.options.get("inside", 0.0)),
+            "outside": float(self.options.get("outside", 0.0)),
+        }
+
+    def live_hide_objects(self):
+        return [self.target] + [m.target for m in self.members]
+
+    def live_ghost_objects(self):
+        return [self.base] + [m.base for m in self.members]
+
+    def live_colors(self):
+        return live_shapes.colors(self.base)
+
+    def live_looks(self):
+        return self._looks  # the dialog's own: its preview ghosts the part the same way
+
+    def _arrow_to(self, what, value):
+        for dragger, spot, _origin, _direction in self.arrows:
+            if spot["what"] == what:
+                try:
+                    dragger.set_distance(value)
+                except Exception:
+                    pass
+
+    # -- walls past what fits (value_limits.LimitedValues) ---------------------------------------
+    def limit_key(self, what):
+        options = {k: v for k, v in self.options.items() if k != what}
+        return value_limits.make_key(
+            "shell",
+            self.base.Shape if self.base is not None else None,
+            self.names(),
+            self.whole,
+            [(m.body.Name, self.member_names(m)) for m in self.members],
+            options,
+            what,
+        )
+
+    def limit_works(self, what):
+        options = dict(self.options)
+        shape, names = self.base.Shape, list(self.names())
+        members = [(m.base.Shape, list(self.member_names(m))) for m in self.members]
+
+        def works(value):
+            trial = dict(options)
+            trial[what] = value
+            shelling.trial(shape, names, trial)
+            for member_shape, member_names in members:
+                shelling.trial(member_shape, member_names, trial)
+            return True
+
+        return works
+
+    def limit_value(self, what):
+        return float(self.options.get(what, 0.0))
+
+    def limit_set(self, what, value):
+        self.options[what] = value
+        field = self.inside if what == "inside" else self.outside
+        value_limits.show_held(self.limit_shower, what, field, field.value(), value)
+        self._arrow_to(what, value)
+
+    def limit_keep(self):
+        return self.base.Shape if self.base is not None else None
 
     def _direction_changed(self, *_):
         self.options["direction"] = self.direction.currentData()
@@ -491,9 +620,9 @@ class ShellPanel(pickpanel.PickPanel):
         self.options["shell_type"] = self.shell_type.currentData()
         self.options["tangent"] = self.tangent.isChecked()
         if not self.formulas.get("inside"):
-            self.options["inside"] = self.inside.value()
+            self.options["inside"] = self.limit_held("inside", self.inside.value())
         if not self.formulas.get("outside"):
-            self.options["outside"] = self.outside.value()
+            self.options["outside"] = self.limit_held("outside", self.outside.value())
 
     # -- formulas (preview.FormulaInput calls these) -------------------------------------------
     def formula_typed(self, key, text, value):
@@ -581,6 +710,17 @@ class ShellPanel(pickpanel.PickPanel):
 
     # -- preview --------------------------------------------------------------------------
     def _preview(self):
+        """The exact shell; the live picture goes (the exact one is there, or refused)."""
+        if self.limit_waits():
+            return  # the search of the thickest wall that fits previews when it ends
+        try:
+            self._preview_exact()
+        finally:
+            self.live_hide()
+            if not self._closed:
+                self.live_soon()
+
+    def _preview_exact(self):
         if self._closed or self.base is None:
             return
         self._collect()
@@ -608,11 +748,18 @@ class ShellPanel(pickpanel.PickPanel):
                 except shelling.ShellError as exc:
                     raise shelling.ShellError("%s: %s" % (member.body.Label, exc))
         except shelling.ShellError as exc:
+            held = self.limit_refuse(str(exc))
+            if held == "again":
+                self._preview_exact()  # held at the thickest wall that fits: preview that
+                return
+            if held == "later":
+                return  # looked for one trial per event-loop turn; previews when found
             self.error = str(exc)
             self.show_status()
             self._hint.start()
             return
         self.error = None
+        self.limit_good()
         if self.target is None:
             self.target = shelling.make(
                 self.body, self.base, names, self.options, formulas=self.formulas
@@ -645,22 +792,14 @@ class ShellPanel(pickpanel.PickPanel):
             member.target = follower
 
     def _compute_hint(self):
+        """A wall from a formula that does not fit (it is not held at the limit): the error
+        also says the thickest wall that fits."""
         try:
             if self._closed or not self.error or self.base is None:
                 return
-            inside, outside = shelling.thicknesses(self.options)
-            which = "inside" if inside >= outside else "outside"
-            size = max(inside, outside)
-            if size <= 0 or "too thick" not in self.error and "cannot be made" not in self.error:
-                return
-            best = shelling.max_thickness(self.base.Shape, self.names(), self.options, which, size)
-            if best and best < size and self.error:
-                shown = int(best * 100.0) / 100.0
-                if shown > 0:
-                    self.say(
-                        "⚠ %s\nThe thickest %s wall that fits here is about %.2f mm."
-                        % (self.error, which, shown)
-                    )
+            text = self.limit_hint(self.error)
+            if text != self.error and self.error:
+                self.say("⚠ " + text)
         except Exception as exc:
             warn("Shell thickness hint: %s" % exc)
 
@@ -693,6 +832,14 @@ class ShellPanel(pickpanel.PickPanel):
             return
         self.say("")
 
+    def say(self, text):
+        """The dialog's message. The note of a wall held at its limit shows under it while
+        there is no error."""
+        self.message.setText(text)
+        limits = getattr(self, "limits", None)
+        note = "" if text or limits is None else limits.note
+        value_limits.show_note(getattr(self, "limit_label", None), note)
+
     def members_failed(self):
         for member in self.members:
             obj = member.target
@@ -716,7 +863,11 @@ class ShellPanel(pickpanel.PickPanel):
                     "to make it hollow."
                 )
                 return False
-            self._preview()
+            self.limit_accept()
+            try:
+                self._preview()
+            finally:
+                self.limit_accepted()
             obj = self.target
             if self.formula_errors or self.error or obj is None:
                 self.show_status()
@@ -735,6 +886,9 @@ class ShellPanel(pickpanel.PickPanel):
             return False
 
     def cleanup(self):
+        self.limit_cancel()
+        value_limits.busy(self, False)
+        self.live_drop()
         self._remove_arrows()
         self.value_boxes.discard()
         super().cleanup()

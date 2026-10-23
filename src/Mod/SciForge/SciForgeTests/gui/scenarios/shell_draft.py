@@ -2,10 +2,11 @@
 """Shell the way a Fusion user does it, only real input: the ribbon's Shell with nothing
 selected (the dialog waits, no error), click the top face (again to drop it), type a
 thickness, take away a second face and drop it again, drag the blue arrow, Direction
-Both / Outside, Shell Type Rounded, a wall too thick (explained in the dialog, OK waits,
-nothing in the Report view), OK, Ctrl+Z / Ctrl+Y, edit by double-clicking the timeline,
+Both / Outside, Shell Type Rounded, a wall too thick (held at the thickest wall that fits
+and said: Luca's decision of 2026-10-21; nothing in the Report view), OK, Ctrl+Z / Ctrl+Y, edit by double-clicking the timeline,
 Cancel and Esc leave the part as it was. Volumes are worked out by hand
 (shell_draft_steps)."""
+
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtCore
@@ -216,10 +217,15 @@ def type_too_thick():
 
 
 def too_thick_reported():
+    """Luca, 2026-10-21: a wall past what fits is held at the thickest that works (it was
+    refused, with the thickest wall in the message, and OK waited)."""
     p = sd.shell_panel()
-    text = p.message.text() if p else ""
-    h.check("too-thick wall explained in the dialog", "too thick" in text, text)
-    h.check("preview keeps the last good result", sd.close(h.solid_volume(), s["good"]))
+    t = p.options.get("inside", 0) if p else 0
+    note = p.limit_label.text() if p and p.limit_label.isVisible() else ""
+    h.check("20 is held just under 10 mm (the bottom wall)", 9.0 < t < 10.0, t)
+    h.check("and said", note == "20 mm does not fit: limited to %.2f mm" % t, note)
+    h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
+    h.check("the preview has that wall", sd.close(h.solid_volume(), sd.open_top(t)))
     h.check("nothing about it in the Report view", not sd.report_errors(), sd.report_errors())
     sd.no_popups("a wall too thick")
     h.shot("7-too-thick")
@@ -228,18 +234,7 @@ def too_thick_reported():
 too_thick_reported.wait_ms = 1500  # the thickest wall that fits is worked out
 
 
-def hint_shown():
-    p = sd.shell_panel()
-    text = p.message.text() if p else ""
-    h.check("dialog says the thickest wall that fits", "thickest inside wall" in text, text)
-    h.task_button("OK")
-
-
 def ok_refused():
-    h.check(
-        "OK waits while the wall does not fit",
-        sd.shell_panel() is not None and Gui.Control.activeDialog(),
-    )
     p = sd.shell_panel()
     if p:
         sd.type_into(p.inside.widget, "2")
@@ -450,7 +445,6 @@ h.run(
         back_to_inside,
         type_too_thick,
         too_thick_reported,
-        hint_shown,
         ok_refused,
         ok,
         after_ok,

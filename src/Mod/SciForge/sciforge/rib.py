@@ -271,6 +271,12 @@ def _plane_section(base, origin, normal, reach):
     """Faces where the plane (origin, normal) cuts the part, or None."""
     import Part
 
+    # (the plane's square is centred on its origin, the sketch's: it must reach the part
+    # wherever the part is, so its size counts the part's distance from that origin too)
+    try:
+        reach = reach + (base.BoundBox.Center - origin).Length
+    except Exception:
+        pass
     plane = Part.Plane(origin, normal).toShape(-reach, reach, -reach, reach)
     try:
         cut = base.common(plane)

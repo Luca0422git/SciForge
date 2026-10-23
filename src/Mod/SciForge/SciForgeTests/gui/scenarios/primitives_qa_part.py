@@ -339,6 +339,7 @@ def p5_replane():
 def p5_plane_box():
     p = pi.panel("BoxPanel")
     h.check("P5 editing Box 1 again", p is not None and p.editing)
+    s["p5_open"] = vol()  # the steps after Box 1 wait while it is edited (Fusion)
     if p is not None:
         ui.click(p.plane_field.button)
 
@@ -360,7 +361,7 @@ def p5_replaned():
     h.check("P5 no message", msg(p) == "", msg(p))
     text = p.plane_field.button.text() if p is not None else ""
     h.check("P5 on Extrude 1's face", text == "Face of Extrude 1", text)
-    h.check("P5 the part unchanged", near(vol(), s["vol"]), vol())
+    h.check("P5 the part unchanged", near(vol(), s["p5_open"]), (vol(), s["p5_open"]))
     h.press(QtCore.Qt.Key_Escape)
 
 

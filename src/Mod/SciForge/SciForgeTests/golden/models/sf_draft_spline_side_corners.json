@@ -1,0 +1,92 @@
+{
+  "id": "sf_draft_spline_side_corners",
+  "title": "Three straight sides and a spline side meeting at sharp corners, extruded 10; all 4 side walls drafted 5 degrees about XY",
+  "tags": [
+    "draft",
+    "sciforge-draft",
+    "free-form",
+    "corners"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "segments": [
+            {
+              "line": [
+                0,
+                0,
+                20,
+                0
+              ]
+            },
+            {
+              "spline": [
+                [
+                  20,
+                  0
+                ],
+                [
+                  26,
+                  7
+                ],
+                [
+                  15,
+                  15
+                ]
+              ]
+            },
+            {
+              "line": [
+                15,
+                15,
+                0,
+                15
+              ]
+            },
+            {
+              "line": [
+                0,
+                15,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10.0
+    },
+    {
+      "op": "sf_draft",
+      "id": "d1",
+      "plane": "XY",
+      "faces": {
+        "along": [
+          0,
+          0,
+          1
+        ],
+        "count": 4
+      },
+      "angle": 5
+    }
+  ],
+  "expect": {
+    "volume": 3175.557983324,
+    "faces": 6,
+    "solids": 1,
+    "source": "analytic",
+    "volume_by": "mesh",
+    "rel_tol": 0.0001,
+    "note": "Each height is the outline offset inward by z tan5 with sharp (mitred) corners, as the drafted walls meet; its area from OpenCASCADE's 2D offset (intersection joins), integrated over z with Simpson's rule on 200 slices."
+  }
+}

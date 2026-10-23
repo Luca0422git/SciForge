@@ -6,8 +6,9 @@ makes them.
 
   A  A cut from Body1's top over x 10..40, y 5..15, 3 deep: it reaches Body1 only. Then a
      6 x 6 x 1 boss on Body2's top over x 36..42 (partly over the cut's footprint): 2036.
-     Double-click the cut, 8 deep: it now reaches Body2 too ("2 bodies"). The cut is older
-     than the boss, so Body2 = 2000 - 300 + 36 = 1736 (the cut acting after the boss gave
+     Double-click the cut, 8 deep: it now reaches Body2 too ("2 bodies"); while it is
+     edited the timeline is rolled to it (Fusion), so the boss waits: 1700 in the preview.
+     The cut is older than the boss, so after OK Body2 = 2000 - 300 + 36 = 1736 (the cut acting after the boss gave
      1712: part of the boss was cut away). The timeline keeps its order.
   C  Double-click the cut, click the row, click Body1 (the sketch's own body), OK: the
      timeline titles stay exactly as they were (the step jumped to the end before), 4000 /
@@ -217,7 +218,9 @@ def a_editing():
 def a_edit_preview():
     p = xpanel()
     h.check("A: 8 deep reaches both", row(p) == ("Bodies to Cut", "2 bodies", both_names()), row(p))
-    check_volumes("A: preview 8 deep (the cut before the boss)", 3200, 1736)
+    # Fusion rolls the timeline to the step being edited: the boss (a later step) waits and
+    # is not shown until OK (edit_rollback / preview.hold), so Body2 is 2000 - 300 here.
+    check_volumes("A: preview 8 deep (the boss waits: rolled back)", 3200, 1700)
     h.task_button("OK")
 
 
@@ -262,7 +265,7 @@ def c_left_out():
         r is not None and r[1] == "1 body" and r[2].startswith(body2().Label),
         r,
     )
-    check_volumes("C: preview without Body1", 4000, 1736)
+    check_volumes("C: preview without Body1 (the boss waits)", 4000, 1700)
     h.task_button("OK")
 
 
@@ -296,7 +299,7 @@ def c2_taken_back():
         and r[2].splitlines()[0] == both_names(),
         r,
     )
-    check_volumes("C2: preview with Body1", 3200, 1736)
+    check_volumes("C2: preview with Body1 (the boss waits)", 3200, 1700)
     h.task_button("OK")
 
 

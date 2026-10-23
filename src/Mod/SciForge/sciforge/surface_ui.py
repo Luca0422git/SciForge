@@ -17,7 +17,8 @@ surface_pick.py.
 import FreeCAD as App
 
 
-from . import bodies, curve_pick, curves, preview, surface, taskui, ui_icon_path, warn
+from . import bodies, curve_pick, curves, preview, surface, taskui, ui_icon_path, value_limits
+from . import warn
 from . import surface_core as core
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtWidgets
@@ -2145,11 +2146,145 @@ class OffsetPanel(SurfacePanel):
 
 
 # -- CREATE: Thicken -------------------------------------------------------------------------------
-class ThickenPanel(SurfacePanel):
+class ThickenPanel(SurfacePanel, value_limits.LimitedValues):
+    """Thicken. A thickness dragged or typed past what the faces can take stops at the
+    thickest one that works and the dialog says so (Luca, 2026-10-21; Fusion refuses it:
+    value_limits.py); a thickness from a formula is explained, with that limit."""
+
     kind = "thicken"
     boxes = (("faces", "Faces", "refs", ("face",), "Select faces"),)
     chain_boxes = ("faces",)
     default_box = "thickness"
+
+    def build_form(self):
+        self.limit_init()
+        super().build_form()
+
+    def finish_layout(self):
+        super().finish_layout()
+        self.limit_label = value_limits.note_label()  # "Largest that fits here: ..."
+        self.layout.addRow(self.limit_label)
+
+    # -- a thickness past what fits (value_limits.LimitedValues) ------------------------------------
+    def limit_key(self, what):
+        options = {k: v for k, v in self.options.items() if k != what}
+        picks = [(o, sub) for o, sub in self.picks.get("faces") or []]
+        # the picked objects' shapes as they are (faces_of() makes new copies every call:
+        # the key would change on every drag step and the limit be searched again)
+        shapes = [getattr(o, "Shape", None) for o, _sub in picks]
+        return value_limits.make_key("thicken", picks, shapes, options, what)
+
+    def limit_works(self, what):
+        from . import surface_geom as g
+
+        faces = self.faces("faces")
+        direction = self.options.get("direction", "one_side")
+        kind = self.options.get("thicken_type", "sharp")
+        return lambda value: g.thicken(faces, value, direction, kind) is not None
+
+    def limit_value(self, what):
+        return float(self.options.get(what, 0.0))
+
+    def limit_set(self, what, value):
+        self.options[what] = float(value)
+        field = self.number_fields.get(what)
+        if isinstance(field, taskui.DistanceField):
+            value_limits.show_held(self.limit_shower, what, field, field.value(), value)
+        handle = self.handles.get(what)
+        if handle is not None:
+            try:
+                handle.set_distance(self._arrow_of(value))
+            except Exception:
+                pass
+        self.dirty = True
+
+    def _arrow_of(self, value):
+        return value / 2.0 if self.options.get("direction") == "symmetric" else value
+
+    def _number(self, key, value):
+        if key == "thickness" and not self._closed:
+            source = "formula" if self.formulas.get(key) else "typed"
+            held = self.limit_edit(key, float(value), source)
+            if held != value:
+                field = self.number_fields.get(key)
+                if isinstance(field, taskui.DistanceField):
+                    value_limits.show_held(self.limit_shower, key, field, value, held)
+                value = held
+        super()._number(key, value)
+
+    def _dragged(self, key, value):
+        if key == "thickness" and not self._closed:
+            try:
+                wanted = self.handle_value(key, value)
+                held = self.limit_edit(key, wanted, "dragged")
+                if held != wanted:
+                    handle = self.handles.get(key)
+                    if handle is not None:
+                        handle.set_distance(self._arrow_of(held))  # stops at the limit
+                    if abs(float(self.options.get(key, 0.0)) - held) < 1e-12:
+                        self.show_status()  # held there: nothing to rebuild
+                        return
+                    value = self._arrow_of(held)
+            except Exception as exc:
+                warn("%s limit: %s" % (self.title, exc))
+        super()._dragged(key, value)
+
+    def _recompute(self):
+        if self.limit_waits():
+            return  # the search of the thickest that fits rebuilds when it ends
+        super()._recompute()
+        if self._closed:
+            return
+        try:
+            text = self.error or (self.failure() if not self.waiting else "")
+            held = self.limit_refuse(text) if text else None
+            if held == "again":
+                super()._recompute()  # held at the thickest that fits: rebuild with it
+            elif held == "later":
+                self.dirty = True  # looked for one trial per event-loop turn; built when found
+            elif not text and not self.waiting and self.step is not None:
+                self.limit_good()
+        except Exception as exc:
+            warn("%s limit: %s" % (self.title, exc))
+
+    def accept(self):
+        self.limit_accept()  # a limit search still running ends now
+        try:
+            if not self._closed and self.dirty:
+                self._timer.stop()
+                self._recompute()  # a thickness past what fits is held at the limit here
+            return super().accept()
+        finally:
+            self.limit_accepted()
+
+    def cleanup(self):
+        self.limit_cancel()
+        value_limits.busy(self, False)
+        super().cleanup()
+
+    def show_status(self):
+        super().show_status()
+        try:
+            if self.limit_searching():
+                # the refused thickness is about to be held at the limit: say what happens
+                self.message.setText("")
+                value_limits.show_note(getattr(self, "limit_label", None), self.limits.note)
+                return
+            text = self.message.text()
+            if text.startswith("⚠ "):
+                hinted = self.limit_hint(text[2:])
+                if hinted != text[2:]:
+                    self.message.setText("⚠ " + hinted)
+            value_limits.show_note(
+                getattr(self, "limit_label", None), "" if text else self.limits.note
+            )
+        except Exception as exc:
+            warn("%s note: %s" % (self.title, exc))
+
+    def picks_changed(self, name):
+        if getattr(self, "limits", None) is not None:
+            self.limits.note = ""  # a limit found for the old faces no longer applies
+        super().picks_changed(name)
 
     def build_rows(self):
         self.box("faces")

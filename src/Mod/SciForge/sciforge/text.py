@@ -32,7 +32,7 @@ import os
 
 import FreeCAD as App
 
-from . import fonts, log, warn
+from . import fonts, log, sketch_geometry, warn
 from . import text_core as core
 
 TYPE = "Part::Part2DObjectPython"
@@ -815,12 +815,16 @@ def set_frame(sketch, ids, corner, angle, width, height):
     if len(indices) != 4 or any(i is None for i in indices):
         return False
     corners = [App.Vector(x, y, 0) for x, y in core.frame_corners(corner, angle, width, height)]
-    geos = list(sketch.Geometry)
+    geos = sketch.Geometry
+    changes = {}
     for k, index in enumerate(indices):
         geo = geos[index]
         geo.StartPoint = corners[k]
         geo.EndPoint = corners[(k + 1) % 4]
-    sketch.Geometry = geos
+        changes[index] = geo
+    # only the frame lines change; the sketch's other curves keep their construction flags
+    # and ids (assigning sketch.Geometry made construction points normal ones)
+    sketch_geometry.set_geometry(sketch, changes)
     try:
         sketch.solve()
     except Exception:

@@ -2,13 +2,23 @@
 """The small MCP server an AI app (Claude Desktop, Gemini CLI, Claude Code ...) starts to
 reach SciForge (docs/sciforge/dev/briefs/home-cloud-ai.md, section 4.4):
 
-    python sciforge_mcp.py [--bridge-file PATH]
+    python sciforge_mcp.py [--bridge] [--bridge-file PATH]
+    freecadcmd sciforge_mcp.py --pass --headless [--allow-overwrite]
 
-It speaks MCP over stdin / stdout (one JSON message per line, mcp_core.py) and passes each
-tool call on to the AI bridge inside SciForge (bridge_core.py) over 127.0.0.1 with the key
-from bridge.json. It runs with FreeCAD's own Python, so nothing has to be installed, but it
-never imports FreeCAD: SciForge does the work, this process only carries messages. Logs go
-to stderr (stdout is only for MCP messages) and never contain a key.
+It speaks MCP over stdin / stdout (one JSON message per line, mcp_core.py). By default it
+passes each tool call on to the AI bridge inside the running SciForge (bridge_core.py) over
+127.0.0.1 with the key from bridge.json; it runs with FreeCAD's own Python, so nothing has to
+be installed, but it never imports FreeCAD: SciForge does the work, this process only carries
+messages. When SciForge is not reachable a call says so: it never switches to running the
+tools itself. With --headless (under FreeCAD's command-line program, which
+tools/sciforge/sciforge-cli finds) the tools run in this process instead, on designs opened
+here (sciforge/ai/headless.py). Logs go to stderr (stdout is only for MCP messages) and never
+contain a key.
+
+A reply that gets lost (the connection breaks, or SciForge takes too long) is handled
+honestly: a read-only tool is asked again; a tool that changes the design is not, and the
+answer says the change may or may not have been applied, so the AI checks the design first
+(an idea from CADCraft, docs/sciforge/dev/cadcraft-lessons.md idea 3).
 
 Where bridge.json is: --bridge-file, else the SCIFORGE_BRIDGE_FILE environment variable,
 else the first one found of the places SciForge's user data folder can be (see
@@ -16,11 +26,13 @@ candidate_bridge_files), looked up again on every call because SciForge may star
 """
 
 import argparse
+import http.client
 import os
 import queue
 import socket
 import sys
 import threading
+import time
 import urllib.error
 import urllib.request
 
@@ -31,10 +43,21 @@ if sys.path and os.path.abspath(sys.path[0] or os.curdir) == _HERE:
 if _ROOT not in sys.path:
     sys.path.insert(0, _ROOT)
 
-from sciforge.ai import bridge_core, mcp_core, tools_core  # noqa: E402,F401
+from sciforge.ai import bridge_core, catalog, mcp_core, tools_core  # noqa: E402,F401
 
 TIMEOUT = 120.0  # seconds; one design step can take a while to compute
 ENV_BRIDGE_FILE = "SCIFORGE_BRIDGE_FILE"
+RETRIES = 2  # a read-only tool whose reply was lost is asked again this many times
+RETRY_WAIT = 0.5  # seconds before asking again
+MAYBE_APPLIED = (
+    "The answer from SciForge was lost (%s), so the change %s may or may not have been "
+    "applied. Do not repeat it blindly: inspect the design first (inspect_design, or "
+    "diff_design since a snapshot you took before), then decide."
+)
+
+
+class _LostReply(Exception):
+    """The request reached SciForge (or may have) but its answer never came back."""
 
 
 def log(text):
@@ -115,18 +138,40 @@ def find_bridge_file(explicit=None, env=None):
 class BridgeClient:
     """Sends tool calls to SciForge's bridge."""
 
-    def __init__(self, bridge_file=None, timeout=TIMEOUT):
+    def __init__(self, bridge_file=None, timeout=TIMEOUT, retries=RETRIES, retry_wait=RETRY_WAIT):
         self.bridge_file = bridge_file
         self.timeout = timeout
+        self.retries = retries
+        self.retry_wait = retry_wait
         # 127.0.0.1 must never go through a proxy set in the environment (HTTP_PROXY ...)
         self.opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
 
     def call_tool(self, name, args):
         try:
-            return self._call(name, args)
+            return self._call_honestly(name, args)
         except Exception as exc:
             log("[SciForge] MCP: call %s failed: %s" % (name, exc))
             return bridge_core.error_result("SciForge could not run %s: %s" % (name, exc))
+
+    def _call_honestly(self, name, args):
+        """A lost reply: read-only tools are asked again, changing tools never are."""
+        read_only = catalog.is_read_only(name)
+        attempt = 0
+        while True:
+            try:
+                return self._call(name, args)
+            except _LostReply as lost:
+                if read_only and attempt < self.retries:
+                    attempt += 1
+                    log("[SciForge] MCP: %s: reply lost (%s), asking again" % (name, lost))
+                    time.sleep(self.retry_wait)
+                    continue
+                if read_only:
+                    return bridge_core.error_result(
+                        "SciForge did not answer %s (%s), also when asked again. Check that "
+                        "SciForge is not busy, then try again." % (name, lost)
+                    )
+                return bridge_core.error_result(MAYBE_APPLIED % (lost, name))
 
     def _call(self, name, args):
         path = find_bridge_file(self.bridge_file)
@@ -141,7 +186,7 @@ class BridgeClient:
         )
         try:
             with self.opener.open(request, timeout=self.timeout) as response:
-                return bridge_core.decode_result(response.read())
+                body = response.read()
         except urllib.error.HTTPError as exc:
             body = b""
             try:
@@ -158,18 +203,31 @@ class BridgeClient:
             answer["is_error"] = True
             return answer
         except (socket.timeout, TimeoutError):
-            return bridge_core.error_result(
-                "SciForge did not answer within %d seconds; the step may still be running. "
-                "Check SciForge before trying again." % self.timeout
-            )
+            raise _LostReply("no answer within %d seconds; it may still be working" % self.timeout)
         except urllib.error.URLError as exc:
-            if isinstance(exc.reason, (socket.timeout, TimeoutError)):
-                return bridge_core.error_result(
-                    "SciForge did not answer within %d seconds." % self.timeout
-                )
+            reason = exc.reason
+            if isinstance(reason, (socket.timeout, TimeoutError)):
+                raise _LostReply("no answer within %d seconds" % self.timeout)
+            if isinstance(reason, (ConnectionResetError, ConnectionAbortedError, BrokenPipeError)):
+                raise _LostReply("the connection broke")
+            return bridge_core.error_result(bridge_core.NOT_RUNNING)  # refused: never sent
+        except ConnectionRefusedError:
             return bridge_core.error_result(bridge_core.NOT_RUNNING)
+        except (
+            ConnectionResetError,
+            ConnectionAbortedError,
+            BrokenPipeError,
+            http.client.RemoteDisconnected,
+            http.client.IncompleteRead,
+            http.client.BadStatusLine,
+        ) as exc:
+            raise _LostReply("the connection broke: %s" % (exc.__class__.__name__,))
         except ConnectionError:
             return bridge_core.error_result(bridge_core.NOT_RUNNING)
+        answer = bridge_core.decode_result(body)
+        if answer["text"] == bridge_core.UNREADABLE and not body:
+            raise _LostReply("an empty answer")
+        return answer
 
 
 class Server:
@@ -207,6 +265,26 @@ class Server:
                 return
             self.answer(message)
 
+    def run_in_line(self):
+        """Every message in turn on this thread (headless: FreeCAD runs the tools here, and
+        FreeCAD wants its own thread)."""
+        while True:
+            try:
+                line = self.stdin.readline()
+            except Exception as exc:
+                log("[SciForge] MCP: reading stdin failed: %s" % exc)
+                break
+            if not line:
+                break
+            try:
+                message, error = mcp_core.parse_line(line)
+                if error is not None:
+                    self.send(error)
+                elif message is not None:
+                    self.answer(message)
+            except Exception as exc:
+                log("[SciForge] MCP: could not handle a message: %s" % exc)
+
     def run(self):
         self.worker.start()
         while True:
@@ -231,10 +309,41 @@ class Server:
         self.worker.join(TIMEOUT + 5)
 
 
+def _arguments(argv):
+    """Our arguments (FreeCAD's command-line program passes them after --pass)."""
+    return [a for a in argv if a != "--pass"]
+
+
 def main(argv=None, stdin=None, stdout=None):
     parser = argparse.ArgumentParser(description="SciForge's MCP server (stdio).")
     parser.add_argument("--bridge-file", help="path of SciForge's bridge.json")
-    options = parser.parse_args(argv)
+    parser.add_argument(
+        "--bridge",
+        action="store_true",
+        help="forward the tools to the running SciForge (the default)",
+    )
+    parser.add_argument(
+        "--headless",
+        action="store_true",
+        help="run the tools in this process (needs FreeCAD's command-line program)",
+    )
+    parser.add_argument(
+        "--allow-overwrite",
+        action="store_true",
+        help="headless: tools may replace files that exist",
+    )
+    raw = sys.argv[1:] if argv is None else argv
+    if argv is None:
+        for i, item in enumerate(sys.argv):  # under freecadcmd: what follows this file
+            if os.path.abspath(item) == os.path.abspath(__file__):
+                raw = sys.argv[i + 1 :]
+                break
+    options = parser.parse_args(_arguments(raw))
+    if options.headless and (options.bridge or options.bridge_file):
+        log("[SciForge] MCP: --headless runs the tools here; it takes no bridge options")
+        return 2
+    if options.headless:
+        return _main_headless(options, stdin, stdout)
     stdin = stdin if stdin is not None else sys.stdin.buffer
     stdout = stdout if stdout is not None else sys.stdout.buffer
     client = BridgeClient(options.bridge_file)
@@ -250,5 +359,38 @@ def main(argv=None, stdin=None, stdout=None):
     return 0
 
 
+def _main_headless(options, stdin=None, stdout=None):
+    try:
+        import FreeCAD  # noqa: F401
+    except ImportError:
+        log(
+            "[SciForge] MCP: --headless needs FreeCAD: start it with tools/sciforge/sciforge-cli "
+            "mcp --headless (or freecadcmd sciforge_mcp.py --pass --headless)"
+        )
+        return 2
+    from sciforge.ai import headless
+
+    stdin = stdin if stdin is not None else sys.stdin.buffer
+    stdout = stdout if stdout is not None else headless.take_stdout()
+    client = headless.InProcessClient(headless.HeadlessHost(options.allow_overwrite))
+    log("[SciForge] MCP server %s started (headless: the tools run here)" % _version())
+    try:
+        Server(client.call_tool, stdin, stdout, _version()).run_in_line()
+    except KeyboardInterrupt:
+        pass
+    except Exception as exc:
+        log("[SciForge] MCP server stopped: %s" % exc)
+        return 1
+    log("[SciForge] MCP server stopped")
+    return 0
+
+
 if __name__ == "__main__":
     sys.exit(main())
+elif len(sys.argv) > 1 and os.path.abspath(sys.argv[1]) == os.path.abspath(__file__):
+    _code = main()  # run as a script by FreeCAD's command-line program
+    try:
+        sys.stderr.flush()
+    except Exception:
+        pass
+    os._exit(_code or 0)

@@ -21,6 +21,10 @@ With a profile picked, a click on a face out of the profile's plane ends the ext
 there (Luca; Fusion): a parallel face, a corner or a parallel plane sets the distance, a
 curved or tilted face is To Object; dragging the arrow over such a face or corner snaps to
 it (extrude_to_face_core.py, extrude_to_face.py).
+
+A taper angle (or a thin wall's thickness) dragged or typed past what the profile can take
+stops at the steepest (thickest) one that works and the dialog says so (Luca, 2026-10-21;
+Fusion refuses it: value_limits.py). A value from a formula is explained instead.
 """
 
 import math
@@ -31,6 +35,7 @@ import FreeCADGui as Gui
 
 from . import commands, cut_preview, drag_guard, extrude, log, preview, profile_pick, taskui
 from . import bodies, extrude_bodies, extrude_to_face, protractor, text, ui_icon_path, warn
+from . import live_shapes, value_limits
 from . import extrude_bodies_core as bodies_core
 from . import extrude_to_face_core as to_face
 from . import plastic  # plastic rule defaults (plastic-1)
@@ -209,6 +214,9 @@ class AngleDragger(BoxCarrier):
         self._shape_arc()
         self.on_drag = on_drag
         self.on_release = on_release
+        # hold(angle): the angle the dialog holds a dragged one at (a limit it went past), or
+        # None; a snap never pulls an angle that is held (see _snap)
+        self.hold = None
         self._last = self.angle()
         self._was_active = False
         self._hover = False
@@ -218,6 +226,8 @@ class AngleDragger(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        # dragged: polled on every mouse move, so the dialog and the box take the angle at once
+        self._move_poll = taskui.poll_on_move(self._poll)
 
     def _shape_arc(self):
         """The arc runs handle_look_core.ARC_REACH_PX on each side of the disc (redrawn
@@ -284,7 +294,13 @@ class AngleDragger(BoxCarrier):
 
     def set_angle(self, degrees):
         self._turn_to(degrees)
+        # the angle as the disc reads it back (80 came back as 80.0000026): the poll must
+        # not take that rounding for a turn (it dropped a formula typed in the box). Read
+        # back next to `degrees`: a handle that counts past half a turn (the pattern's
+        # Total Angle, pattern_ui._TurnDragger) unwraps from the last reading, and 270
+        # reads back as -90 on the disc itself
         self._last = degrees
+        self._last = self.angle()
 
     def _turn_to(self, degrees):
         from pivy import coin
@@ -301,6 +317,12 @@ class AngleDragger(BoxCarrier):
             self._wheel.show(self.view, self.pivot, self.axis, self.zero, self.radius)
         if held:  # the release keeps what Ctrl was while the disc was held
             self._free = protractor.ctrl_held()
+        if self._held_past(value):
+            # past the steepest angle that fits (Draft): the dialog holds it at the limit; a
+            # snap here (0 deg is a few pixels from a limit of 1.5 deg) fought the hold on
+            # every mouse move (review finding DRAFT-2-F7)
+            self._wheel.update(value, None)
+            return value
         snapped, mark = protractor.snap_angle(
             self.view,
             value,
@@ -316,20 +338,36 @@ class AngleDragger(BoxCarrier):
         self._wheel.update(value, mark)
         return value
 
+    def _held_past(self, value):
+        hold = self.hold
+        if hold is None:
+            return False
+        try:
+            held = hold(value)
+        except Exception:
+            return False
+        return held is not None and abs(held - value) > 1e-6
+
     def _poll(self):
         try:
             active = drag_guard.guard_coin_dragger(self.dragger, self.root, self.view)
             value = self.angle()
-            if active or self._was_active:  # the release keeps the snap too
+            if (active or self._was_active) and abs(value - self._last) > 1e-6:
+                # the release keeps the snap too; an angle the dialog put there (set_angle:
+                # a limit it holds) is not snapped again (it did snap a held 1.5 deg to 0)
                 value = self._snap(value, held=active)
+            elif active and not self._wheel.shown():
+                self._wheel.show(self.view, self.pivot, self.axis, self.zero, self.radius)
             if not active:
                 self._wheel.hide()
             if abs(value - self._last) > 1e-6:
                 self._last = value
                 if self.on_drag:
                     self.on_drag(value)
-            if self._was_active and not active and self.on_release:
-                self.on_release(value)
+            if self._was_active and not active:
+                if self.on_release:
+                    self.on_release(value)
+                taskui.handle_released()  # the dialog's waiting rebuild now
             self._was_active = active
             self._look(active)
             self.follow_box()
@@ -355,6 +393,7 @@ class AngleDragger(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        taskui.drop_poll_on_move(self)
         self._wheel.hide()
         try:
             drag_guard.before_remove(self.dragger, self.root, self.view)
@@ -544,10 +583,14 @@ def newest_single_region(body):
 
 
 # -- the dialog -------------------------------------------------------------------------------
-class ExtrudePanel(Panel):
+class ExtrudePanel(Panel, value_limits.LimitedValues, live_shapes.LivePanel):
     title = "Extrude"
     icon = "extrude"
     last = None
+    # While a distance arrow or the taper disc is dragged the extrusion follows it as a
+    # picture (live_shapes.ExtrudePicture) and the exact one is built once the mouse rests or
+    # is let go (taskui.Panel.schedule(settle))
+    LIVE_NAME = "Extrude live picture"
     auto_pick = True  # take the single area of a sketch just finished, like Fusion
 
     def __init__(self, doc, feature=None, profiles=None, sketch=None):
@@ -581,6 +624,10 @@ class ExtrudePanel(Panel):
         self.waiting = ""  # the selection box that waits for a click, said as a hint
         self.formula_error = ""  # a formula typed in a field that is no value
         self.options["expressions"] = {}  # formulas typed in value fields (FormulaInput)
+        self.limit_init()  # a taper / wall past what the profile takes stops at the limit
+        self._limit_seen = {}  # value name -> the value _collect() read last
+        self._limit_source = {}  # value name -> "dragged" for the next _collect()
+        self._limit_restore_to = None  # (profiles, options) the limit search puts back
         self.dirty = False
         self._geometry_changed = False
         self.active = "profiles"
@@ -741,6 +788,8 @@ class ExtrudePanel(Panel):
         self.formulas.setStyleSheet("color: #b8c7d9;")
         form.addRow(self.formulas)
         self.finish_layout()
+        self.limit_label = value_limits.note_label()  # "Largest that fits here: ..."
+        form.addRow(self.limit_label)
         self.formula_inputs = [
             preview.FormulaInput(self, key, field)
             for key, field in (
@@ -899,6 +948,135 @@ class ExtrudePanel(Panel):
             self._quiet = True
             _set_combo(self.extent, "distance")
             self._quiet = False
+        self._hold_limited()
+
+    # -- a taper or wall past what fits (value_limits.LimitedValues) -------------------------------
+    LIMITED = {
+        "taper": "taper",
+        "taper2": "taper2",
+        "wall_thickness": "wall_thickness",
+        "wall_thickness2": "wall_thickness2",
+    }
+
+    def _limit_field(self, key):
+        return getattr(self, key, None)
+
+    def _hold_limited(self):
+        """A taper or wall thickness that changed is held at the limit known for it (the
+        note says so); one that did not stays held where it was. Never a formula's."""
+        expressions = self.options.get("expressions", {})
+        two = self.options.get("direction") == "two_sides"
+        thin = bool(self.options.get("thin"))
+        for key in self.LIMITED:
+            if key not in self.options:
+                continue
+            if (key.endswith("2") and not two) or (key.startswith("wall") and not thin):
+                continue  # not in use: never "the value just edited"
+            value = float(self.options[key])
+            seen = self._limit_seen.get(key)
+            if seen is None:
+                self._limit_seen[key] = value  # what the dialog started with
+                continue
+            if abs(seen - value) > 1e-12:
+                source = self._limit_source.pop(key, "typed")
+                if expressions.get(key):
+                    source = "formula"
+                held = self.limit_edit(key, value, source)
+            else:
+                held = value if expressions.get(key) else self.limit_held(key, value)
+            self._limit_seen[key] = value
+            if held != value:
+                self.options[key] = held
+                field = self._limit_field(key)
+                if field is not None and field._typed is None:
+                    self._limit_seen[key] = held
+                value_limits.show_held(self.limit_shower, key, field, value, held)
+                disc = self.draggers.get(key)
+                if disc is not None and hasattr(disc, "set_angle"):
+                    disc.set_angle(held)  # the taper disc stops at the limit
+
+    def limit_unit(self, what):
+        return "deg" if what.startswith("taper") else "mm"
+
+    def limit_start(self, what, value):
+        step = value_limits.step_for(self.limit_unit(what))
+        return step if value > 0 else -step
+
+    def limit_key(self, what):
+        options = {
+            k: v
+            for k, v in self.options.items()
+            if k != what and k not in ("bodies", "expressions")
+        }
+        return value_limits.make_key("extrude", list(self.profiles), options, what)
+
+    def limit_works(self, what):
+        """works(value): the extrude built in the document with that value does not fail
+        (its own feature or FreeCAD's Pad / Pocket: the taper is theirs to refuse)."""
+        options = self._build_options()
+        if options is None or options is not self.options:
+            return lambda value: False  # one side at 0: not searched
+        options = dict(options)
+        profiles = list(self.profiles)
+
+        def works(value):
+            trial = dict(options)
+            trial[what] = value
+            if self._limit_restore_to is None:
+                self._limit_restore_to = (profiles, options)  # what limit_search puts back
+            self.target = extrude.build(profiles, trial, feature=self.target, hide=False)
+            preview.recompute(self.doc)
+            if preview.failure(self.target):
+                raise extrude.ExtrudeError("refused")
+            return True
+
+        return works
+
+    def limit_search(self, what, value):
+        """The search builds its trials in the extrude itself: the dialog's own values are put
+        back afterwards, so no trial value is left in the document (a taper changed nobody
+        asked for, made by OK)."""
+        self._limit_restore_to = None
+        try:
+            return value_limits.LimitedValues.limit_search(self, what, value)
+        finally:
+            restore, self._limit_restore_to = self._limit_restore_to, None
+            if restore is not None and self.target is not None:
+                try:
+                    self.target = extrude.build(
+                        restore[0], restore[1], feature=self.target, hide=False
+                    )
+                    preview.recompute(self.doc)
+                except Exception as exc:
+                    warn("extrude limit: %s" % exc)
+
+    def limit_value(self, what):
+        return float(self.options.get(what, 0.0))
+
+    def limit_set(self, what, value):
+        self.options[what] = value
+        self._limit_seen[what] = value
+        field = self._limit_field(what)
+        if field is not None:
+            value_limits.show_held(self.limit_shower, what, field, field.value(), value)
+        disc = self.draggers.get(what)
+        if disc is not None and hasattr(disc, "set_angle"):
+            disc.set_angle(value)
+
+    def _settle_limits(self):
+        """After a rebuild: a value just typed or dragged that the extrude refused is held
+        at the limit and built again; a good one is remembered."""
+        try:
+            if self.formula_error or self.waiting:
+                return
+            text = self.error or _plain(preview.failure(self.target))
+            if text and self.limit_refused(text):
+                self._apply()
+                preview.recompute(self.doc)
+            elif not text and self.target is not None:
+                self.limit_good()
+        except Exception as exc:
+            warn("extrude limit: %s" % exc)
 
     def _refresh_extend(self):
         """Each side's Extend choices follow what its object is (a face or a body; a plane
@@ -1747,7 +1925,18 @@ class ExtrudePanel(Panel):
             return distance / 2.0
         return distance
 
-    def _dragged(self, value):
+    def _again(self, key, value, released):
+        """True when an arrow is let go at the value of its last drag step: that step
+        rebuilt it (or its rebuild runs now, taskui.handle_released); rebuilding it again
+        froze a heavy part a second time (review finding DRAFT-2-F6)."""
+        last = self.__dict__.setdefault("_drag_last", {})
+        raw = round(float(value), 6)
+        again = released and last.get(key) == raw
+        last[key] = None if released else raw
+        return again
+
+    def _dragged(self, value, released=False):
+        again = self._again("distance", value, released)
         self.drop_formula("distance")
         snap = self._drag_snap("distance")  # over a parallel face or a point: its height
         if snap is not None:
@@ -1758,16 +1947,21 @@ class ExtrudePanel(Panel):
                 value = abs(value)
                 if self.measurement.currentData() == "whole":
                     value *= 2.0
-        if self._snapped("distance", self.distance, value, snap):
-            self._changed()
+        if self._snapped("distance", self.distance, value, snap) and not again:
+            self._changed(live=True)
+        elif again and not self._timer.isActive():
+            self.show_status()  # let go: what is said once the arrow is let go (a limit)
         self._show_note()
 
-    def _dragged2(self, value):
+    def _dragged2(self, value, released=False):
+        again = self._again("distance2", value, released)
         self.drop_formula("distance2")
         snap = self._drag_snap("distance2")
         value = snap[0] if snap is not None else round(max(value, 0.0), 2)
-        if self._snapped("distance2", self.distance2, value, snap):
-            self._changed()
+        if self._snapped("distance2", self.distance2, value, snap) and not again:
+            self._changed(live=True)
+        elif again and not self._timer.isActive():
+            self.show_status()  # let go: what is said once the arrow is let go (a limit)
         self._show_note()
 
     def _show_note(self):
@@ -1811,12 +2005,13 @@ class ExtrudePanel(Panel):
     def _taper_dragged(self, value):
         self.drop_formula("taper")
         value = max(-60.0, min(60.0, round(value, 1)))
+        self._limit_source["taper"] = "dragged"
         self._quiet = True
         try:
             self.taper.set_value(value)
         finally:
             self._quiet = False
-        self._changed()
+        self._changed(live=True)
 
     def _auto_operation(self):
         """Fusion: extruding into material (of any body) becomes a cut; touching a body, a
@@ -1846,8 +2041,10 @@ class ExtrudePanel(Panel):
             _set_combo(self.operation, wanted)
             self._quiet = False
 
-    def _changed(self, new_geometry=False):
-        """Something changed: rebuild the preview shortly (coalesces drags)."""
+    def _changed(self, new_geometry=False, live=False):
+        """Something changed: rebuild the preview shortly (coalesces drags). `live`: a handle
+        dragged: the live picture shows it at once and the exact extrusion waits for the
+        mouse to rest (when there is a picture for these options)."""
         self._update_visibility()
         self._collect()
         # Fusion: choosing "To Object" or "Start: Object" makes that selection box active.
@@ -1868,10 +2065,98 @@ class ExtrudePanel(Panel):
         self.dirty = True
         if new_geometry:
             self._geometry_changed = True
+        if live and not new_geometry and self.live_show():
+            self._hide_cut_view()
+            self.schedule(settle=True)
+            return
         self.schedule()
 
+    # -- the live picture (live_shapes.ExtrudePicture) --------------------------------------------
+    def _live_options(self):
+        """The options the preview is built with, when the picture can show them (distances,
+        no taper widening the extrusion, no taper on a thin wall), else None."""
+        if not self.profiles or self._closed:
+            return None
+        if self.formula_error:
+            return None
+        built = self._build_options()
+        if built is None:
+            return None
+        o = extrude.options_with_defaults(built)
+        two = o["direction"] == "two_sides"
+        if o["extent"] != "distance" or (two and o["extent2"] != "distance"):
+            return None
+        tapers = [float(o["taper"])] + ([float(o["taper2"])] if two else [])
+        if any(t < 0.0 for t in tapers) or (o["thin"] and any(abs(t) > 1e-12 for t in tapers)):
+            return None  # FreeCAD's widening taper is not the offset outline the picture draws
+        if o["start"] == "object" and not o.get("start_object"):
+            return None
+        return o
+
+    def live_key(self):
+        o = self._live_options()
+        if o is None:
+            return None
+        profiles = extrude.normalize(self.profiles)
+        sign = extrude._sign1(profiles, o)
+        return value_limits.make_key(
+            "extrude-live",
+            [(obj.Name, sub, obj.Shape) for obj, sub in profiles],
+            o["direction"],
+            sign,
+            bool(o["thin"]),
+            [o.get(k) for k in ("wall_location", "wall_thickness")],
+            o["operation"] == "cut",
+        )
+
+    def live_make(self):
+        o = self._live_options()
+        profiles = extrude.normalize(self.profiles)
+        sign = extrude._sign1(profiles, o)
+        faces = extrude.section_faces(profiles, o)
+        return [live_shapes.ExtrudePicture(faces, extrude.profile_normal(profiles) * sign)]
+
+    def live_values(self):
+        o = self._live_options()
+        if o is None:
+            return {}
+        profiles = extrude.normalize(self.profiles)
+        sign = extrude._sign1(profiles, o)
+        start = extrude.start_offset_of(profiles, o) * sign
+        return {"ends": live_shapes.extrude_ends(o, start)}
+
+    def live_hide_objects(self):
+        return [self.target] if self.target is not None else []
+
+    def live_ghost_objects(self):
+        base = getattr(self.target, "BaseFeature", None) if self.target is not None else None
+        return [base] if base is not None else []
+
+    def live_colors(self):
+        if self.options.get("operation") == "cut":
+            return live_shapes.CUT_COLOR, (0.35, 0.05, 0.05)
+        if self.target is not None:
+            return live_shapes.colors(self.target)
+        return None, None
+
+    def _hide_cut_view(self):
+        if self.cut_view is not None:
+            try:
+                self.cut_view.clear()  # the red of the last exact value: back with the next
+            except Exception:
+                pass
+
     def _recompute(self):
-        """Apply the dialog's values to the document and rebuild the preview."""
+        """Apply the dialog's values to the document and rebuild the preview; the live
+        picture goes (the exact extrusion is there, or the value was refused)."""
+        try:
+            self._recompute_exact()
+        finally:
+            self.live_hide()
+            if not self._closed:
+                self.live_soon()
+
+    def _recompute_exact(self):
         if self._closed:
             return  # a change that arrived as the dialog closed
         if getattr(self, "_rebuilding", False):
@@ -1887,6 +2172,7 @@ class ExtrudePanel(Panel):
             preview.recompute(self.doc)
             if self._closed:
                 return  # closed (Esc) while the part was rebuilt
+            self._settle_limits()
             self._bodies_built()  # a cut that takes a whole body is known only now
             self.show_status()
             if self._geometry_changed or self._handles_moved():
@@ -2012,6 +2298,32 @@ class ExtrudePanel(Panel):
         return self.target
 
     def show_status(self):
+        self._show_status()
+        try:
+            text = self.message.text()
+            if text.startswith("⚠ ") and not self.formula_error and not self._arrow_held():
+                # A formula, or a value that stopped fitting because another one changed (the
+                # distance dragged under a taper) is not held: say the limit. Not on every step
+                # of a drag (each distance has its own limit): once the arrow is let go.
+                hinted = self.limit_hint(text[2:])
+                if hinted != text[2:]:
+                    self.message.setText("⚠ " + hinted)
+            value_limits.show_note(self.limit_label, "" if text else self.limits.note)
+        except Exception as exc:
+            warn("extrude note: %s" % exc)
+
+    def _arrow_held(self):
+        """True while an arrow or disc of the dialog is being dragged."""
+        for dragger in list(self.draggers.values()):
+            try:
+                held = dragger.dragging if hasattr(dragger, "dragging") else dragger.box_active
+                if held():  # box_active of an arrow is also True while the pointer is over it
+                    return True
+            except Exception:
+                pass
+        return False
+
+    def _show_status(self):
         self._update_bodies_row()
         waiting = getattr(self, "waiting", "")
         self.info.setText(waiting or self._note_text())
@@ -2442,7 +2754,7 @@ class ExtrudePanel(Panel):
                     self._arrow_value(options["distance"]),
                     size,
                     on_drag=self._dragged,
-                    on_release=self._dragged,
+                    on_release=lambda v: self._dragged(v, True),
                 )
                 self._attach_box("distance")
             if options["direction"] == "two_sides" and options["extent2"] == "distance":
@@ -2452,7 +2764,7 @@ class ExtrudePanel(Panel):
                     options["distance2"],
                     size,
                     on_drag=self._dragged2,
-                    on_release=self._dragged2,
+                    on_release=lambda v: self._dragged2(v, True),
                 )
                 self._attach_box("distance2")
             self._make_taper_handle(faces, start, normal, size)
@@ -2630,10 +2942,11 @@ class ExtrudePanel(Panel):
             )
             return False
         preview.recompute(self.doc)
+        self._settle_limits()
         text = _plain(preview.failure(self.target)) or self._followers_failure()
         text = text or self._bodies_problem
         if text:
-            self.message.setText("⚠ " + text)
+            self.message.setText("⚠ " + self.limit_hint(text))  # with the limit, if known
             return False
         feature = self.target
         plastic.remember_links(feature, "extrude", self.body)  # plastic-1: rule links
@@ -2670,6 +2983,7 @@ class ExtrudePanel(Panel):
         super()._close()
 
     def cleanup(self):
+        self.live_drop()
         self._unwatch()
         self.escape.remove()
         self.undo_guard.remove()

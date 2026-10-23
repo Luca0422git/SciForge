@@ -10,9 +10,11 @@ Four shapes on the XY plane, each a line ending on a quarter arc (radius 15) at 
   A  MODIFY > Fillet: the line, then the arc of S1, type 3, Enter: an arc of radius 3
      tangent to both, the line and the arc cut back to it, a Radius dimension 3; Ctrl+Z
      takes it back in one step, Ctrl+Y brings it again
-  B  Fillet at the corner point (0, 0) of two lines: 50 is refused (too big, the reason by
-     the pointer, nothing made), then 4, Enter: radius 4, the old corner kept as a
-     construction point
+  B  Fillet at the corner point (0, 0) of two lines: 50 is held at the largest radius that
+     fits (30: the 30 mm line) and said by the pointer (Luca's decision of 2026-10-21: it was
+     refused); that fillet takes the 30 mm line whole (no sliver of it is left, it stays as
+     a construction line); Ctrl+Z; the corner again, 4, Enter: radius 4, the old corner kept
+     as a construction point
   C  MODIFY > Chamfer, Equal distance, the corner point (40, -40) of S2: type 4, Enter: the
      chamfer from 4 along the line to 4 (straight) from the corner on the arc, two 4 mm
      dimensions from the old corner, the second following the first (fx)
@@ -221,12 +223,58 @@ b_too_big.wait_ms = 900
 
 
 def b_refused():
-    h.check("B 50 is refused: nothing made", geo_count() == s["n"], geo_count() - s["n"])
-    h.check("B ...the reason by the pointer", "larger" in hint() or "smaller" in hint(), hint())
-    st.keys("4\n")
+    g = sk().Geometry
+    new = list(range(s["n"], len(g)))
+    arcs = [i for i in new if g[i].TypeId == "Part::GeomArcOfCircle"]
+    r = g[arcs[0]].Radius if len(arcs) == 1 else 0
+    h.check("B 50 makes the largest fillet that fits (the 30 mm line)", st.near(r, 30.0), r)
+    h.check(
+        "B ...and the pointer says so",
+        "50 mm does not fit: limited to %.2f mm" % r in hint(),
+        hint(),
+    )
+    # the largest fillet takes the 30 mm line whole: no sliver of it is left, it stays as a
+    # construction line (with its constraints) and the arc ends at its far end (0, 30)
+    lines = [(i, x) for i, x in enumerate(g) if x.TypeId == "Part::GeomLineSegment"]
+    slivers = [x for i, x in lines if not sk().getConstruction(i) and x.length() < 0.01]
+    h.check("B no sliver of the line is left", not slivers, slivers)
+    kept = [
+        i
+        for i, x in lines
+        if sk().getConstruction(i)
+        and st.vnear(x.StartPoint, V(0, 0, 0))
+        and st.vnear(x.EndPoint, V(0, 30, 0))
+    ]
+    ends = (g[arcs[0]].StartPoint, g[arcs[0]].EndPoint) if len(arcs) == 1 else ()
+    h.check("B the 30 mm line stays whole, as construction", len(kept) == 1, lines)
+    h.check(
+        "B the arc ends at its far end (0, 30)",
+        any(st.vnear(p, V(0, 30, 0), 1e-6) for p in ends),
+        ends,
+    )
+    st.sketch_ok("B")
+    st.esc()
+    st.undo()
 
 
 b_refused.wait_ms = 900
+
+
+def b_undone():
+    h.check("B Ctrl+Z takes it back", geo_count() == s["n"], geo_count() - s["n"])
+    si.menu_item("MODIFY", "Fillet")
+
+
+def b_corner_again():
+    st.click(V(0, 0, 0))
+
+
+def b_four():
+    h.check("B the corner again", st.tool() is not None and st.tool().step == 2)
+    st.keys("4\n")
+
+
+b_four.wait_ms = 900
 
 
 def b_check():
@@ -328,6 +376,18 @@ def _chamfer_check(where, n, s_line, s_arc, angle=None, construction=True):
 
 def c_check():
     _chamfer_check("C", 2, 4.0, 4.0)
+    # the line-arc chamfer rewrites the curves it cuts: B's old corner (0, 0) stays a
+    # construction point (it came back as a normal point)
+    corner_b = [
+        i
+        for i, x in enumerate(sk().Geometry)
+        if x.TypeId == "Part::GeomPoint" and st.vnear(V(x.X, x.Y, 0), V(0, 0, 0), 1e-6)
+    ]
+    h.check(
+        "C B's old corner is still a construction point",
+        len(corner_b) == 1 and sk().getConstruction(corner_b[0]),
+        [(i, sk().getConstruction(i)) for i in corner_b],
+    )
     named = [c for c in sk().Constraints if c.Name.startswith("Chamfer")]
     exprs = [e for e in sk().ExpressionEngine if "Chamfer" in e[0] and "Chamfer" in e[1]]
     h.check(
@@ -479,6 +539,9 @@ h.run(
             b_corner,
             b_too_big,
             b_refused,
+            b_undone,
+            b_corner_again,
+            b_four,
             b_check,
             c_open,
             c_type,

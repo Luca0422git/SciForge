@@ -132,6 +132,31 @@ def build_extension():
     return out
 
 
+HANDBOOK_NAME = "SciForge-for-AI.md"  # compact: what most AI apps should load
+HANDBOOK_BIG_NAME = "SciForge-for-AI-with-tool-pages.md"  # plus every tool's reference page
+
+
+def save_handbook(folder=None):
+    """Write SciForge's documentation for AI models as Markdown files for AI apps that load
+    files (a Claude Desktop project, a custom GPT...): HANDBOOK_NAME, the compact export
+    (handbook, guides, recipes, the list of tools: about 45 thousand tokens), and
+    HANDBOOK_BIG_NAME, the export with every tool's reference page (about 170 thousand
+    tokens: too big for most projects). Returns [(path, characters), ...], compact first."""
+    from .ai import docs_core
+
+    folder = folder or os.path.join(App.getUserAppDataDir(), "SciForge", "ai")
+    os.makedirs(folder, exist_ok=True)
+    written = []
+    for name, compact in ((HANDBOOK_NAME, True), (HANDBOOK_BIG_NAME, False)):
+        path = os.path.join(folder, name)
+        text = docs_core.export_text(compact=compact)
+        with open(path, "w", encoding="utf-8", newline="\n") as handle:
+            handle.write(text)
+        log("AI: handbook written to %s (%d characters)" % (path, len(text)))
+        written.append((path, len(text)))
+    return written
+
+
 def _open_file(path):
     if OPEN_FILE is not None:
         return OPEN_FILE(path)
@@ -207,6 +232,14 @@ class AddAIDialog(QtWidgets.QDialog):
         self.extension_button.setObjectName("SciForgeAddAIExtension")
         self.extension_button.clicked.connect(self._extension)
         row.addWidget(self.extension_button)
+        self.handbook_button = QtWidgets.QPushButton("Save AI handbook...")
+        self.handbook_button.setObjectName("SciForgeAddAIHandbook")
+        self.handbook_button.setToolTip(
+            "Write SciForge's documentation for AI models into a file, for AI apps that "
+            "load files (for example a Claude Desktop project)."
+        )
+        self.handbook_button.clicked.connect(self._handbook)
+        row.addWidget(self.handbook_button)
         self.copy_button = QtWidgets.QPushButton("Copy")
         self.copy_button.setObjectName("SciForgeAddAICopy")
         self.copy_button.clicked.connect(self._copy)
@@ -294,6 +327,30 @@ class AddAIDialog(QtWidgets.QDialog):
         except Exception as exc:
             warn("AI: extension: %s" % exc)
             self.text.setPlainText("The extension could not be made: %s" % exc)
+
+    def _handbook(self):
+        try:
+            from .ai import docs_core
+
+            (path, size), (big, big_size) = save_handbook()
+            self.text.setPlainText(
+                "The AI handbook is %s (about %s tokens, the measure AI apps count in). Add "
+                "it to your AI app's project or knowledge files.\n\n"
+                "Next to it, %s (about %s tokens) also has the page of every tool. Use it only "
+                "with an AI app that takes very large files: it would fill most of a 200,000 "
+                "token project, and small models cannot read it at all.\n\n"
+                "AI apps connected through MCP read the same documents by themselves."
+                % (
+                    path,
+                    docs_core.tokens_text(size),
+                    os.path.basename(big),
+                    docs_core.tokens_text(big_size),
+                )
+            )
+            _open_file(os.path.dirname(path))
+        except Exception as exc:
+            warn("AI: handbook: %s" % exc)
+            self.text.setPlainText("The handbook could not be written: %s" % exc)
 
     def _copy(self):
         QtWidgets.QApplication.clipboard().setText(self.text.toPlainText())

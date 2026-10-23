@@ -20,6 +20,7 @@ radians.
 import math
 
 EPS = 1e-9
+WHOLE = 1e-6  # a fillet that leaves less than this of a curve takes it whole (mm)
 
 
 class FilletError(ValueError):
@@ -196,26 +197,101 @@ def _ang(c, p):
     return math.atan2(p[1] - c[1], p[0] - c[0])
 
 
-def fits(curve, ref, touch, corner):
-    """True when trimming `curve` to `touch` keeps a piece of it: the touch point lies
-    between the pick point's end of the curve and the corner (or past the corner, where
-    FreeCAD extends the curve), never beyond that far end."""
+def leftover(curve, touch, corner):
+    """How much of `curve` stays when it is trimmed to `touch` (mm, from the touch point to
+    the curve's far end; less than 0: the touch point is beyond that far end). None for a
+    circle (it is cut, never used up)."""
     if curve[0] == "circle":
-        return True
+        return None
     far = _far_end(curve, corner)
     if curve[0] == "line":
         to_corner = _sub(corner, far)
         if _len(to_corner) <= EPS:
-            return False
-        return _dot(_sub(touch, far), _unit(to_corner)) > 1e-7
-    c, s, e = curve[1], curve[3], curve[4]
+            return -1.0
+        return _dot(_sub(touch, far), _unit(to_corner))
+    c, radius, s, e = curve[1], curve[2], curve[3], curve[4]
     span = (e - s) % (2 * math.pi) or 2 * math.pi
-    start = _add(c, (curve[2] * math.cos(s), curve[2] * math.sin(s)))
+    start = _add(c, (radius * math.cos(s), radius * math.sin(s)))
     if _len(_sub(far, start)) <= 1e-9:
         t = (_ang(c, touch) - s) % (2 * math.pi)  # from the start, anticlockwise
     else:
         t = (e - _ang(c, touch)) % (2 * math.pi)  # from the end, clockwise
-    return 1e-7 < t < span + (2 * math.pi - span) / 2.0
+    if t > span + (2 * math.pi - span) / 2.0:
+        t -= 2 * math.pi  # just beyond the far end
+    return t * radius
+
+
+def fits(curve, ref, touch, corner):
+    """True when trimming `curve` to `touch` stays on the curve: the touch point lies
+    between the curve's far end and the corner (or past the corner, where FreeCAD extends
+    the curve), never beyond that far end. Reaching the far end fits: the fillet then takes
+    the curve whole (takes_whole)."""
+    rest = leftover(curve, touch, corner)
+    return rest is None or rest >= -WHOLE
+
+
+def leftovers(c1, c2, r, ref1, ref2):
+    """(what stays of curve 1, of curve 2) after the fillet of radius r (leftover; None for
+    a circle, or when the curves make no corner)."""
+    _centre, t1, t2 = fillet(c1, c2, r, ref1, ref2)
+    corner = corner_of(c1, c2, ref1, ref2)
+    if corner is None:
+        return None, None
+    return leftover(c1, t1, corner), leftover(c2, t2, corner)
+
+
+def takes_whole(c1, c2, r, ref1, ref2):
+    """(curve 1, curve 2): True for a curve the fillet of radius r uses up (it reaches the
+    curve's far end: the curve is kept as construction, the fillet ends there)."""
+    rests = leftovers(c1, c2, r, ref1, ref2)
+    return tuple(rest is not None and rest < WHOLE for rest in rests)
+
+
+def largest_radius(c1, c2, ref1, ref2, near):
+    """The largest radius whose fillet fits both curves (it then reaches the far end of one
+    of them), searched from `near` (any radius, fitting or not): exact, no rounding, so
+    nothing of that curve is left. None when no such limit is found (circles)."""
+
+    def ok(r):
+        try:
+            check(c1, c2, r, ref1, ref2)
+            rests = leftovers(c1, c2, r, ref1, ref2)
+        except FilletError:
+            return False
+        return all(rest is None or rest >= 0.0 for rest in rests)  # not even a hair beyond
+
+    near = max(float(near), 1e-6)
+    lo = hi = None
+    r = near
+    if ok(r):
+        lo = r
+        for _ in range(60):
+            r *= 2.0
+            if not ok(r):
+                hi = r
+                break
+            lo = r
+    else:
+        hi = r
+        for _ in range(60):
+            r /= 2.0
+            if ok(r):
+                lo = r
+                break
+            hi = r
+    if lo is None or hi is None:
+        return None
+    for _ in range(200):
+        mid = (lo + hi) / 2.0
+        if not lo < mid < hi:
+            break
+        if ok(mid):
+            lo = mid
+        else:
+            hi = mid
+        if hi - lo <= 1e-12 * max(1.0, hi):
+            break
+    return lo
 
 
 def corner_of(c1, c2, ref1, ref2):

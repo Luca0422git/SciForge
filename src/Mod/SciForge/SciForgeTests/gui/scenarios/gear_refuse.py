@@ -4,8 +4,9 @@ from its selected face, New Component, and Ctrl+Z / Ctrl+Y. Only real input.
 
 1. A user parameter n = 20 (Change Parameters made it). Gear, XY, centre on the origin.
    Number of Teeth 3: the dialog says a spur gear needs at least 6 and OK stays open.
-   Hole Diameter 60: "too big ... at most" and OK waits. Root Fillet Radius 3: "does not
-   fit ... at most". Backlash 3: "come to a point". Each time the last good gear stays.
+   Hole Diameter 60, Root Fillet Radius 3, Backlash 3: each is held at the largest value
+   that works and the dialog says so (Luca's decision of 2026-10-21; they were refused:
+   "too big ... at most 41", "does not fit ... at most", "come to a point").
    Then hole 10, fillet 0.5, backlash 0, Number of Teeth "n": 20 teeth, the formula is
    listed. OK. n = 26 in Change Parameters: the gear follows.
 2. A Box 60 x 60 x 10 beside it; click its top face, Gear: the face is taken at once;
@@ -118,10 +119,17 @@ def big_hole():
 big_hole.wait_ms = 1500
 
 
+def note():
+    p = panel()
+    return p.limit_label.text() if p is not None and p.limit_label.isVisible() else ""
+
+
 def hole_refused():
-    text = message()
-    h.check("hole: too big, at most 41 mm", "too big" in text and "at most 41" in text, text)
-    h.check("the last good gear stays", near(vol(), s["good"]), vol())
+    p = panel()
+    hole = p.options.get("hole") if p is not None else 0
+    h.check("hole: held at the largest, 41 mm", near(hole, 41.0), hole)
+    h.check("and said", note() == "60 mm does not fit: limited to 41.00 mm", note())
+    h.check("no error", message() == "", message())
     h.shot("1-hole-refused")
     ui.type_into(panel().hole.widget, "10")
 
@@ -138,8 +146,14 @@ big_fillet.wait_ms = 1500
 
 
 def fillet_refused():
-    text = message()
-    h.check("fillet: does not fit, at most ...", "does not fit" in text and "at most" in text, text)
+    from sciforge import gear_core
+
+    p = panel()
+    fillet = p.options.get("fillet") if p is not None else 0
+    most = gear_core.max_fillet(dict(p.options, fillet=0.0)) if p is not None else 0
+    h.check("fillet: held at the largest that fits", 0.5 < fillet <= most + 1e-9, (fillet, most))
+    h.check("and said", note() == "3 mm does not fit: limited to %.2f mm" % fillet, note())
+    h.check("no error", message() == "", message())
     ui.type_into(panel().fillet.widget, "0.5")
 
 
@@ -154,8 +168,11 @@ big_backlash.wait_ms = 1500
 
 
 def backlash_refused():
-    text = message()
-    h.check("backlash: the teeth come to a point", "come to a point" in text, text)
+    p = panel()
+    backlash = p.options.get("backlash") if p is not None else 0
+    h.check("backlash: held before the teeth come to a point", 0.0 < backlash < 3.0, backlash)
+    h.check("and said", note() == "3 mm does not fit: limited to %.2f mm" % backlash, note())
+    h.check("no error", message() == "", message())
     ui.type_into(panel().backlash.widget, "0")
 
 

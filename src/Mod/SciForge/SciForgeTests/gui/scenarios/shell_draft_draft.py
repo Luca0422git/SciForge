@@ -3,7 +3,8 @@
 selected (the dialog waits for the fixed plane, the origin squares appear), click the XY
 square, click the front face (again to drop it, a second face), type the angle, turn the
 blue angle handle, Flip the pull direction, a face that cannot be drafted does not light
-up, an angle too steep (explained in the dialog, OK waits, nothing in the Report view),
+up, an angle too steep (held at the steepest that works and said: Luca's decision of
+2026-10-21; nothing in the Report view),
 OK, Ctrl+Z / Ctrl+Y, edit from the timeline, Cancel and Esc leave the part as it was, and
 a second Draft started with a face selected beforehand.
 
@@ -13,6 +14,7 @@ Box 40 x 30 x 10, fixed plane XY (pull +Z), h = 10, hand-derived volumes:
   flipped (the face leans out):     12000 + 40 * h^2 tan(a) / 2
   then the right face by b:         V1 - tan(b) (30 h^2 / 2 - h^3 tan(a) / 3)
 """
+
 import math
 
 import FreeCAD as App
@@ -188,17 +190,24 @@ def type_too_steep():
 
 
 def too_steep_reported():
+    """Luca, 2026-10-21: an angle too steep is held at the steepest that works (it was
+    refused, and OK waited)."""
     p = sd.draft_panel()
-    text = p.message.text() if p else ""
-    h.check("too steep explained in the dialog", "cannot be tilted this far" in text, text)
+    a = p.options.get("angle", 0) if p else 0
+    note = p.limit_label.text() if p is not None and p.limit_label.isVisible() else ""
+    h.check("too steep: held at the steepest that works", 30.0 < a < 80.0, a)
+    h.check("and said", note == "80° does not fit: limited to %.1f°" % a, note)
+    h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
+    h.check("the preview has that draft", sd.close(h.solid_volume(), one_face(a)))
     h.check("nothing about it in the Report view", not sd.report_errors(), sd.report_errors())
     sd.no_popups("an angle too steep")
     h.shot("6-too-steep")
-    h.task_button("OK")
+
+
+too_steep_reported.wait_ms = 4000
 
 
 def ok_refused():
-    h.check("OK waits while the draft fails", sd.draft_panel() is not None)
     p = sd.draft_panel()
     if p:
         sd.type_into(p.angle.widget, "5")

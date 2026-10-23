@@ -240,13 +240,28 @@ def _relink_to_base(doc, step, gone):
     """Steps that use edges/faces of `step` (a fillet on its edges, a sketch on its face) are
     pointed at the same edges/faces of the step before it, where those exist unchanged: they
     then keep working after the delete (Fusion re-finds geometry the same way)."""
+    from . import sketch_external
+
     base = getattr(step, "BaseFeature", None)
     if base is None or base.Shape.isNull():
         return
+
+    def rename(name):
+        try:
+            element = step.Shape.getElement(name)
+            return _same_element(base.Shape, element, name.rstrip("0123456789"))
+        except Exception:
+            return None
+
     for obj in list(step.InList):
         if obj.Name in gone or obj is step:
             continue
         for prop in obj.PropertiesList:
+            if prop == "ExternalGeometry" and sketch_external.is_sketch(obj):
+                # read-only in FreeCAD 1.1: the projected edges are projected again from
+                # the base (they froze as "missing reference" copies of the deleted step)
+                sketch_external.relink(obj, step, base, rename)
+                continue
             try:
                 kind = obj.getTypeIdOfProperty(prop)
             except Exception:
@@ -447,7 +462,7 @@ def run(doc, found, title="Delete", heal=True):
         raise DeleteError(found.get("refused") or "Select what to delete.")
     if not doc.UndoMode:
         doc.UndoMode = 1
-    doc.openTransaction(title)
+    doc.openTransaction(timeline_ops.transaction_title(title))  # (an AI call names it)
     made = []
     try:
         for sketch, indices in found["curves"].items():

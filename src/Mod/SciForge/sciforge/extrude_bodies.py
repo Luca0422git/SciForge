@@ -390,23 +390,24 @@ def insert_point(body, after, lead, times=None):
     return point
 
 
-def before_shape(body, lead=None, times=None):
+def before_shape(body, lead=None, times=None, copy=True):
     """`body`'s solid (design coordinates) as it was before the extrude `lead` changed it:
     the step before the lead or before its follower in that body, else the body at the
-    extrude's place in the timeline (an empty shape: the body did not exist yet)."""
+    extrude's place in the timeline (an empty shape: the body did not exist yet). copy=False
+    for a caller that only reads it (bodies.global_shape)."""
     import Part
 
     if lead is None or not _alive(lead):
-        return bodies.global_shape(body)
+        return bodies.global_shape(body, copy)
     if owner_body(lead) is body:
         step = lead.BaseFeature
-        return bodies.global_shape(step) if step is not None else Part.Shape()
+        return bodies.global_shape(step, copy) if step is not None else Part.Shape()
     for follower in followers_of(lead):
         if owner_body(follower) is body and not is_merge(follower):
             step = follower.BaseFeature
-            return bodies.global_shape(step) if step is not None else Part.Shape()
+            return bodies.global_shape(step, copy) if step is not None else Part.Shape()
     step = place_in(body, lead, times)
-    return bodies.global_shape(step) if step is not None else Part.Shape()
+    return bodies.global_shape(step, copy) if step is not None else Part.Shape()
 
 
 def _merged_by(lead, body):
@@ -445,7 +446,8 @@ def candidate_bodies(doc, lead=None):
         if not bodies.is_shown(body) and body.Name not in kept:
             continue
         try:
-            shape = before_shape(body, lead, times)
+            # (only read here and by the checks that use the candidates: not copied)
+            shape = before_shape(body, lead, times, copy=False)
         except Exception:
             continue
         if shape.isNull() or not shape.Solids:
@@ -635,7 +637,9 @@ def _face_contact(shape, tool, tol=1e-6):
         if not box.intersect(sbox):
             continue
         if faces is None:
-            faces = [(b, b.BoundBox) for b in shape.Faces]
+            from .shape_checks import face_boxes
+
+            faces = face_boxes(shape)
         samples = None
         for b, bbox in faces:
             if not box.intersect(bbox) or not _same_surface(a, b, tol):

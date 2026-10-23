@@ -277,8 +277,8 @@ def p3_axes():
 
 def p3_ok2():
     v = h.solid_volume()
-    expect = 2 * sd.BOX + BOSS * BOSS * 5
-    h.check("P3 Non Uniform previews with the boss", sd.close(v, expect, 1e-5), (v, expect))
+    expect = 2 * sd.BOX  # edited with the timeline rolled to the scale: the boss waits
+    h.check("P3 Non Uniform previews, the boss waits", sd.close(v, expect, 1e-5), (v, expect))
     p = sd.scale_panel()
     h.check("P3 no message", msg(p) == "", msg(p))
     h.task_button("OK")

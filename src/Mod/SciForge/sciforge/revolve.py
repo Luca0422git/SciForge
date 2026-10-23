@@ -1528,9 +1528,23 @@ def _map_subs(old, new, subs):
 
 
 def _relink_users(old, new, users):
-    """Point every link of `users` to `old` (and its faces/edges) at `new`."""
+    """Point every link of `users` to `old` (and its faces/edges) at `new` (a sketch's
+    projected edges are projected again: sketch_external)."""
+    from . import sketch_external
+
+    def projected(name):  # a sketch's projected edge on `new` (None: not there)
+        try:
+            kind = name.rstrip("0123456789")
+            return _same_element(new.Shape, old.Shape.getElement(name), kind) or None
+        except Exception:
+            return None
+
     for obj in users:
         try:
+            if sketch_external.is_sketch(obj):
+                # ExternalGeometry is read-only in FreeCAD 1.1 (the setattr below failed
+                # and the projected edges froze when `old` went)
+                sketch_external.relink(obj, old, new, projected)
             if isinstance(getattr(obj, "Proxy", None), FaceLink):
                 entries = _face_entries(obj)
                 for entry in entries:
@@ -1541,7 +1555,7 @@ def _relink_users(old, new, users):
                 obj.touch()
                 continue
             for prop in obj.PropertiesList:
-                if prop == "BaseFeature":
+                if prop == "BaseFeature" or prop == "ExternalGeometry":
                     continue
                 kind = obj.getTypeIdOfProperty(prop)
                 if "Link" not in kind or "Hidden" in kind:

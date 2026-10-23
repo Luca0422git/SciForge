@@ -350,3 +350,6 @@ Builder.op_interference_expect = op_interference_expect
 Builder.op_blend_radius_expect = op_blend_radius_expect
 Builder.op_expect_component = op_expect_component
 Builder.op_expect_radius = op_expect_radius
+
+from . import export_checks  # noqa: E402,F401  (registers export_report_expect and its setups)
+from . import live_checks  # noqa: E402,F401  (registers live_blend_expect)

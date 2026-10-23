@@ -158,6 +158,27 @@ def join_not_red():
     h.check("R7: the profile's blue is back", p.picker is not None and not p.picker.dimmed)
 
 
+def live_red(q):
+    """1 while the live picture of a push shows the material taken away in red."""
+    from sciforge import live_shapes
+
+    live = q.__dict__.get("_live_view")
+    colors = getattr(live, "_colors", None) if live is not None else None
+    shown = live is not None and live.shown and colors
+    return int(bool(shown and colors[0] == live_shapes.CUT_COLOR))
+
+
+def shown_size(q):
+    """What the view shows of the part: the live picture's values while it shows (since
+    2026-10-23 the faces follow the arrow as a picture and the exact solid comes at the rest:
+    sciforge/live_shapes.py, checked against the exact solid in scenario live_shapes), else
+    the solid's volume."""
+    live = q.__dict__.get("_live_view")
+    if live is not None and live.shown and live.values:
+        return repr(sorted(live.values.items()))
+    return "%.3f" % h.solid_volume()
+
+
 def drag_into_part():
     p = xpanel()
     s["samples"] = samples = []
@@ -174,7 +195,7 @@ def drag_into_part():
                 "active": bool(q.dragger and q.dragger.dragger.isActive.getValue()),
                 "cut": q.operation.currentData() == "cut",
                 "red": len(a.cut_nodes()),
-                "volume": round(h.solid_volume(), 3),
+                "volume": shown_size(q),
             }
         )
 
@@ -399,9 +420,9 @@ def pp_drag_down():
             {
                 "i": index,
                 "active": bool(q.dragger and q.dragger.dragger.isActive.getValue()),
-                "volume": round(h.solid_volume(), 3),
+                "volume": shown_size(q),
                 "field": q.field.value(),
-                "red": len(a.cut_nodes()),
+                "red": len(a.cut_nodes()) + live_red(q),
                 "box": boxes[0].text() if boxes else None,
                 "field_text": q.field.widget.text(),
             }

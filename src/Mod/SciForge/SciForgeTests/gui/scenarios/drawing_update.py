@@ -12,6 +12,9 @@ B  Workspace > Drawing > the drawing: the corners are R8 arcs on the view; the r
    dimension reads 8, the bottom edge's 44 (60 - 2 x 8); the hole's is still 12; the
    centre mark is still on the hole; the title block is unchanged.
 C  Back in the design, Ctrl+Z (the fillet edit undone): on the drawing R5 and 50 again.
+   The Undo rebuilt nothing (undo_fast: FreeCAD put the shapes back), only the drawing's
+   views were recomputed (review fix F1, 2026-10-22: the view kept the edited part).
+   Ctrl+Y: R8 and 44 again, the same way.
 D  The hole moved 10 mm to the right (by script: the subject is the drawing): the centre
    mark goes with it, the diameter dimension still reads 12.
 """
@@ -205,7 +208,14 @@ def c_design():
 c_design.wait_ms = 1200
 
 
+def undo_stats():
+    from sciforge import undo_fast
+
+    return dict(undo_fast.stats)
+
+
 def c_undo():
+    state["stats"] = undo_stats()
     h.press(QtCore.Qt.Key_Z, QtCore.Qt.ControlModifier)
 
 
@@ -223,11 +233,51 @@ def c_undone():
 c_undone.wait_ms = 2500
 
 
+def fast(what):
+    before, after = state["stats"], undo_stats()
+    h.check(
+        "%s rebuilt nothing (the shapes were put back)" % what,
+        after["skipped"] > before["skipped"] and after["rebuilt"] == before["rebuilt"],
+        (before, after),
+    )
+
+
 def c_followed():
     found = by_type()
     h.check("R5 corners on the view again", len(arcs(5.0)) == 4, len(arcs(5.0)))
     h.check("the radius reads 5 again", found.get("Radius") == 5.0, found)
     h.check("the bottom edge reads 50 again", found.get("DistanceX") == 50.0, found)
+    fast("the Undo")
+
+
+def c_redo():
+    state["stats"] = undo_stats()
+    h.press(QtCore.Qt.Key_Y, QtCore.Qt.ControlModifier)
+
+
+c_redo.wait_ms = 1500
+
+
+def c_redone():
+    import math
+
+    body = App.ActiveDocument.getObject("Body")
+    extra = 4 * ((64 - math.pi * 64 / 4) - (25 - math.pi * 25 / 4)) * fx.HEIGHT
+    h.check(
+        "the fillets are R8 again", abs(body.Shape.Volume - (fx.VOLUME - extra)) < 1e-3, body.Shape.Volume
+    )
+    d.workspace("Drawing", state["label"])
+
+
+c_redone.wait_ms = 2500
+
+
+def c_followed_redo():
+    found = by_type()
+    h.check("after Ctrl+Y, R8 corners on the view", len(arcs(8.0)) == 4, len(arcs(8.0)))
+    h.check("after Ctrl+Y, the radius reads 8", found.get("Radius") == 8.0, found)
+    h.check("after Ctrl+Y, the bottom edge reads 44", found.get("DistanceX") == 44.0, found)
+    fast("the Redo")
 
 
 # -- D ------------------------------------------------------------------------------------------
@@ -266,5 +316,6 @@ h.run(
     + [a_design, a_edit, a_radius, a_ok, a_done]
     + [b_open, b_followed]
     + [c_design, c_undo, c_undone, c_followed]
+    + [c_design, c_redo, c_redone, c_followed_redo]
     + [d_move, d_followed],
 )
