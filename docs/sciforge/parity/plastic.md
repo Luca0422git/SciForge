@@ -222,6 +222,8 @@ pass after the fixes.
   returns a half pipe unshelled but "Valid" (no error, same volume); Join = Arc (Rounded)
   shells it. This is a Shell problem outside the plastic area (`shell_ui` / `shelling.py`):
   a silent wrong result to fix (refuse, or fall back to Rounded with a note).
+  Fixed by fix-shell-sharp (2026-10-23): the Shell dialog refuses Sharp there with the reason
+  (`shell_draft_qa_sharp`).
 
 ## Journey pass (sf/journey-pl, 2026-10-23)
 
