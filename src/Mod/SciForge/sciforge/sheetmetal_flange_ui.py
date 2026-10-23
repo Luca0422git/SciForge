@@ -693,17 +693,19 @@ class FlangePanel(Panel):
         if "Invalid" in list(getattr(self.target, "State", [])):
             return  # the message says why; no arrow on a flange that is not built
         try:
-            if self.kind == "edge" and self.options["extent"] == "distance":
+            if self.kind == "edge":
                 origin, direction = self._edge_arrow()
-                self.arrows["height"] = ArrowDragger(
-                    origin,
-                    direction,
-                    self.options["height"],
-                    5.0,
-                    on_drag=self._height_dragged,
-                    on_release=self._height_dragged,
-                )
-                self._attach_box("height")
+                if self.options["extent"] == "distance":
+                    self.arrows["height"] = ArrowDragger(
+                        origin,
+                        direction,
+                        self.options["height"],
+                        5.0,
+                        on_drag=self._height_dragged,
+                        on_release=self._height_dragged,
+                    )
+                    self._attach_box("height")
+                self._make_angle_handle()
             elif self.kind == "contour":
                 origin, direction = self._contour_arrow()
                 self.arrows["distance"] = ArrowDragger(
@@ -752,7 +754,39 @@ class FlangePanel(Panel):
         )
         origin = frame.point(x, z, (t0 + t1) / 2.0)
         direction = frame.out * math.cos(a) + frame.up * math.sin(a)
+        # the bend's axis, for the angle handle: it turns `out` towards `up`
+        self._bend = (frame.point(xc, T + R, (t0 + t1) / 2.0), frame.out.cross(frame.up), frame.out)
+        self._bend_reach = R + T + 4.0
         return origin, direction
+
+    def _make_angle_handle(self):
+        """Fusion's angle manipulator on the bend: the ball turns about the bend's axis."""
+        from . import handles3d
+
+        center, axis, zero = self._bend
+        self.arrows["angle"] = handles3d.angle_handle(
+            center,
+            axis,
+            zero,
+            self._bend_reach,
+            self.options["angle"],
+            2.0,
+            on_drag=self._angle_dragged,
+            on_release=self._angle_dragged,
+        )
+        self._attach_box("angle")
+
+    @safe
+    def _angle_dragged(self, angle):
+        value = min(180.0, max(1.0, round(float(angle), 1)))
+        if self.formulas.get("angle"):
+            self.formulas["angle"] = ""
+        self._quiet = True
+        try:
+            self.f_angle.set_value(value)
+        finally:
+            self._quiet = False
+        self._changed()
 
     def _contour_arrow(self):
         edges = curves.refs_edges(self.refs)
@@ -947,6 +981,8 @@ def _same_edge(obj, short, base):
 
 def _dragging(arrow):
     try:
+        if hasattr(arrow, "busy"):
+            return bool(arrow.busy())
         return bool(arrow.dragger.isActive.getValue())
     except Exception:
         return False

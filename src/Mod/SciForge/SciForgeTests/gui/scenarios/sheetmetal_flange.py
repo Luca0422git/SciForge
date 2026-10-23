@@ -294,6 +294,26 @@ def edit_again():
     sm.double_click_timeline("Flange 2")
 
 
+def drag_angle():
+    sm.settle()
+    p = sm.panel()
+    h.check(
+        "the angle handle is there", p is not None and "angle" in p.arrows, p and list(p.arrows)
+    )
+    sm.drag_angle("angle", 120.0)
+
+
+drag_angle.wait_ms = 1500
+
+
+def angle_dragged():
+    sm.settle()
+    p = sm.panel()
+    angle = p.options["angle"] if p else 0
+    h.check("the drag turned the flange (about 120)", 100.0 < angle < 140.0, angle)
+    h.check("one valid solid", s["body"].Shape.isValid() and len(s["body"].Shape.Solids) == 1)
+
+
 def angle_135():
     sm.type_field("angle", "135")
 
@@ -417,6 +437,8 @@ h.run(
         esc_edit,
         unchanged,
         edit_again,
+        drag_angle,
+        angle_dragged,
         angle_135,
         ok_135,
         done_135,
