@@ -1,0 +1,67 @@
+{
+  "id": "sheetmetal_edge_flange_miter_outside",
+  "title": "Edge flanges on two edges that meet, Bend Position Outside: the flanges stand 1 mm out past the plate, run on past the corner and close the mitre up to the gap",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ],
+        [
+          25,
+          30,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10,
+        "position": "outside"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2322.389753,
+    "bbox": [
+      0,
+      0,
+      0,
+      51,
+      31,
+      11
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "plate 1500 - strips 30 + 50 (cut back R = 1) + their shared 1 x 1 = 1421; each flange's section A = 3pi/4 + 9 (quarter ring r 1..2 about x' = -1, wall x' 0..1, z 2..11, x' measured out from the edge) runs along its edge to the corner's bisector less gap/2 (gap = T): length L + x' - 1/sqrt2, so volume = A (L - 1/sqrt2) + integral x' dA with integral x' dA = (7/3 - 3pi/4) + 4.5; L = 30 and 50"
+  }
+}

@@ -80,3 +80,36 @@ Thickness only (the Flange's own fields take user parameters).
   `sheetmetal_flange.corner_reliefs(step)` (and `sheetmetal_form.mitred_corners`) give each
   mitred corner and the 2-bend relief to cut in the flat pattern (the folded part leaves the
   corner open).
+
+## QA pass (2026-10-23, branch `sf/sm-forming-qa`)
+
+Independent QA of `sf/sm-forming` (every sheet metal scenario, the shared-file scenarios
+components_basic, timeline_browser_2, timeline_browser_qa3, ribbon_sweep with
+SWEEP_TABS=sheet_metal, unit and golden runs, the whole diff read, headless probes of the
+geometry against research 4.3 / 4.4 / 4.7).
+
+Fixed (details in `docs/sciforge/parity/sheet-metal.md`, "QA pass"):
+
+- A later Flange on the plate edge next to an earlier edge flange was refused ("not on the
+  sheet's thickness"): the two side faces fuse into one coplanar face. `edge_frame` probes
+  the solid's thickness when the face extents cannot tell.
+- Mitred corners of flanges standing out past the plate (Outside / Adjacent, or leaning out
+  below 90 degrees) were left open; the flanges now run on to the mitre (research 4.7).
+- A Sheet Metal component's active rule could be deleted from the design.
+- New Component + a Rule chosen after the pick left the component's active rule behind.
+- Inserting a design with its own rule into one that already had sheet metal silently
+  rebuilt the inserted parts in the default rule (copied rule stores were never read).
+
+FreeCAD facts found:
+
+- `Document.copyObject(obj, True)` (Paste New, Insert) copies the objects a flange links
+  through `App::PropertyLinkGlobal` too: the rule store comes along as `SheetMetalRules001`.
+- After a fuse + `removeSplitter`, a plate's side face and a coplanar flange end face become
+  one face: never measure the sheet's thickness from a face's extent alone.
+- `harness.press` sends keys to the 3D view: a non-modal window (Sheet Metal Rules) gets Esc
+  only when it is sent to its own focused widget.
+
+New tests: scenario `sheetmetal_qa` (empty design, preselected edge, Cancel, save / reopen,
+edit from the timeline, rule Undo / Redo, later flanges, component rule refusal, New
+Component rule, Outside mitre), golden models `sheetmetal_edge_flange_adjacent_later` and
+`sheetmetal_edge_flange_miter_outside`.

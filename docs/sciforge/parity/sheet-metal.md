@@ -32,7 +32,7 @@ behaviour SciForge copies.
 | K factor outside 0..1 refused; names unique in a list | Refused with the reason in the dialog | A[R25], A[R26] |
 | Round 2-bend relief allows Intersection / Tangent placement, Square Intersection only, others none | Same (Placement greyed for the other shapes, Square forces Intersection) | A[R24] |
 | Copy between Library and In This Design | Copy to Library / Copy to Design (a new name when the name is taken) | F[F8] |
-| Deleting a rule that is in use is refused | Refused with the bodies that use it; also refused for the active rule and the design's last rule | G |
+| Deleting a rule that is in use is refused | Refused with the bodies that use it; also refused for the active rule, a Sheet Metal component's active rule (QA) and the design's last rule | G |
 | Editing a rule In This Design recomputes every body that follows it | Same: the bodies' flanges read the rule when they compute and depend on the design's rule store, so Save (and its Undo) rebuild them | G |
 | Active rule per component | Set Active (the rule new flanges in the active component start with); a Sheet Metal component keeps its own | G |
 | (not in the browser) | SciForge shows "Sheet Metal Rule: <active rule>" under Document Settings once the design has sheet metal; a click opens the dialog | G |
@@ -71,11 +71,12 @@ its **diameter** (said in the tooltip).
 | Bend Position Inside / Outside / Adjacent / Tangent | Same (research 4.4): the plate is cut back (R + T) tan(a/2), R tan(a/2), 0; Tangent keeps the bend's outside on the side face from 90 degrees up (below 90 it is Inside, G) | A[R2], A[R29] |
 | Angle, default 90; Flip turns the flange over the plate | Same; angle 0 < a <= 180 | A[R27], A[R2] |
 | Width Full Edge / Symmetric / Two Sides / Two Offsets (between two picked reference faces or planes, an offset from each) | Same: Two Offsets lights Offset Object 1 then 2; the flange runs between where the two references cross the edge, each offset inwards. With no reference picked the offsets count from the edge's ends (SciForge) | A[R2] |
-| Several edges; adjacent ones mitred with the Miter/Rip/Seam Gap | Same: each pair of picked edges that meet at a corner of the same face is cut on the corner's bisector, gap/2 each side (a four-edge tray and the inside corner of an L-shaped plate work) | A[R6], G(Inv) |
+| Several edges; adjacent ones mitred with the Miter/Rip/Seam Gap; the corner closes up to the gap (research 4.7) | Same: each pair of picked edges that meet at a corner of the same face is cut on the corner's bisector, gap/2 each side (a four-edge tray and the inside corner of an L-shaped plate work). Where the flanges stand out past the plate's edges (Bend Position Outside / Adjacent, or walls leaning out below 90 degrees), each one runs on past the outside corner far enough to meet the mitre, so the corner closes up to the gap (QA; before, those corners were left open) | A[R6], G(Inv) |
 | Bend relief where the flange stops inside its edge: Straight / Tear / Round, width, depth, remnant | Same (research 4.5): a slot from the edge back across the bend zone and Relief Depth more, Relief Width wide; Round ends in a half circle; a plate sliver narrower than Relief Remnant is cut away; Tear is a 0.05 mm slit (a solid cannot hold a zero-width cut) | A[R6], A[R1], G |
 | Rule overrides with their check boxes: Bend Radius, Bend Relief, Corner Relief (2 bends), Corner Relief (3 bends) | Same check boxes and fields. Bend Radius and Bend Relief change the geometry; the corner relief overrides are kept on the step (see Known gaps) | A[R1] |
 | Live preview, drag arrow with its value box, OK / Cancel | Same: the preview is the real step; the height arrow stands on the Height Datum point and points along the wall; an angle handle turns about the bend's axis (G); every field and value box takes a number, a user parameter or a formula | A[R2], G |
 | Timeline "Flange<n>" with the flange icon; edit from the timeline | Same (double-click opens the dialog with the picks and values) | G |
+| A later Flange on a plate edge next to an earlier flange | Works: the edge's side face runs on into the earlier flange's end face (one coplanar face), and the edge is still recognised as a sheet edge by probing the solid's thickness under it (QA; it was refused as "not on the sheet's thickness") | G |
 | Errors: curved edge, an edge not on a sheet metal body, a flange that runs into the part, a height that does not reach past the bend | Refused in the dialog with the reason (OK keeps it open): curved edge, edge across the thickness, edge of another body, overlapping flanges, a flange that would run into the part, Height Datum Inner / Outer or Bend Position Inside / Outside at 180 degrees, a contour line too short for its bends, a closed or branched contour, a spline in a contour, a Join sheet laid on the body's sheet (double thickness) or apart from it | G |
 
 Geometry rule (what sm-flat's unfolder relies on): every solid is flat walls plus cylindrical
@@ -100,6 +101,15 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
   Two Offsets, Sheet Metal component), `sheetmetal_parameters` (a user parameter in Height),
   `sheetmetal_components` (New Component, Extrude cut through sheet metal, Join), and
   `ribbon_sweep` with `SWEEP_TABS=sheet_metal`.
+- QA (2026-10-23, branch `sf/sm-forming-qa`): scenario `sheetmetal_qa` (an empty design:
+  Flange waits, OK refused, Esc adds no undo step, Sheet Metal Rules visit with Esc in the
+  editor; an edge picked before Flange; Cancel; a mitred corner saved, closed and reopened
+  with its proxies, view providers and rule link; edit from the timeline and Cancel; a rule
+  edit after the reopen with Undo / Redo; a later Flange on the two edges next to the earlier
+  ones; a component's active rule cannot be deleted; New Component with another rule; an
+  Outside mitre that closes its corner), golden models
+  `sheetmetal_edge_flange_adjacent_later` and `sheetmetal_edge_flange_miter_outside` (volumes
+  by hand).
 
 ## Known gaps
 
@@ -125,3 +135,40 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
 - **The Lofted flange type** is sm-more's own entry.
 - **Rule expressions** accept Thickness only, not user parameters (critic pass CP2 item 4); the
   Flange's own fields do take user parameters.
+
+## QA pass (2026-10-23)
+
+Fixed on `sf/sm-forming-qa`:
+
+- **A second Flange next to an earlier one was refused.** After an edge flange, the plate's
+  side face next to it and the flange's end face are one coplanar face, so the edge's "side
+  face" was wider than the thickness and `edge_frame` refused it ("not on the sheet's
+  thickness"): flanging a box one edge at a time was impossible. `edge_frame` now probes the
+  solid (material half a thickness under the face, none past the thickness) when the face
+  extents cannot tell.
+- **Mitred corners of flanges that stand out past the plate were left open** (Bend Position
+  Outside / Adjacent, or walls leaning out below 90 degrees: a notch or a widening V at the
+  corner). Each flange now runs on past the outside corner by its reach and is cut on the
+  bisector, so the corner closes up to the gap (research 4.7). Inside corners and flanges
+  that stay inside the plate's outline are as before (every earlier golden model unchanged).
+- **A rule that was a Sheet Metal component's active rule could be deleted**, leaving the
+  component pointing at a rule the design no longer had. Refused now with the reason.
+- **New Component with the Rule changed after the pick** gave the body the new rule but left
+  the new component's active rule at the old one. The component follows the Rule box now.
+- **Inserting a design that has its own rule** into a design that already used sheet metal
+  silently rebuilt the inserted parts with the default rule (a 0.5 mm part became 1 mm, with
+  only a console warning): FreeCAD copies the rule store the flanges link under another name
+  (`SheetMetalRules001`), which `find_rule` never read. Copied stores' rules now count as
+  the design's (`sheetmetal.design_rules`), and the next rule save keeps them in the store.
+
+Left as they are (reported, not fixed):
+
+- Two separate profiles in one base flange make one body with two solids (Fusion probably
+  makes a body per plate: not checked).
+- An inserted design's rule with the same name as one In This Design but other values takes
+  the design's values (Fusion's behaviour unknown).
+- Paste New of a sheet metal component leaves a hidden copy of the rule store in the design
+  (harmless: its rules are the design's).
+- A Flange added later next to an earlier one meets it with an open corner (no mitre against
+  the existing flange; Fusion's behaviour here was not found).
+- The Sheet Metal Rules window is not modal: Esc reaches it only while it has the focus.

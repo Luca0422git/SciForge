@@ -497,8 +497,12 @@ def _sheet_thick_at(shape, mid, n_face, n_side, thickness):
     alone cannot tell a sheet edge then."""
     eps = min(1e-3, thickness / 10.0)
     inward = mid - n_side * eps
-    return _inside(shape, inward - n_face * (thickness / 2.0)) and not _inside(
-        shape, inward - n_face * (thickness + eps)
+    half = n_face * (thickness / 2.0)
+    return (
+        _inside(shape, inward - half)
+        and not _inside(shape, inward - n_face * (thickness + eps))
+        # and nothing past the side face (an inside corner of a wall is no sheet edge)
+        and not _inside(shape, mid + n_side * eps - half)
     )
 
 
@@ -724,6 +728,43 @@ def _shared_vertex(fa, fb):
     return None
 
 
+def _mitre_corners(frames, ranges):
+    """[(i, j, point, ta, tb, m)]: the pairs of picked edges whose flanges meet at a corner
+    of the same face (both reach it, both turn the same way); m is the unit normal of the
+    corner's bisector plane, towards edge i's side (an outside corner and an inside one of
+    an L-shaped plate put it on opposite sides)."""
+    found = []
+    for i in range(len(frames)):
+        for j in range(i + 1, len(frames)):
+            shared = _shared_vertex(frames[i], frames[j])
+            if shared is None:
+                continue
+            point, ta, tb = shared
+            reach_a = ranges[i][0] <= TOL if ta == 0.0 else ranges[i][1] >= frames[i].length - TOL
+            reach_b = ranges[j][0] <= TOL if tb == 0.0 else ranges[j][1] >= frames[j].length - TOL
+            if not (reach_a and reach_b):
+                continue
+            diff = frames[j].out - frames[i].out
+            if diff.Length < 1e-6 or (frames[i].up - frames[j].up).Length > 1e-6:
+                continue
+            m = V(diff).normalize()
+            mid_i = frames[i].point(0.0, 0.0, frames[i].length / 2.0)
+            if (mid_i - point).dot(m) < 0:
+                m = m * -1.0
+            found.append((i, j, point, ta, tb, m))
+    return found
+
+
+def _reach(thickness, radius, angle, length, position):
+    """How far (mm, frame x) a flange's cross-section stands out past its edge: the bend's
+    outside (at most a quarter turn of it) or the wall's outer face."""
+    T, R = thickness, radius
+    a = math.radians(angle)
+    xc = core.bend_start_x(position, angle, R, T)
+    start = xc + (R + T) * math.sin(a)
+    return max(xc + (R + T) * math.sin(min(a, math.pi / 2.0)), start, start + length * math.cos(a))
+
+
 def edge_flange(shape, edge_names, rule, options=None):
     """Fusion's edge flange on the sheet metal solid `shape` (design coordinates): a bend
     and a wall on every named edge, the plate cut back where the bend position needs it,
@@ -761,9 +802,37 @@ def edge_flange(shape, edge_names, rule, options=None):
                 )
         except ValueError as exc:
             raise FormError("Width: %s." % exc)
-        made = bend_wall(frame, t0, t1, T, eff["bend_radius"], angle, length, opts["position"])
-        pieces.append(made)
         ranges.append((t0, t1))
+    corners = _mitre_corners(frames, ranges)
+    # a mitred corner closes up to the gap: where the flanges stand out past the plate's
+    # edges (Bend Position Outside / Adjacent, or walls leaning out below 90 degrees), each
+    # runs on past the corner far enough for the mitre to meet the other one (QA)
+    try:
+        reach = _reach(T, eff["bend_radius"], angle, length, opts["position"])
+    except ValueError as exc:
+        raise FormError("Bend Position: %s." % exc)
+    extend = [[0.0, 0.0] for _frame in frames]
+    if reach > TOL:
+        for i, j, _point, ta, tb, _m in corners:
+            for k, tk, other in ((i, ta, j), (j, tb, i)):
+                toward = frames[k].axis * (1.0 if tk > 0.0 else -1.0)
+                along = toward.dot(frames[other].out)
+                if along <= 1e-6:
+                    continue  # an inside corner: the flanges cross, the mitre only trims
+                c = frames[k].out.dot(frames[other].out)
+                extend[k][1 if tk > 0.0 else 0] = reach * (1.0 - c) / along + T
+    for frame, (t0, t1), more in zip(frames, ranges, extend):
+        made = bend_wall(
+            frame,
+            t0 - more[0],
+            t1 + more[1],
+            T,
+            eff["bend_radius"],
+            angle,
+            length,
+            opts["position"],
+        )
+        pieces.append(made)
         if made.trim is not None:
             cuts.append(made.trim)
         for a, b in core.relief_ends(
@@ -773,27 +842,9 @@ def edge_flange(shape, edge_names, rule, options=None):
     size = 10.0 * (shape.BoundBox.DiagonalLength + length + 10.0 * T + 10.0)
     solids = [p.solid for p in pieces]
     gap = eff["miter_gap"]
-    for i in range(len(frames)):
-        for j in range(i + 1, len(frames)):
-            shared = _shared_vertex(frames[i], frames[j])
-            if shared is None:
-                continue
-            point, ta, tb = shared
-            reach_a = ranges[i][0] <= TOL if ta == 0.0 else ranges[i][1] >= frames[i].length - TOL
-            reach_b = ranges[j][0] <= TOL if tb == 0.0 else ranges[j][1] >= frames[j].length - TOL
-            if not (reach_a and reach_b):
-                continue
-            diff = frames[j].out - frames[i].out
-            if diff.Length < 1e-6 or (frames[i].up - frames[j].up).Length > 1e-6:
-                continue
-            # m: across the corner's bisector plane, towards edge i's side (an outside corner
-            # and an inside one of an L-shaped plate put it on opposite sides)
-            m = diff.normalize()
-            mid_i = frames[i].point(0.0, 0.0, frames[i].length / 2.0)
-            if (mid_i - point).dot(m) < 0:
-                m = m * -1.0
-            solids[i] = _clean(solids[i].cut(_half_space(point + m * (gap / 2.0), m * -1.0, size)))
-            solids[j] = _clean(solids[j].cut(_half_space(point - m * (gap / 2.0), m, size)))
+    for i, j, point, _ta, _tb, m in corners:
+        solids[i] = _clean(solids[i].cut(_half_space(point + m * (gap / 2.0), m * -1.0, size)))
+        solids[j] = _clean(solids[j].cut(_half_space(point - m * (gap / 2.0), m, size)))
     base = shape
     if cuts:
         base = shape.cut(cuts)

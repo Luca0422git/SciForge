@@ -12,7 +12,10 @@ with no undo step. Sheet Metal Rules after the reopen: Steel (mm) Thickness 2 re
 whole part (2 mm, still one valid solid); Undo takes it back to 1 mm, Redo to 2 mm. A later
 Flange on the two plate edges next to the earlier flanges (their side faces run on into the
 flanges' end faces) is taken. New Component, Type Sheet Metal with Aluminum (mm): deleting
-that rule in Sheet Metal Rules is refused (it is the component's active rule).
+that rule in Sheet Metal Rules is refused (it is the component's active rule). A second
+design: a plate made as New Component with the Rule Aluminum (mm) chosen after the pick: the
+component's active rule follows; two edges with Bend Position Outside: the walls run on to the
+mitre and close the corner up to the gap.
 """
 
 import os
@@ -478,6 +481,101 @@ def rules_closed_2():
     h.check("closed", sm.rules_dialog() is None)
 
 
+# -- New Component with another rule; an Outside mitre closes its corner ------------------------
+def design_2():
+    App.newDocument("SheetQA2")
+    h.fit()
+
+
+def d2_sketch():
+    h.ribbon("Create Sketch")
+
+
+def d2_flange():
+    h.ribbon("Finish Sketch")
+    h.fit()
+    h.click_empty()
+    sm.tab()
+    h.ribbon("Flange")
+
+
+def d2_profile():
+    h.fit()
+    h.click(V(25, 15, 0))
+
+
+def d2_new_component():
+    sm.settle()
+    sm.choose("operation", "New Component")
+
+
+def d2_aluminum():
+    sm.settle()
+    sm.choose("rule", "Aluminum (mm) (Library)")
+
+
+def d2_ok():
+    sm.settle()
+    s["body2"] = sm.target_body()
+    sm.ok()
+
+
+def d2_component():
+    from sciforge import components, sheetmetal
+
+    doc = _doc()
+    body = s["body2"]
+    h.check("dialog closed", sm.panel() is None)
+    h.check("the body follows Aluminum (mm)", sheetmetal.body_rule_name(body) == "Aluminum (mm)")
+    part = components.container_of(body) if body is not None else None
+    h.check("in a new component", part is not None)
+    rule = sheetmetal.active_rule_name(doc, part) if part is not None else None
+    h.check("the component's active rule follows the Rule box", rule == "Aluminum (mm)", rule)
+    h.check("a 1.5 mm plate", sm.near(sm.volume(body), 2250.0), sm.volume(body))
+
+
+def d2_flange_corner():
+    h.fit()
+    h.click_empty()
+    h.ribbon("Flange")
+
+
+def d2_first():
+    h.fit()
+    h.check("clicked the 30 mm edge", h.click_edge(V(50, 15, 1.5)))
+
+
+def d2_second():
+    sm.settle()
+    h.check("clicked the 50 mm edge", h.click_edge(V(25, 30, 1.5)))
+
+
+def d2_outside():
+    sm.settle()
+    sm.choose("position", "Outside")
+
+
+def d2_closed_corner():
+    sm.settle()
+    body = s["body2"]
+    shape = body.Shape
+    h.check("no message", not sm.message(), sm.message())
+    h.check("one valid solid", shape.isValid() and len(shape.Solids) == 1)
+    # the walls stand 1.5 mm out past the plate; each runs on to the mitre (gap 1.5 mm)
+    h.check("the 30 mm edge's wall reaches the mitre", shape.isInside(V(51.4, 30.1, 6), 1e-6, True))
+    h.check("the 50 mm edge's wall reaches the mitre", shape.isInside(V(50.1, 31.4, 6), 1e-6, True))
+    h.check("the gap stays open", not shape.isInside(V(50.75, 30.75, 6), 1e-6, True))
+    h.shot("3-outside-mitre")
+
+
+def d2_ok_corner():
+    sm.ok()
+
+
+def d2_done():
+    h.check("dialog closed", sm.panel() is None)
+
+
 h.run(
     "sheetmetal_qa",
     [
@@ -547,5 +645,22 @@ h.run(
         component_rule_kept,
         close_rules_2,
         rules_closed_2,
+        design_2,
+        d2_sketch,
+        pick_xy,
+        draw_rect,
+        d2_flange,
+        d2_profile,
+        d2_new_component,
+        d2_aluminum,
+        d2_ok,
+        d2_component,
+        d2_flange_corner,
+        d2_first,
+        d2_second,
+        d2_outside,
+        d2_closed_corner,
+        d2_ok_corner,
+        d2_done,
     ],
 )

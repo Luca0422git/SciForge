@@ -713,6 +713,13 @@ class FlangePanel(Panel):
                 if self.made_with and self.made_with[:2] == made_with[:2]:
                     body = flange.owner_body(self.target)
                     sheetmetal.make_sheet_metal_body(body, self.rule_name)
+                    if self.operation == "new_component":
+                        # the new Sheet Metal component's active rule follows the Rule box
+                        from . import components
+
+                        part = components.container_of(body)
+                        if part is not None:
+                            sheetmetal.set_active_rule(self.doc, self.rule_name, part)
                     self.target.touch()  # it reads the body's rule when it computes
                     self.made_with = made_with
                 else:
