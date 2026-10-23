@@ -1324,6 +1324,8 @@ class PlacedPanel(Panel, value_limits.LimitedValues):
             if self.doc.Recomputing:
                 self._timer.start()  # FreeCAD is still busy: try again shortly
                 return
+            if self.limit_waits():
+                return  # the search of the largest value that fits previews when it ends
             if self.dirty and self.state == "ready":
                 self.dirty = False
                 self._apply()
@@ -1341,8 +1343,14 @@ class PlacedPanel(Panel, value_limits.LimitedValues):
         self._apply_once()
         if self.ref is None:
             return
-        if self.error and self.limit_refused(self.error):
+        held = self.limit_refuse(self.error) if self.error else None
+        if held == "again":
             self._apply_once()
+        elif held == "later":
+            # looked for one trial per event-loop turn; its end builds the held value
+            self.dirty = True
+            self.error = ""
+            return
         elif not self.error:
             self.limit_good()
         if self.error:
@@ -1624,6 +1632,13 @@ class PlacedPanel(Panel, value_limits.LimitedValues):
             return False
 
     def _accept(self):
+        self.limit_accept()  # a limit search still running ends now
+        try:
+            return self._accept_now()
+        finally:
+            self.limit_accepted()
+
+    def _accept_now(self):
         if self.target is None and self._finish_placing():
             return False  # placed from the typed sizes; the dialog stays for the next value
         if self.target is None:
@@ -1693,6 +1708,8 @@ class PlacedPanel(Panel, value_limits.LimitedValues):
         return True
 
     def cleanup(self):
+        self.limit_cancel()
+        value_limits.busy(self, False)
         self._unwatch()
         self.escape.remove()
         self.undo_guard.remove()

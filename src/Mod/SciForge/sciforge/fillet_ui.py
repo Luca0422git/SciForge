@@ -38,6 +38,7 @@ from . import blend, commands, fillet_core as core, fillet_sets, log, shape_chec
 from . import ui_icon_path, value_limits, warn
 from .blend_field import SaveFinishes, ValueField
 from .compat import QtCore, QtWidgets
+from . import taskui
 from .taskui import ArrowDragger, Panel, ValueBoxes, _end_transaction, handle_size_at
 
 GHOST = 75  # transparency (%) of the part before the blend while the preview is shown
@@ -1172,6 +1173,7 @@ class BlendPanel(Panel):
         self.select_button.setText("%d selected" % count if count else "Select")
         if hasattr(self, "_rebuild_points"):
             self._rebuild_points()
+        self._limit_cancel()  # a search for the old picks
         self.limits.note = ""  # a limit found for the old picks no longer applies
         self._update_arrows()
         if recompute:
@@ -1275,6 +1277,7 @@ class BlendPanel(Panel):
         formula = field is not None and bool(field.formula)
         self._edit = (row, what, "formula" if formula else "typed")
         self._edit_pending = True
+        self._limit_stale(row, what, -1.0 if formula else value)
         if formula:
             self.limits.note = ""  # a formula is never held at the limit
         else:
@@ -1300,6 +1303,7 @@ class BlendPanel(Panel):
             self._activate(row, rebuild=False)  # dragging a set's arrow makes it the current one
         value = max(MIN_DRAG, round(distance / spot["per_unit"], 2))
         self._edit = (row, what, "dragged")
+        self._limit_stale(row, what, value)
         held = self._hold(row, what, value, typed=False)
         if held != value:
             value = held
@@ -1423,7 +1427,10 @@ class BlendPanel(Panel):
 
     def _limit_refused(self, reason):
         """The size just dragged or typed was refused as too big: find the largest that works
-        (once for these picks), use it and preview again. True when that was done."""
+        (once for these picks), use it and preview again. True when that was done, or when the
+        search runs in the background (one trial build per turn of the event loop, so a
+        dragged arrow keeps moving; Luca, 2026-10-23): its end previews the held size. While
+        OK runs, the search runs to its end at once (a wait cursor)."""
         if self._limiting or not self._edit_pending or self._edit is None or self.info is None:
             return False
         row, what, source = self._edit
@@ -1438,25 +1445,20 @@ class BlendPanel(Panel):
             good, good_known = self._good_size(row, what, key, value)
             if value <= good:
                 return False
-            limit = self.limits.find(
-                key,
-                self._limit_works(row, what),
-                value,
-                good,
-                good_known=good_known,
-                unit=self._unit(what),
-                keep=self.info.shape,
-            )
+            works, unit, keep = self._limit_works(row, what), self._unit(what), self.info.shape
+            if not getattr(self, "_accepting_limit", False):
+                answered, limit = self.limits.cached(key, value, good)
+                if not answered:
+                    self._limit_start(row, what, source, key, works, value, good, good_known)
+                    return True
+            else:
+                with value_limits._WaitCursor():
+                    limit = self.limits.find(
+                        key, works, value, good, good_known=good_known, unit=unit, keep=keep
+                    )
             if limit is None:
                 return False
-            self._edit_pending = False
-            self.limits.limited(key, value, limit, source == "typed", self._unit(what))
-            self._set_value(row, what, limit)
-            field = self._field_for(what)
-            if field is not None and field.raw is None:
-                field.set_value(limit)
-            self._place_arrows(row, what)
-            self._refresh_rows()
+            self._limit_hold(row, what, source, key, value, limit)
             self._preview()
             return True
         except Exception as exc:
@@ -1464,6 +1466,108 @@ class BlendPanel(Panel):
             return False
         finally:
             self._limiting = False
+
+    def _limit_hold(self, row, what, source, key, value, limit):
+        """`value` (refused) held at `limit`: the note, the size, its box, the arrows."""
+        self._edit_pending = False
+        self.limits.limited(key, value, limit, source == "typed", self._unit(what))
+        self._set_value(row, what, limit)
+        field = self._field_for(what)
+        if field is not None and field.raw is None:
+            field.set_value(limit)
+        self._place_arrows(row, what)
+        self._refresh_rows()
+
+    def _limit_start(self, row, what, source, key, works, value, good, good_known):
+        """Look for the largest size that fits in the background (value_limits.Background)."""
+        self._limit_cancel()
+        progress = {}
+        unit, keep = self._unit(what), self.info.shape
+
+        def steps(clock):
+            return self.limits.find_steps(
+                key,
+                works,
+                value,
+                good,
+                good_known=good_known,
+                unit=unit,
+                keep=keep,
+                clock=clock,
+                progress=progress,
+            )
+
+        def ended(limit):
+            self._limit_job = None
+            self._limit_ended(row, what, source, key, value, limit)
+
+        job = value_limits.Background(steps, ended, key, self._limit_paused)
+        job.row, job.what, job.value, job.progress = row, what, value, progress
+        self._limit_job = job
+        self.error = None
+        self.limits.note = (
+            value_limits.SEARCHING_ANGLE if unit == "deg" else value_limits.SEARCHING_VALUE
+        )
+        self.show_status()
+        job.start()
+
+    def _limit_searching(self):
+        job = getattr(self, "_limit_job", None)
+        return job is not None and not job.done
+
+    def _limit_cancel(self):
+        job, self._limit_job = getattr(self, "_limit_job", None), None
+        if job is not None:
+            job.cancel()
+
+    def _limit_stale(self, row, what, value):
+        """A size back below the nearest one the running search found not to fit (or another
+        size edited): the search is not needed for it any more."""
+        job = getattr(self, "_limit_job", None)
+        if job is None or job.done:
+            return
+        try:
+            fails = job.progress.get("fails", job.value)
+            if (job.row, job.what) == (row, what) and value - fails >= -1e-12:
+                return
+        except Exception:
+            pass
+        self._limit_cancel()
+
+    def _limit_paused(self):
+        """True while an arrow is being dragged: the search builds nothing then."""
+        try:
+            if self._closed or not taskui.button_held():
+                return False
+            return time.perf_counter() - self.last_moved() < self.PAUSE_MS / 1000.0
+        except Exception:
+            return False
+
+    def _limit_ended(self, row, what, source, key, value, limit):
+        """The background search ended: the size is held at the limit if it is still past it
+        for the same picks, then previewed (now, or once the mouse rests)."""
+        try:
+            if self._closed:
+                return
+            if self.limits.note in (value_limits.SEARCHING_VALUE, value_limits.SEARCHING_ANGLE):
+                self.limits.note = ""
+            if limit is not None and key == self._limit_key(row, what):
+                now = self._value(row, what)
+                if now - limit > 1e-12:
+                    if self._edit is not None and self._edit[:2] == (row, what):
+                        source = self._edit[2]  # typed meanwhile: the note says so
+                    self._limit_hold(row, what, source, key, now, limit)
+            value_limits.busy(self)  # until the preview it asks for has run
+            quiet = time.perf_counter() - self.last_moved()
+            if quiet < self._rest_needed():
+                self.schedule(settle=True)
+            else:
+                self._timer.stop()
+                self._timer.setInterval(0)
+                self._timer.start()
+        except Exception as exc:
+            value_limits.busy(self, False)
+            warn("%s size limit: %s" % (self.title, exc))
 
     def _collect(self):
         """Read the dialog's choices into the settings (subclasses). The value boxes report
@@ -1732,6 +1836,9 @@ class BlendPanel(Panel):
             blend.check_build(self.kind, self.info, self.groups[row], self.spec["sets"][row])
 
     def _preview(self):
+        if self._limit_searching() and not self._closed:
+            return  # the search of the largest size that fits previews when it ends
+        value_limits.busy(self, False)  # the preview after a search: this one
         if self._closed:
             return
         self._collect()
@@ -1938,7 +2045,7 @@ class BlendPanel(Panel):
         try:
             if self._closed or not self.error or not self._has_picks() or self.info is None:
                 return
-            if not value_limits.is_limit_error(self.error):
+            if not value_limits.is_limit_error(self.error) or self._limit_searching():
                 return
             if self._edit is not None and self._edit[0] == self._row_key():
                 row, what = self._edit[0], self._edit[1]
@@ -2024,7 +2131,15 @@ class BlendPanel(Panel):
             if self.formula_error:  # a box holds text that is no value: fix it first
                 self._say("⚠ " + self.formula_error)
                 return False
-            self._preview()
+            self._accepting_limit = True  # a size past what fits is searched at once here
+            try:
+                if self._limit_searching():  # the search still running: its end now
+                    with value_limits._WaitCursor():
+                        self._limit_job.finish()
+                    self._timer.stop()
+                self._preview()
+            finally:
+                self._accepting_limit = False
             obj = self.target
             if self.error or obj is None:
                 self.show_status()
@@ -2059,6 +2174,8 @@ class BlendPanel(Panel):
 
     def cleanup(self):
         self._closed = True
+        self._limit_cancel()
+        value_limits.busy(self, False)
         for timer in (self._events, self._hint):
             try:
                 timer.stop()

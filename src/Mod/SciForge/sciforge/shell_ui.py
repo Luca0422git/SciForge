@@ -648,6 +648,8 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
 
     # -- preview --------------------------------------------------------------------------
     def _preview(self):
+        if self.limit_waits():
+            return  # the search of the thickest wall that fits previews when it ends
         if self._closed or self.base is None:
             return
         self._collect()
@@ -675,9 +677,12 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                 except shelling.ShellError as exc:
                     raise shelling.ShellError("%s: %s" % (member.body.Label, exc))
         except shelling.ShellError as exc:
-            if self.limit_refused(str(exc)):
+            held = self.limit_refuse(str(exc))
+            if held == "again":
                 self._preview()  # held at the thickest wall that fits: preview that
                 return
+            if held == "later":
+                return  # looked for one trial per event-loop turn; previews when found
             self.error = str(exc)
             self.show_status()
             self._hint.start()
@@ -787,7 +792,11 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                     "to make it hollow."
                 )
                 return False
-            self._preview()
+            self.limit_accept()
+            try:
+                self._preview()
+            finally:
+                self.limit_accepted()
             obj = self.target
             if self.formula_errors or self.error or obj is None:
                 self.show_status()
@@ -805,6 +814,8 @@ class ShellPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             return False
 
     def cleanup(self):
+        self.limit_cancel()
+        value_limits.busy(self, False)
         self._remove_arrows()
         self.value_boxes.discard()
         super().cleanup()

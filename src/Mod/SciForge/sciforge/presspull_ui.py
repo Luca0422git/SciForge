@@ -847,11 +847,17 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
     def _recompute(self):
         if self._closed:
             return  # a change that arrived as the dialog closed
+        if self.limit_waits():
+            return  # the search of the furthest value that works rebuilds when it ends
         try:
             preview.recompute(self.doc)
             text = preview.failure(self.target) if self._modify is None else ""
-            if text and self.limit_refused(text):
+            held = self.limit_refuse(text) if text else None
+            if held == "again":
                 preview.recompute(self.doc)  # held at the furthest value that works
+            elif held == "later":
+                self._update_cut_preview()
+                return  # looked for one trial per event-loop turn; rebuilt when found
             elif not text:
                 self.limit_good()
             self.show_status()
@@ -901,6 +907,11 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
 
     def show_status(self):
         value_limits.show_note(self.limit_label, "")
+        if self.limit_searching():
+            # the refused value is about to be held at the limit: say what happens
+            self.message.setText("")
+            value_limits.show_note(self.limit_label, self.limits.note)
+            return
         if self.formula_error:  # stays until the field gets a value again
             self.message.setText("⚠ " + self.formula_error)
             return
@@ -919,7 +930,14 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
         value_limits.show_note(self.limit_label, self.limits.note)
 
     def accept(self):
-        if self._timer.isActive():
+        searched = self.limit_accept()  # a limit search still running ends now
+        try:
+            return self._accept_now(searched)
+        finally:
+            self.limit_accepted()
+
+    def _accept_now(self, searched):
+        if self._timer.isActive() or searched:
             # A value typed and Enter (or OK) at once: build it before deciding. Left to the
             # timer, that rebuild came ~60 ms later and wiped the message said below.
             self._timer.stop()
@@ -1075,6 +1093,8 @@ class PressPullPanel(Panel, value_limits.LimitedValues):
         self.schedule()
 
     def cleanup(self):
+        self.limit_cancel()
+        value_limits.busy(self, False)
         self._unwatch()
         self._unshade()
         self.escape.remove()
