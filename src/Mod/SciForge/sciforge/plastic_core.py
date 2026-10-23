@@ -173,6 +173,10 @@ def library_rule(name):
     return None
 
 
+def _label(key):
+    return LABELS.get(key, key)
+
+
 def validate(rule):
     """[] when the rule is usable, else the reasons (texts for the dialog)."""
     problems = []
@@ -186,18 +190,21 @@ def validate(rule):
     try:
         thickness = evaluate_expression(rule["thickness"])
     except ValueError as exc:
+        if "thickness" in str(rule["thickness"]).lower():
+            return ["Thickness cannot use Thickness: type a number, such as 2"]
         return ["Thickness: %s" % exc]
     if thickness <= 0:
         return ["Thickness must be more than 0"]
     values = {}
     for key in LENGTH_FIELDS + NUMBER_FIELDS:
+        label = _label(key)  # the dialog's name of the field (plastic-1 QA)
         try:
             values[key] = evaluate_expression(rule[key], thickness)
         except ValueError as exc:
-            problems.append("%s: %s" % (key, exc))
+            problems.append("%s: %s" % (label, exc))
             continue
         if values[key] < 0:
-            problems.append("%s cannot be negative" % key)
+            problems.append("%s cannot be negative" % label)
     if problems:
         return problems
     if values["minimum_thickness"] > values["maximum_thickness"]:

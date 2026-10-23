@@ -92,6 +92,15 @@ class LibraryTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             core.evaluated(core.make_rule("X", thickness="9"))
 
+    def test_refusals_name_the_fields_as_the_dialog_does(self):
+        # QA: the messages said "nominal_radius: ..." (the internal key)
+        bad = core.make_rule("X", nominal_radius="abc")
+        self.assertTrue(core.validate(bad)[0].startswith("Nominal Radius:"), core.validate(bad))
+        bad = core.make_rule("X", clearance="-1")
+        self.assertEqual(core.validate(bad), ["Clearance cannot be negative"])
+        bad = core.make_rule("X", thickness="Thickness / 2")
+        self.assertIn("cannot use Thickness", core.validate(bad)[0])
+
     def test_describe_lists_every_value_with_units(self):
         rows = dict(core.describe(core.library_rule("PC 2 mm")))
         self.assertEqual(rows["Thickness"], "2.0 mm")
