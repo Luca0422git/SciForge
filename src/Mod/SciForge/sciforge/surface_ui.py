@@ -693,6 +693,7 @@ class SurfacePanel(BodyPanel):
         for name, _label, role, _accepts, _empty in self.boxes:
             if role == "bodies":
                 options["bodies"] = [o for o, _s in self.picks.get(name) or []]
+        options["hidden_numbers"] = self.hidden_numbers()
         return options
 
     def missing(self):
@@ -735,6 +736,19 @@ class SurfacePanel(BodyPanel):
         self.step = surface.build(self.kind, self.refs(), options, self.step)
         self.target = self.step
         self._apply_formulas(self.step)
+
+    def hidden_numbers(self):
+        """The numbers whose rows the choices hide (saved with the step: Change Parameters
+        lists only the numbers a step uses, surface.apply_number_modes)."""
+        found = []
+        for key in surface.NUMBERS.get(self.kind, {}):
+            row = self.rows.get(key)
+            try:
+                if row is not None and row[0].isHidden():
+                    found.append(key)
+            except Exception:
+                pass
+        return found
 
     def check(self, options):
         """More checks before building (subclasses; raise core.SurfaceError / NeedsPick)."""

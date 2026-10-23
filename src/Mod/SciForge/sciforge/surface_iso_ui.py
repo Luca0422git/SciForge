@@ -7,7 +7,6 @@ spread evenly), OK and Cancel. Enter is OK, Esc is Cancel; a click on another fa
 curves there. OK keeps them in the sketch (surface_iso.IsoparametricCurves, one undo step).
 """
 
-
 from . import log, sketch_draw as draw, surface_iso, theme, warn
 from . import surface_core as core
 from .compat import QtCore, QtWidgets

@@ -1017,8 +1017,9 @@ STATIONS = 9  # sections along a guide rail that does not keep a straight course
 def _rail_extent(path, rail, o, at_end=False):
     """Path + Guide Rail: the path and rail the sweep runs along. Guide Rail Distance takes
     that share of the rail (from the end the profile sits at); Perpendicular to Path stops
-    where the plane square to the path through the rail's end (or the path's, when the path
-    is the shorter) cuts the other; Full Extents runs each to its own end. at_end: the
+    square to the path where the shorter of the two ends: the rail is cut by the plane square
+    to the path at its end, or the path ends at its own square section through the rail's
+    end; Full Extents runs each to its own end. at_end: the
     profile sits at the path's end (the sweep runs back along it)."""
     if at_end and not path.closed:
         back_path, back_rail = _rail_extent(path.reversed(), rail.reversed(), o)
@@ -1038,12 +1039,44 @@ def _rail_extent(path, rail, o, at_end=False):
     reach_rail = _plane_cut(rail, end, t)
     if reach_rail is not None and reach_rail < rail.length - 1e-6:
         return path, rail.sub(0.0, reach_rail)
-    r_end = rail.end
-    r_t = rail.tangent_at(rail.length)
-    reach_path = _plane_cut(path, r_end, r_t)
-    if reach_path is not None and reach_path < path.length - 1e-6:
+    # the rail is the shorter: the path stops where its own square section passes through
+    # the rail's end (a section square to the rail there would tilt the end of a rail that
+    # runs away from the path: measured, the sweep ran 8 mm past a diverging rail's end)
+    reach_path = _section_through(path, rail.end)
+    if reach_path is not None and 1e-6 < reach_path < path.length - 1e-6:
         return path.sub(0.0, reach_path), rail
     return path, rail
+
+
+def _section_through(curve_path, point):
+    """The length along `curve_path` where the plane square to it there passes through
+    `point` (of several such places, the one nearest the point), or None."""
+    count = 200
+
+    def side(s):
+        return (point - curve_path.point_at(s)).dot(unit(curve_path.tangent_at(s)))
+
+    found = []
+    previous = None
+    for k in range(count + 1):
+        s = curve_path.length * k / float(count)
+        h = side(s)
+        if abs(h) < 1e-12:
+            found.append(s)
+        elif previous is not None and (previous[1] < 0) != (h < 0) and abs(previous[1]) > 1e-12:
+            a, b, ha = previous[0], s, previous[1]
+            for _i in range(50):  # bisection on the crossing
+                m = 0.5 * (a + b)
+                hm = side(m)
+                if (ha < 0) == (hm < 0):
+                    a, ha = m, hm
+                else:
+                    b = m
+            found.append(0.5 * (a + b))
+        previous = (s, h)
+    if not found:
+        return None
+    return min(found, key=lambda s: (curve_path.point_at(s) - point).Length)
 
 
 def _plane_cut(curve_path, point, normal):
@@ -1591,6 +1624,18 @@ def _fill(wire, boundary, order, interior, points):
         # walls that rise square to it (a cylinder's rim), and then silently stays flat.
         # Fusion would make a dome; SciForge says so instead of faking tangency.
         off = _tangency_off(face, [(e, f) for e, f, o in boundary if o > 0])
+        mixed = any(f is not None and o == 0 for _e, f, o in boundary)
+        if off > TANGENCY_TOLERANCE and mixed:
+            # Group Edges off, some edges Connected: at a corner where a Connected edge meets a
+            # Tangent one the patch cannot be tangent, and OpenCASCADE's plate surface bends
+            # back over a long stretch of the Tangent edge (QA measured 19 degrees off a third
+            # of the way along it on 45 degree walls), so it is the mix, not the slope alone
+            raise SurfaceError(
+                "Tangent continuity cannot be reached along these edges (off by %.0f degrees): "
+                "where a Connected edge meets a Tangent one, OpenCASCADE's patch bends away "
+                "from the walls for a long way. Make the edges next to it Tangent too, use "
+                "Connected for all, or patch an opening whose walls slope less." % math.degrees(off)
+            )
         if off > TANGENCY_TOLERANCE:
             raise SurfaceError(
                 "Tangent continuity cannot be reached along these edges (off by %.0f degrees): "
@@ -1771,6 +1816,8 @@ def offset_faces(faces, distance, offset_type="sharp"):
             result = piece.makeOffsetShape(d, 1e-6, False, False, 0, join, False)
             if join == 2 and (result.isNull() or not result.Faces or not result.isValid()):
                 raise ValueError("the sharp corners do not close")
+            if join == 2 and _runaway(piece, result, d):
+                raise ValueError("OpenCASCADE could not close the sharp corners")
         except Exception as exc:
             if join == 2:
                 raise SurfaceError(
@@ -1783,6 +1830,24 @@ def offset_faces(faces, distance, offset_type="sharp"):
             )
         out.extend(result.Faces)
     return surface_result(sew(out))
+
+
+# How far past the picked faces a sharp offset may reach, in offset distances: a sharp corner
+# carries the faces on by d / cos(half the turn between them), 11.5 d at a 170 degree turn.
+SHARP_REACH = 25.0
+
+
+def _runaway(piece, result, d):
+    """OpenCASCADE's intersection join can come back "valid" with faces carried on without
+    end where it could not close a corner (measured in FreeCAD 1.1.4: the top of a box whose
+    top edges are filleted, offset 2 mm, gave faces 2e7 mm across). True when the result
+    reaches farther past the faces than any sharp corner does."""
+    try:
+        box = piece.BoundBox
+        box.enlarge(SHARP_REACH * abs(d) + 1e-3)
+        return not box.isInside(result.BoundBox)
+    except Exception:
+        return False
 
 
 # -- CREATE: Thicken -------------------------------------------------------------------------------
@@ -2361,6 +2426,43 @@ def _speed(surface, u, v, along_u):
     return max((du if along_u else dv).Length, 1e-9)
 
 
+def _grow_by(surface, u, v, along_u, sign, d):
+    """The parameter step past (u, v) (sign -1: below it, +1: above) that carries the surface
+    on `d` mm along its iso-line. A free-form surface carried past its bounds (or a spline
+    revolved or extruded) speeds up or slows down, so the step is measured along the curve,
+    not taken from the speed at the edge (measured: an extruded spline carried on by the
+    edge's speed went 14.0 mm for 10)."""
+
+    def at(t):
+        x = sign * t
+        return surface.value(u + x, v) if along_u else surface.value(u, v + x)
+
+    def polyline(t, n):
+        total, last = 0.0, at(0.0)
+        for i in range(1, n + 1):
+            here = at(t * i / float(n))
+            total += (here - last).Length
+            last = here
+        return total
+
+    def length(t):
+        # Richardson: two polylines' lengths give the curve's to 1e-10 (a polyline alone runs
+        # short by its chords' sag)
+        return (4.0 * polyline(t, 128) - polyline(t, 64)) / 3.0
+
+    first = d / _speed(surface, u, v, along_u)
+    t = first
+    try:
+        for _i in range(25):
+            reached = length(t)
+            if reached < 1e-12 or abs(reached - d) <= 1e-7 * max(1.0, d):
+                break
+            t *= d / reached
+    except Exception:
+        return first
+    return t if t > 0 and math.isfinite(t) else first
+
+
 def _grow_rectangle(face, picked, d):
     """Natural Extend of a face that is its surface's parameter rectangle: the rectangle
     made bigger past each picked side by about `d` mm along the surface. Analytic surfaces
@@ -2384,13 +2486,13 @@ def _grow_rectangle(face, picked, d):
         except Exception:
             return None
         if abs(u - u0) < 1e-6:
-            grow[0] = d / _speed(surface, u0, v, True)
+            grow[0] = _grow_by(surface, u0, v, True, -1.0, d)
         elif abs(u - u1) < 1e-6:
-            grow[1] = d / _speed(surface, u1, v, True)
+            grow[1] = _grow_by(surface, u1, v, True, 1.0, d)
         elif abs(v - v0) < 1e-6:
-            grow[2] = d / _speed(surface, u, v0, False)
+            grow[2] = _grow_by(surface, u, v0, False, -1.0, d)
         elif abs(v - v1) < 1e-6:
-            grow[3] = d / _speed(surface, u, v1, False)
+            grow[3] = _grow_by(surface, u, v1, False, 1.0, d)
         else:
             return None
     # every edge of the face must lie on the rectangle (a trimmed face is not one)

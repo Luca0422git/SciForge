@@ -205,6 +205,11 @@ class SurfaceFeature:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        apply_number_modes(obj)
+
+    def onChanged(self, obj, prop):
+        if prop == META:  # its choices changed (a dialog, undo / redo, a Cancel)
+            apply_number_modes(obj)
 
     def execute(self, obj):
         try:
@@ -231,6 +236,30 @@ class SurfaceFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def apply_number_modes(obj):
+    """Change Parameters lists only the numbers a step's choices use, as Fusion lists a
+    feature's values in use (a One Side extrude has no Distance Two there): the numbers whose
+    rows the dialog hid (saved with the choices, "hidden_numbers") are hidden properties,
+    which parameters.py passes over as it does for FreeCAD's own features. It follows the
+    saved choices, so undo, redo and Cancel bring the right ones back. Never raises."""
+    try:
+        kind = kind_of(obj)
+        numbers = NUMBERS.get(kind or "", {})
+        if not numbers:
+            return
+        meta = bodies.load_meta(obj, META)
+        hidden = set((meta.get("options") or {}).get("hidden_numbers") or [])
+        props = obj.PropertiesList
+        for option, prop in numbers.items():
+            if prop not in props:
+                continue
+            want = option in hidden
+            if bool(obj.getEditorMode(prop)) != want:
+                obj.setEditorMode(prop, 2 if want else 0)
+    except Exception as exc:
+        warn("surface parameters of %s: %s" % (getattr(obj, "Label", "?"), exc))
 
 
 # -- reading a step --------------------------------------------------------------------------------
