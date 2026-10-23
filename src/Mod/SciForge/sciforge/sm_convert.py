@@ -30,49 +30,38 @@ class ConvertError(ValueError):
 
 def detect(shape, face):
     """Thickness and bends of the solid seen from face ('FaceN'): checks that it is one
-    sheet of even thickness made of flat walls and round bends."""
+    sheet of even thickness made of flat walls and round bends. Nothing is laid flat (a
+    closed tube or box is still sheet metal: it needs a Rip before a flat pattern, not
+    before the conversion)."""
     if shape is None or shape.isNull() or not shape.Solids:
         raise ConvertError("there is no solid to convert")
     try:
-        result = unfolder.unfold(shape, face, 0.44)
+        result = unfolder.unfold(shape, face, 0.44, bends=[], check=True, lay_flat=False)
     except unfolder.UnfoldError as exc:
-        text = str(exc)
-        if "closes on itself" in text or "overlaps" in text:
-            # a closed tube or box is still sheet metal: it needs a Rip before a flat
-            # pattern, not before the conversion
-            try:
-                result = _measure_only(shape, face)
-            except unfolder.UnfoldError as exc2:
-                raise ConvertError(str(exc2))
-        else:
-            raise ConvertError(text)
-    radii = sorted(set(round(b.inner_radius, 6) for b in result.bends))
+        raise ConvertError(str(exc))
+    bends = {}
+    for fmap in result.maps:
+        if fmap.kind != "kept":
+            continue
+        key = _axis_key(fmap)
+        if key not in bends:
+            bends[key] = fmap.inner_radius
+    radii = sorted(set(round(r, 6) for r in bends.values()))
     return {
         "thickness": result.thickness,
-        "bends": len(result.bends),
+        "bends": len(bends),
         "radius": radii[0] if radii else None,
         "radii": radii,
     }
 
 
-def _measure_only(shape, face):
-    """The walk and the fill check without laying anything flat (closed shapes)."""
-    solid = shape.Solids[0]
-    index = unfolder.face_index(face)
-    start = solid.Faces[index]
-    if not unfolder.is_planar(start):
-        raise unfolder.UnfoldError("pick a flat face of a wall (a wide top or bottom face)")
-    T = unfolder.thickness_at(solid, start)
-    # every bend kept: nothing is laid flat, so a closed loop is fine
-    result = unfolder.unfold(shape, face, 0.44, bends=[], check=True)
-    result.thickness = T
-    bends = []
-    for fmap in result.maps:
-        if fmap.kind == "kept":
-            fmap.angle = max(fmap.phi(v.Point) for v in fmap.face.Vertexes)
-            bends.append(unfolder.Bend(fmap, ((None, None),) * 3, 0.0))
-    result.bends = bends
-    return result
+def _axis_key(fmap):
+    """One key per bend axis (a bend split into two cylinder faces counts once)."""
+    a = fmap.axis
+    if a.x < -1e-9 or (abs(a.x) < 1e-9 and (a.y < -1e-9 or (abs(a.y) < 1e-9 and a.z < 0))):
+        a = -a
+    c = fmap.center - a * fmap.center.dot(a)
+    return tuple(round(v, 4) for v in (a.x, a.y, a.z, c.x, c.y, c.z))
 
 
 def rules_for(doc, thickness, matching=True):

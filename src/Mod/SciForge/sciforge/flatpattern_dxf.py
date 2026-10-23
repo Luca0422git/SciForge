@@ -106,9 +106,10 @@ def write(outer, interior, bends, options=None):
 
 
 def note(bend):
-    """'UP 90.0° R1' style bend note (direction, angle, inner radius)."""
+    """'UP 90.0%%d R1' style bend note (direction, angle, inner radius); %%d is DXF's own
+    code for the degree sign (an R12 file is plain ASCII)."""
     radius = ("%.3f" % bend["radius"]).rstrip("0").rstrip(".")
-    return "%s %.1f%s R%s" % ("UP" if bend["up"] else "DOWN", bend["angle"], "°", radius)
+    return "%s %.1f%s R%s" % ("UP" if bend["up"] else "DOWN", bend["angle"], "%%d", radius)
 
 
 def _put(dxf, item, layer):

@@ -59,7 +59,7 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | Fusion | SciForge | Src |
 |---|---|---|
 | Export bend center lines (on), Export bend extent lines (on), Convert Splines to Polylines (off), Tolerance 0.01 cm | Same options and defaults, in the dialog with the file name | A[R36], F[F4] |
-| Outer profiles, interior profiles, bend centre lines, bend extent lines, text on their own layers; bend lines in another line type | Layers OUTER_PROFILES, INTERIOR_PROFILES, BEND_CENTER_LINES_UP (red, CENTER), BEND_CENTER_LINES_DOWN (blue, CENTER), BEND_EXTENT_LINES (HIDDEN), TEXT (a note per bend: "UP 90.0° R1") | F[F4], F[F9], G (names, notes) |
+| Outer profiles, interior profiles, bend centre lines, bend extent lines, text on their own layers; bend lines in another line type | Layers OUTER_PROFILES, INTERIOR_PROFILES, BEND_CENTER_LINES_UP (red, CENTER), BEND_CENTER_LINES_DOWN (blue, CENTER), BEND_EXTENT_LINES (HIDDEN), TEXT (a note per bend: "UP 90.0%%d R1", which CAD shows as UP 90.0° R1) | F[F4], F[F9], G (names, notes) |
 | 1:1 in document units | AutoCAD R12 in mm: LINE, CIRCLE, ARC; a spline as SPLINE (POLYLINE when converting) | G |
 
 ## Unfold / Refold (SHEET METAL > MODIFY)

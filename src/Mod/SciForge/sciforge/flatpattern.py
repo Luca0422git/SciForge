@@ -334,7 +334,7 @@ def export_dxf(fp, path, options=None):
         path += ".dxf"
     outer, interior, bend_list = dxf_entities(fp, options)
     text = fdxf.write(outer, interior, bend_list, options)
-    with open(path, "w", encoding="utf-8") as handle:
+    with open(path, "w", encoding="ascii", errors="replace") as handle:
         handle.write(text)
     log(
         "flat pattern DXF: %s (%d outline, %d interior, %d bends)"

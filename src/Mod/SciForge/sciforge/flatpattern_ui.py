@@ -175,6 +175,15 @@ class _DocWatch:
         except Exception as exc:
             warn("flat pattern save: %s" % exc)
 
+    def slotActivateDocument(self, doc):
+        """Another design's tab: the open flat pattern is finished (its design keeps the
+        folded part shown)."""
+        try:
+            if STATE["doc"] and doc is not None and doc.Name != STATE["doc"]:
+                QtCore.QTimer.singleShot(0, leave)
+        except Exception as exc:
+            warn("flat pattern watch: %s" % exc)
+
     def slotUndoDocument(self, doc):
         self._check(doc)
 

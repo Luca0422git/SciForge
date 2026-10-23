@@ -72,7 +72,9 @@ class DxfTest(unittest.TestCase):
             fdxf.write([("blob", 1)], [], [])
 
     def test_note(self):
-        self.assertEqual(fdxf.note(_bend(True)), "UP 90.0° R1")
+        self.assertEqual(fdxf.note(_bend(True)), "UP 90.0%%d R1")
+        text = fdxf.write(OUTER, [], [_bend(True)])
+        text.encode("ascii")  # an R12 DXF is plain ASCII
         self.assertTrue(fdxf.note(_bend(False)).startswith("DOWN"))
 
 

@@ -393,9 +393,10 @@ def bend_key(face):
     return (App.Vector(cyl.Center), App.Vector(cyl.Axis).normalize())
 
 
-def unfold(shape, face_name, k_factor, bends=None, thickness=None, check=True):
+def unfold(shape, face_name, k_factor, bends=None, thickness=None, check=True, lay_flat=True):
     """Unfold the solid shape. face_name: the stationary face ('FaceN' of shape). bends: None
-    for every bend, else a list of bend_key(face) of the bends to unfold. Returns a Result.
+    for every bend, else a list of bend_key(face) of the bends to unfold. lay_flat=False only
+    finds and checks the sheet (no result shape: Convert to Sheet Metal). Returns a Result.
     Raises UnfoldError with the reason."""
     if shape is None or shape.isNull():
         raise UnfoldError("there is no solid to unfold")
@@ -454,6 +455,8 @@ def unfold(shape, face_name, k_factor, bends=None, thickness=None, check=True):
     result.maps = order
     if check:
         _check_fill(solid, order, T)
+    if not lay_flat:
+        return result
     slabs = []
     for fmap in order:
         slabs.append((fmap, _slab(fmap, T)))
