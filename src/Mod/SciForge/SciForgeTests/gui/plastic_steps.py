@@ -128,6 +128,7 @@ def box_body(doc, label, z, height, open_side, wall=2.0, shell=True, component=N
 def enclosure(name, lid=True, points=((10, 10), (50, 30))):
     """New design: the enclosure (Bottom) and its lid (Lid), shelled 2 mm, and a sketch
     "Boss Points" on the parting plane z = 20 with the boss points (in Bottom)."""
+    clear_library_prefs()  # a library default left by another scenario changes the sizes
     Gui.activateWorkbench("SciForgeWorkbench")
     doc = App.newDocument(name)
     bottom = box_body(doc, "Bottom", 0, 20, "top")

@@ -19,6 +19,7 @@ s = {}
 
 
 def empty():
+    ps.clear_library_prefs()
     Gui.activateWorkbench("SciForgeWorkbench")
     App.newDocument("PlasticEmpty")
     ps.plastic_tab()

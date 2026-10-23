@@ -25,6 +25,7 @@ s = {}
 def setup():
     from sciforge import bodies, extrude, shelling
 
+    ps.clear_library_prefs()
     Gui.activateWorkbench("SciForgeWorkbench")
     doc = App.newDocument("PlasticRest")
     body = bodies.new_body(doc, "Cover")
