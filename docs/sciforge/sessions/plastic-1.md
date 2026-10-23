@@ -78,7 +78,7 @@ one MENUS row). `sf/sm-forming` is merged into this branch (7f7e786) for that ho
 FreeCAD core change.
 
 **Tests**: scenarios `plastic_rules` (67), `plastic_boss` (58), `plastic_boss_face` (30),
-`plastic_boss_fastener` (20), `plastic_rest` (39), `ribbon_sweep` with SWEEP_TABS=plastic (114) pass; golden `plastic_boss_enclosure`,
+`plastic_boss_fastener` (23), `plastic_rest` (39), `ribbon_sweep` with SWEEP_TABS=plastic (114) pass; golden `plastic_boss_enclosure`,
 `plastic_boss_fastener`, `plastic_boss_hole_radii`, `plastic_boss_ribs_each`,
 `plastic_rest_cylinder`, `plastic_rule_boss_wall`,
 `plastic_rule_edit_moves_boss` pass (exact, analytic); existing scenarios of the touched

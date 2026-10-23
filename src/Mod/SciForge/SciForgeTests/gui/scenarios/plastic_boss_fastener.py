@@ -165,6 +165,29 @@ def back():
     )
 
 
+def save():
+    import os
+    import tempfile
+
+    s["path"] = os.path.join(tempfile.mkdtemp(prefix="sf-plastic-"), "PlasticFastener.FCStd")
+    App.ActiveDocument.saveAs(s["path"])
+
+
+def reopen():
+    App.closeDocument(App.ActiveDocument.Name)
+    doc = App.openDocument(s["path"])
+    doc.recompute()
+    h.fit()
+
+
+def reopened():
+    found = fasteners()
+    h.check("reopened: the screws", len(found) == 1, found)
+    if found:
+        h.check("reopened: hex screws by hand", ps.near(found[0].Shape.Volume, HEX, 1e-6))
+        h.check("reopened: valid", "Invalid" not in found[0].State, found[0].State)
+
+
 h.run(
     "plastic_boss_fastener",
     [
@@ -185,5 +208,8 @@ h.run(
         gone,
         undo,
         back,
+        save,
+        reopen,
+        reopened,
     ],
 )
