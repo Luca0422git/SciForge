@@ -557,6 +557,14 @@ class FlangePanel(Panel):
         if self._quiet:
             return
         self._changed(new_geometry=True)
+        if (
+            self.kind == "edge"
+            and self.options["extent"] == "to_object"
+            and self.to_object is None
+            and self.active != "object"
+        ):
+            self.activate("object")  # To Object: the next click picks what it runs to
+            self.message.setText("Click the face or plane the flange runs to.")
 
     def _changed(self, new_geometry=False):
         self._collect()
@@ -860,18 +868,37 @@ def _chain(sketch, sub):
 
 
 def _same_edge(obj, short, base):
-    """The name in `base`'s shape of the edge `short` of `obj` (same place), or None."""
+    """The name in `base`'s shape of the straight edge that the edge `short` of `obj` (the
+    flange being previewed) is part of: the preview cuts the plate back next to the first
+    picked edge, so a neighbouring edge shows shortened. None for an edge only the preview
+    has (its wall)."""
+    import Part
+
     try:
         edge = obj.Shape.getElement(short)
     except Exception:
         return None
-    if base is None or base.Shape.isNull():
+    if base is None or base.Shape.isNull() or edge.ShapeType != "Edge":
         return None
+    if not isinstance(edge.Curve, (Part.Line, Part.LineSegment)):
+        return None
+    a, b = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
+    direction = b - a
+    if direction.Length < 1e-9:
+        return None
+    direction.normalize()
+    mid = Part.Vertex((a + b) * 0.5)
     for i, other in enumerate(base.Shape.Edges, 1):
-        if abs(other.Length - edge.Length) > 1e-6:
+        if not isinstance(other.Curve, (Part.Line, Part.LineSegment)):
             continue
-        ends = [v.Point for v in other.Vertexes]
-        if all(min((p - q.Point).Length for q in edge.Vertexes) < 1e-6 for p in ends):
+        p, q = other.Vertexes[0].Point, other.Vertexes[-1].Point
+        along = q - p
+        if along.Length < 1e-9:
+            continue
+        along.normalize()
+        if abs(abs(along.dot(direction)) - 1.0) > 1e-9:
+            continue
+        if other.distToShape(mid)[0] < 1e-6:
             return "Edge%d" % i
     return None
 
