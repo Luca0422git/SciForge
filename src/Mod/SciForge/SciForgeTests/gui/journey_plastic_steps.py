@@ -1276,6 +1276,9 @@ def reopen_steps():
         h.check("the Lip on the timeline", s["lip_title"] in titles(), titles())
 
     def edit_lip():
+        # (before the dialog: while the Lip is edited, the steps after it are rolled back,
+        # edit_rollback; Esc brings them back)
+        s["v_base_before_lip_e"] = vol(base())
         h.check("double-click the Lip", p2.double_click_timeline(s["lip_title"]))
 
     def lip_edit():
@@ -1297,7 +1300,9 @@ def reopen_steps():
 
     def lip_esc():
         h.check("Lip edit: Esc closed", p2.lip_panel() is None)
-        h.check("Lip edit: Esc left it", near(vol(base()), s["v_base_lip_e"]), vol(base()))
+        h.check(
+            "Lip edit: Esc left it", near(vol(base()), s["v_base_before_lip_e"]), vol(base())
+        )
         ok_errors("lip edit")
         h.shot("journey_pl_9_reopened")
 

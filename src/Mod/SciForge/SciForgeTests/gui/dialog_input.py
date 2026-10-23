@@ -82,12 +82,18 @@ def timeline_button(title):
 
 
 def timeline_titles():
-    """Titles of the timeline icons (they carry a "state" property)."""
-    return [
-        b.accessibleName()
-        for b in Gui.getMainWindow().findChildren(QtWidgets.QToolButton)
+    """Titles of the timeline icons (they carry a "state" property), left to right as they
+    stand: the timeline keeps the button of a step whose look did not change, so the order
+    Qt made the buttons in is not the order on the screen (journey_surface3 after an edit
+    and Ctrl+Z)."""
+    window = Gui.getMainWindow()
+    buttons = [
+        b
+        for b in window.findChildren(QtWidgets.QToolButton)
         if b.isVisible() and b.property("state") is not None
     ]
+    buttons.sort(key=lambda b: b.mapTo(window, QtCore.QPoint(0, 0)).x())
+    return [b.accessibleName() for b in buttons]
 
 
 def double_click_timeline(title):

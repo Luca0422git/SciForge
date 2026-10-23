@@ -1610,6 +1610,37 @@ The session was started on `Release`.
   when CI names a scenario, read its crash log (the stack says where FreeCAD died).
 
 #### Results
+- **CI run #260** (b8c02e6c, 6 parts, 60-70 min a part, no part near the limit): base,
+  Windows golden, update script, quick update, parts 1 and 4 green; 6 scenarios red, all
+  reproduced locally and fixed:
+  - `drawing2_symbols`: **"FreeCAD did not end cleanly"** (the new check), every run, also on
+    develop before the merge, on experimental and on the 0.1.0-beta tag: the run #258 mystery.
+    gdb (`gdb -batch -ex run -ex bt --args usr/bin/freecad scenario_launcher.py` with
+    `set environment PYTHONHOME=...` for FreeCAD only; gdb's own Python breaks with it
+    exported): SIGSEGV in `ViewProviderPage::getQGSPage` from `QGIViewPart::hoverLeaveEvent`
+    <- `QGraphicsScene::leaveScene` <- the drawing tab closing in `~Gui::Document` <-
+    `App.closeDocument`. Gui::Application::slotDeleteDocument drops the view-provider map
+    before it deletes the Gui document, whose tabs then send the hovered view a hover-leave.
+    Only when the mouse is on a drawing view as the design closes (keyboard, the AI's
+    close_design, scripts; the tab's x moves the mouse off the sheet first). Fix without a
+    core patch: `drawing_ui._DocWatch.slotDeletedDocument` (Gui observers hear it before the
+    map goes) sends each drawing tab's viewport a Leave event (`_leave_sheets`); `_DocWatch`
+    is installed when the interface starts. All 22 drawing scenarios + welcome_line PASS, no
+    marker. CHANGELOG "Fixed".
+  - `plastic_qa_tools` (**a real merge bug**): editing a Boss rolled the marker to the step
+    double-clicked; the Boss's other side (a step of its own in the other component, same
+    `BossGroup`) was rolled back, so the edit's preview lost half the boss.
+    `edit_rollback._companions` now returns the group's other steps and its screws.
+  - `journey_surface3`: the screen timeline was right; `dialog_input.timeline_titles` read
+    the buttons in Qt's creation order, which experimental's button reuse no longer keeps:
+    now sorted left to right.
+  - `sheetmetal_qa`, `journey_plastic_rule`: written before edit rollback (a later flange's
+    edge clicked while editing an earlier one; a volume taken inside the Lip edit compared
+    with the whole part after Esc): now check Fusion's behaviour (the later flange is rolled
+    back, nothing to click; the volume before the edit).
+  - `update_check`: my VERSION change broke it (the update code reads the running version,
+    so a fake 0.1.0-beta.2 was "up to date"). The scenario now sets `update_ui.__version__`
+    to the 0.1.0-beta it pretends to be (setup / teardown). Lesson: run a scenario you edit.
 
 ### Session log: wave 6, SHEET METAL + PLASTIC tabs, SURFACE complete (`develop`, 2026-10-23 night)
 

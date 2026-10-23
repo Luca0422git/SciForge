@@ -28,7 +28,7 @@ P10 A different core (the program itself changed): the full installer; the dialo
     may warn; the hand-over waits for SciForge and starts the installer.
 P11 A command still open: Update now says to finish it first and downloads nothing.
 P12 Cancel at "save your changes?" (the quit says no): the helper is stopped, the update is off.
-P13 After the update: "Updated to <the running version>." once, What's new opens the notes, Dismiss hides it.
+P13 After the update: "Updated to 0.1.0-beta." once, What's new opens the notes, Dismiss hides it.
 P14 Linux (the AppImage cannot replace itself): the release page and one line of what to do.
 P15 Preferences > General > Updates: the two options, their defaults, and they work.
 P16 The update icon in the top bar (top right, left of the search button, like Fusion's): hidden
@@ -241,6 +241,10 @@ def setup():
     s["fake"] = fg.FakeGitHub()
     s["old_base"] = update_core.API_BASE
     update_core.API_BASE = s["fake"].base
+    # The scenario is a 0.1.0-beta install (its fake releases 0.1.0-beta.2 ... are newer),
+    # whatever the VERSION file says: the update code reads the running version here
+    s["old_version"] = update_ui.__version__
+    update_ui.__version__ = VERSION
     s["opened"], s["handed"], s["quit"] = [], [], []
     s["quit_answer"] = True
 
@@ -797,13 +801,10 @@ def p13_updated_to():
     update_ui._changed()
     h.check("P13 an update that did not happen says nothing on Home", line_text() == "", line_text())
     h.check("P13 ... it is logged", any("did not finish" in m for m in sciforge.RECENT[before:]))
-    # the start after a good update: to the version that runs now (sciforge.__version__,
-    # the VERSION file; this scenario's own VERSION is the install it pretends to be)
-    running = sciforge.__version__
-    group().SetString("UpdateJustInstalled", running)
-    older = updates_folder("0.0.1-beta")  # (the download of an earlier try is left over)
+    group().SetString("UpdateJustInstalled", VERSION)  # the start after a good update
+    older = updates_folder("0.1.0-beta.2")  # (the download of an earlier try is left over)
     os.makedirs(older, exist_ok=True)
-    kept = updates_folder(running)
+    kept = updates_folder(VERSION)
     os.makedirs(kept, exist_ok=True)
     with open(os.path.join(kept, "install_update.log"), "w") as handle:
         handle.write("the log of the update that just worked\n")
@@ -813,7 +814,7 @@ def p13_updated_to():
     h.check("P13 ... the folder of this one (its log) stays", os.path.isfile(os.path.join(kept, "install_update.log")))
     update_ui._changed()
     found = line()
-    h.check("P13 Home says it once", line_text() == "Updated to %s." % running, line_text())
+    h.check("P13 Home says it once", line_text() == "Updated to %s." % VERSION, line_text())
     h.check("P13 ... What's new and Dismiss, not Update now", found.whats_new_button.isVisible() and found.dismiss_button.isVisible() and not found.update_button.isVisible() and not found.later_button.isVisible())
     h.check("P13 it is remembered only for this start", group().GetString("UpdateJustInstalled", "x") == "")
     QtTest.QTest.qWait(250)  # (painted before the screen is looked at)
@@ -822,7 +823,7 @@ def p13_updated_to():
     h.shot("updated_to")
     w.click(found.whats_new_button)
     wait_for(lambda: bool(s["opened"]), 3)
-    h.check("P13 What's new opens this version's page", s["opened"] and s["opened"][-1].endswith("/releases/tag/sciforge-v" + running), s["opened"])
+    h.check("P13 What's new opens this version's page", s["opened"] and s["opened"][-1].endswith("/releases/tag/sciforge-v" + VERSION), s["opened"])
     update_ui._note_updated()
     h.check("P13 the next start does not say it again", group().GetString("UpdateJustInstalled", "") == "")
     w.click(found.dismiss_button)
@@ -924,6 +925,7 @@ def teardown():
     update_ui.OPEN_URL = update_ui.HAND_OVER = update_ui.QUIT = None
     update_ui.LAYOUT = update_ui.INSTALLED = None
     update_core.API_BASE = s["old_base"]
+    update_ui.__version__ = s["old_version"]
     update_ui._state["answer"] = None
     update_ui._state["release"] = None
     update_ui._state["version"] = ""

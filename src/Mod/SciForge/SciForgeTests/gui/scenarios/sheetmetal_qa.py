@@ -468,20 +468,29 @@ def edit_earlier():
     sm.double_click_timeline("Flange 2")
 
 
+def _state(title):
+    from sciforge import timeline_ops
+
+    return next((i.state for i in timeline_ops.timeline(_doc()).items if i.display == title), None)
+
+
 def click_later_edge():
     sm.settle()
     p = sm.panel()
     h.check("editing Flange 2", p is not None and p.editing and len(p.refs) == 2, p and p.refs)
     h.fit()
-    # the top of Flange 3's front wall (T = R = 2 now: the wall runs z 4 .. 12)
-    h.check("clicked the later wall's top edge", h.click_edge(V(25, 0, 12)))
+    # Fusion: the steps after the one edited are rolled back while it is edited
+    # (edit_rollback), so Flange 3's walls are not there to click; the top of its front wall
+    # (T = R = 2 now: the wall ran z 4 .. 12) is no edge any more. (Picked some other way,
+    # a later step's edge is refused, saying why: sheetmetal_flange_ui.)
+    h.check("Flange 3 rolled back while Flange 2 is edited", _state("Flange 3") == "rolled_back")
+    h.check("the later wall's top edge is not there to click", not h.click_edge(V(25, 0, 12)))
 
 
 def later_edge_refused():
     sm.settle()
     p = sm.panel()
     h.check("still its two edges", p is not None and len(p.refs) == 2, p and p.refs)
-    h.check("says why", "later step" in sm.message(), sm.message())
 
 
 def esc_earlier():
