@@ -172,3 +172,11 @@ Placement; a golden model cannot see that a Part::FeaturePython went Invalid (it
 shape stays), so a QA golden changes the rule after the edit to force a new flat.
 `sketch_draw` fails its "sketch palette shown" check on this machine both on this branch and
 on the develop base before sm-flat (d50a665): not caused by this area.
+
+QA test results (real FreeCAD 1.1.4, final QA head): all 15 `flatpattern_*` scenarios pass
+(l_bracket 47, u_channel_dxf 50, unfold_refold 40, rip_convert 46, component_rip 23,
+refusals 27, environment 27, flange 15, drawing 42, tray 10, corners 22, qa_paths 85,
+qa_partial 41, qa_two_bodies 18, qa_hidden_component 12 checks); `--only base` passes (unit
+1909 OK, golden 511 + 2 known xfail, smoke, journey); shared files: drawing_new 63,
+drawing_annotations 44, drawing_reopen 44, timeline_browser 92, ribbon_customize 57 and
+ribbon_sweep with `SWEEP_TABS=sheet_metal,flat_pattern` 141 checks pass.
