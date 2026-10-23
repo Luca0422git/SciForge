@@ -73,7 +73,8 @@
           0
         ],
         "solids": 1,
-        "abs_tol": 0.001
+        "abs_tol": 0.001,
+        "source": "analytic"
       }
     },
     {
