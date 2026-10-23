@@ -38,7 +38,7 @@ keys in `docs/sciforge/dev/research/fusion-surface.md`), **F** = Autodesk Commun
 | Fusion | SciForge | Src |
 |---|---|---|
 | SURFACE > MODIFY lists Press Pull, Fillet, Chamfer, Trim, Untrim, Extend, Stitch, Unstitch, Merge, Reverse Normal, Scale, Split Face, Split Body | Same entries (the ribbon of wave 6); every one now works on surface bodies | A |
-| **Split Body**: Body to Split = solid or open bodies; Splitting Tool = a body (solid or open), a plane, a profile, a face; Extend Splitting Tool | A surface body is a Splitting Tool: a click on a face of a surface body (not the body being split) takes the whole surface body. Extend Splitting Tool (on) carries its open edges on (Natural where the surface allows, else Tangent, `surface_geom.extend`) far enough to cross the body, so a sculpted surface smaller than the body still cuts it in two. A surface body can be split too: its pieces become surface bodies | A |
+| **Split Body**: Body to Split = solid or open bodies; Splitting Tool = a body (solid or open), a plane, a profile, a face; Extend Splitting Tool | A surface body is a Splitting Tool: a click on a face of a surface body (not the body being split) takes the whole surface body. Extend Splitting Tool (on) carries the open edges that touch or run inside the body on (Natural where the surface allows, else Tangent, `surface_geom.extend`) far enough to cross the body, so a sculpted surface smaller than the body still cuts it in two; edges already outside the body stay as they are (carrying a twisted loft on would curl it back into the body). A surface body can be split too: its pieces become surface bodies | A |
 | Splitting a solid with a sculpted surface (the "hybrid" workflow) | Kept piece = the bigger one (as for any split); the tool body stays a surface | A, G (which piece stays) |
 | **Delete** on the SURFACE tab: SurfaceDeleteFaceFeature, faces removed without healing; a solid becomes a surface body at the first deleted face. On SOLID, Delete heals (DeleteFaceFeature, fails if it cannot) | Decided by the tab Delete runs from (`ribbon.current_tab()`, read when Del / the menu runs): SURFACE removes the faces (a "Delete Face" step, `SurfaceDeleteFace`; a solid becomes a surface body), SOLID keeps healing. Faces of a surface body are never healed, whatever the tab (there is no solid to close). Every other Delete (bodies, steps, sketch curves) is unchanged | A, F; G (a surface body on the SOLID tab) |
 | **Fillet / Chamfer** of edges of a surface body (Surface > Modify > Fillet / Chamfer; the SOLID dialog) | A step of its own (`SurfaceFillet` / `SurfaceChamfer`): FreeCAD's PartDesign::Fillet refuses a body that is not a solid ("Base feature's shape is not a solid", probed), OpenCASCADE's `makeFillet` / `makeChamfer` on the shell work. Radius Type Constant or Variable (Start Radius at the edge's start, End Radius at its end; `makeFillet(r1, r2)`), Chord Length greyed with the reason (fillet); Equal Distance / Two Distances / Distance and Angle with Flip (chamfer); Tangent Chain; a drag arrow with its value box | A |
@@ -84,6 +84,9 @@ saved with the design.
   that the radius then follows, chamfer with a pre-selected edge, a free-edge refusal, Esc,
   a Variable radius fillet),
   `surface4_split` (a box split by a curved surface, undo / redo, save with Ctrl+S, reopen),
+  `surface4_split_loft` (a box split by a lofted surface, edit with Extend Splitting Tool
+  off, the loft itself split by the box's face, a refusal: a face that does not reach it,
+  undo / redo),
   `surface4_delete_merge` (an empty design, SURFACE Delete of a floor, of a solid's face,
   SOLID Delete still heals, edit from the timeline, Merge, a Merge refusal, a solid's edge
   handed to the SOLID Fillet),
@@ -95,10 +98,11 @@ saved with the design.
   `surface4_misc` (Align, Combine refusal, Physical Material, Appearance),
   `surface4_component` (fillet, press pull and delete on a surface body in a moved
   component, undo / redo).
-- Golden models `surface4_*.json` (13): fillet + edit + reopen, variable fillet, chamfer +
+- Golden models `surface4_*.json` (14): fillet + edit + reopen, variable fillet, chamfer +
   SURFACE delete, press pull + edit + reopen, press pull of a tray with slanted walls, press
   pull of a cup's round wall, merge, merge of
-  tangent faces (refit), split of a solid by a surface, split of a surface, rectangular
+  tangent faces (refit), split of a solid by a surface and by a lofted surface, split of a
+  surface, rectangular
   pattern and pattern on path of a surface body, mirror join + scale.
 - Unit tests: `SciForgeTests/unit/test_surfmod_core.py`.
 

@@ -1037,13 +1037,16 @@ def extended_tool(shape, around, clip=False):
     carried on (Natural where the surface allows it, else Tangent) far enough to cross
     `around`, so a sculpted surface smaller than the body still cuts it in two. The surface
     as it is when that cannot be done. clip: only the part of it near `around` (the
-    dialog's red preview: just over the body, like a plane's)."""
+    dialog's red preview: just over the body, like a plane's).
+    Only the open edges that touch or run inside `around` are carried on: a surface whose
+    edges all lie outside the body already cuts it wherever it crosses it, and carrying a
+    twisted surface (a loft) on would curl the new parts back into the body."""
     from . import surface_geom
 
     try:
-        free = surface_geom.free_edges(shape)
+        free = [e for e in surface_geom.free_edges(shape) if _gap(e, around) < 1e-6]
         if not free:
-            return shape
+            return _clipped(shape, around) if clip else shape
         reach = max(around.BoundBox.DiagonalLength, 1.0) + _gap(shape, around)
         grown = surface_geom.extend(shape, free, reach, "natural")
         if grown is None or grown.isNull() or not grown.Faces:
