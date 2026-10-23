@@ -146,12 +146,13 @@ measured again on the exact shape (the display triangles cut corners off round f
     bodies refusal, an empty design.
   - `ribbon_sweep` with `SWEEP_TABS=plastic` (112): every PLASTIC command opens with no
     pop-up or error.
-- Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 16):
+- Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 18):
   snap fit parallel, edit (taper + draft), Hook and Loop, two points Aligned, Distance
   extent, Perpendicular through a panel; Lip And Groove, drafted, Swap, Groove alone, open
   chain, round rim, tip radius, root radius (with the groove's mouth round), Face Guide on a
   tapered rim; Fusion's usual flow (a hollow box split in two, Lip And Groove, Hook and
-  Loop).
+  Loop); a lip suppressed and back; a snap fit with the history marker rolled back before it
+  and to the end (the other body's step follows both).
 - Unit tests: `SciForgeTests/unit/test_plastic2_core.py` (31).
 
 ## Known gaps
