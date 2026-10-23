@@ -13,9 +13,11 @@ cannot do on a surface (docs/sciforge/parity/surface-modify.md):
                        becomes a surface body at the first deleted face)
   surface_merge        Merge: adjacent faces of one surface body that lie on one surface
                        become one face
-  surface_press_pull   Press Pull on a flat face of a surface body: the face moves along its
-                       normal, the faces around it (which run along the pull) follow
+  surface_press_pull   Press Pull on a face of a surface body: the face moves along its
+                       normal, the faces around it follow
 """
+
+import math
 
 # kind -> SciForgeType of its step
 TYPES = {
@@ -54,10 +56,11 @@ DIALOG_ICONS = {
     "surface_press_pull": "press_pull",
 }
 
-# Fusion's Radius Type: Constant, Chord Length, Variable. On surface bodies SciForge builds
-# Constant and Variable (Radius at the edge's start, End Radius at its end; OpenCASCADE's
-# makeFillet(r1, r2)); Chord Length is shown greyed with the reason.
-RADIUS_TYPES = ("constant", "variable")
+# Fusion's Radius Type: Constant, Chord Length, Variable. Variable: Radius at the edge's
+# start, End Radius at its end (OpenCASCADE's makeFillet(r1, r2)). Chord Length: the width
+# of the round across its two edges; OpenCASCADE has no chord-length fillet, so the radius
+# is worked out from the angle between the faces at the edge (chord_radius).
+RADIUS_TYPES = ("constant", "chord", "variable")
 RADIUS_LABELS = {"constant": "Constant", "variable": "Variable", "chord": "Chord Length"}
 CHAMFER_TYPES = ("equal", "two", "angle")
 CHAMFER_LABELS = {
@@ -112,6 +115,17 @@ def kind_of_type(sciforge_type):
     return KIND_BY_TYPE.get(sciforge_type or "")
 
 
+def chord_radius(chord, angle):
+    """The radius of a round whose chord (the straight width across its two edges) is
+    `chord`, between faces whose normals are `angle` radians apart at the edge (the round
+    turns through that angle): chord = 2 r sin(angle / 2)."""
+    if angle < 1e-3:
+        raise SurfaceModifyError(
+            "The faces meet smoothly at that edge: there is no corner to round."
+        )
+    return float(chord) / (2.0 * math.sin(angle / 2.0))
+
+
 def with_defaults(kind, options=None):
     merged = dict(DEFAULTS.get(kind, {}))
     merged.update(options or {})
@@ -125,9 +139,7 @@ def check_values(kind, options):
         if float(o["radius"]) <= 1e-7:
             raise NeedsPick("Type a radius bigger than 0, or drag the arrow.")
         if o.get("radius_type", "constant") not in RADIUS_TYPES:
-            raise SurfaceModifyError(
-                "Chord Length fillets are not made on surface bodies: pick Constant or Variable."
-            )
+            raise SurfaceModifyError("Pick a radius type: Constant, Chord Length or Variable.")
         if o.get("radius_type") == "variable" and float(o.get("radius2", 0.0)) <= 1e-7:
             raise NeedsPick("Type the End Radius (bigger than 0).")
     elif kind == "surface_chamfer":

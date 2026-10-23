@@ -190,6 +190,12 @@ def blend_shape(shape, names, kind, options):
         if kind == "surface_fillet" and options.get("radius_type") == "variable":
             # Fusion's Variable radius: Radius at each edge's start, End Radius at its end
             made = shape.makeFillet(float(options["radius"]), float(options["radius2"]), edges)
+        elif kind == "surface_fillet" and options.get("radius_type") == "chord":
+            r1, r2 = chord_radii(shape, edges, float(options["radius"]))
+            if abs(r1 - r2) <= 1e-9 * max(1.0, r1):
+                made = shape.makeFillet(r1, edges)
+            else:
+                made = shape.makeFillet(r1, r2, edges)
         elif kind == "surface_fillet":
             made = shape.makeFillet(float(options["radius"]), edges)
         else:
@@ -210,6 +216,37 @@ def blend_shape(shape, names, kind, options):
         raise SurfaceModifyError("The size is too big: faces would disappear. Try smaller.")
     result = sew(made.Faces) if not made.Shells or made.ShapeType == "Compound" else made
     return _result(result, core.TITLES[kind])
+
+
+def chord_radii(shape, edges, chord):
+    """Fusion's Chord Length fillet: the radius at the start and at the end of the edges
+    that gives the round that chord there (from the angle between the two faces' normals,
+    core.chord_radius). Edges whose faces meet at one angle (a box's) get one radius, so the
+    chord is exact all along; one edge whose angle changes gets the radius changing evenly
+    from its start to its end (exact at both ends). Several edges at different angles are
+    refused: OpenCASCADE takes one radius law for all the edges of a fillet."""
+    radii = []
+    for edge in edges:
+        ends = []
+        for param in (edge.FirstParameter, edge.LastParameter):
+            point = edge.valueAt(param)
+            normals = []
+            for face in faces_of_edge(shape, edge):
+                u, v = face.Surface.parameter(point)
+                normals.append(App.Vector(face.normalAt(u, v)))
+            if len(normals) != 2:
+                raise SurfaceModifyError("Pick edges between two faces of the surface body.")
+            ends.append(core.chord_radius(chord, normals[0].getAngle(normals[1])))
+        radii.append(tuple(ends))
+    first = radii[0]
+    if all(abs(a - first[0]) <= 1e-7 * max(1.0, first[0]) for pair in radii for a in pair):
+        return first[0], first[0]
+    if len(radii) == 1:
+        return first
+    raise SurfaceModifyError(
+        "With Chord Length the radius follows the angle between the faces, and these edges "
+        "meet their faces at different angles. Round them in separate fillets, or use Constant."
+    )
 
 
 def _text(exc):
@@ -1232,6 +1269,12 @@ def apply(obj, base, names, options):
         if abs(obj.Radius.Value - float(options["radius"])) > 1e-12:
             obj.Radius = float(options["radius"])
         label = core.RADIUS_LABELS[options.get("radius_type", "constant")]
+        labels = [core.RADIUS_LABELS[k] for k in core.RADIUS_TYPES]
+        if list(obj.getEnumerationsOfProperty("RadiusType") or []) != labels:
+            current = str(obj.RadiusType)
+            obj.RadiusType = labels  # a step saved before Chord Length was offered
+            if current in labels:
+                obj.RadiusType = current
         if str(obj.RadiusType) != label:
             obj.RadiusType = label
         radius2 = float(options.get("radius2", options["radius"]))

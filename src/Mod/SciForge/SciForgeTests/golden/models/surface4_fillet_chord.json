@@ -1,0 +1,131 @@
+{
+  "id": "surface4_fillet_chord",
+  "title": "Chord Length Fillet (chord 2 sqrt 2) of a corner edge of an open box of surfaces: the walls meet at 90 degrees, so the radius is 2",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "fillet"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces, area 1600"
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "f1",
+      "kind": "surface_fillet",
+      "edges": {
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 30
+          },
+          {
+            "axis": "y",
+            "value": 0
+          }
+        ],
+        "count": 1
+      },
+      "options": {
+        "radius": 2.8284271247461903,
+        "radius_type": "chord"
+      },
+      "comment": "the chord across a quarter round is r sqrt 2: radius 2"
+    }
+  ],
+  "expect": {
+    "area": 1590.5575191894877,
+    "faces": 6,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      30,
+      20,
+      10
+    ],
+    "rel_tol": 1e-06,
+    "source": "analytic",
+    "note": "radius 2: the walls lose 2 x 10 each, the quarter cylinder adds pi x 10, the floor's corner loses 4 - pi: 1600 - 40 + 10 pi - (4 - pi)"
+  }
+}

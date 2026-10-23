@@ -175,16 +175,7 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
             self.layout.addRow("Tangent Chain", self.tangent)
         if self.kind == "surface_fillet":
             self.radius_type = pickpanel.combo(
-                [
-                    (core.RADIUS_LABELS["constant"], "constant"),
-                    (core.RADIUS_LABELS["variable"], "variable"),
-                    (
-                        core.RADIUS_LABELS["chord"],
-                        "chord",
-                        False,
-                        "Not on surface bodies yet: OpenCASCADE has no chord-length fillet",
-                    ),
-                ],
+                [(core.RADIUS_LABELS[k], k) for k in core.RADIUS_TYPES],
                 self.options.get("radius_type", "constant"),
             )
             self.radius_type.currentIndexChanged.connect(lambda *_: self._radius_type_changed())
@@ -287,7 +278,9 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
         field, caption = self.fields["radius2"]
         for widget in (field.widget, caption):
             widget.setVisible(variable)
-        self.fields["radius"][1].setText("Start Radius" if variable else "Radius")
+        chord = self.radius_type.currentData() == "chord"
+        caption = "Start Radius" if variable else ("Chord Length" if chord else "Radius")
+        self.fields["radius"][1].setText(caption)
 
     def _radius_type_changed(self):
         self._radius_rows()

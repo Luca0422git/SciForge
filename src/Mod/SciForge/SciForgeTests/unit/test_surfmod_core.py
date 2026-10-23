@@ -61,9 +61,23 @@ class Values(unittest.TestCase):
         core.check_values("surface_fillet", dict(o, radius2=3))
         with self.assertRaises(core.NeedsPick):
             core.check_values("surface_fillet", dict(o, radius2=0))
+        core.check_values("surface_fillet", dict(o, radius_type="chord"))
         with self.assertRaises(core.SurfaceModifyError):
-            core.check_values("surface_fillet", dict(o, radius_type="chord"))
+            core.check_values("surface_fillet", dict(o, radius_type="setback"))
         self.assertEqual(core.with_defaults("surface_fillet")["radius_type"], "constant")
+        self.assertEqual(core.RADIUS_TYPES, ("constant", "chord", "variable"))  # Fusion's order
+
+    def test_chord_radius(self):
+        import math
+
+        # a box's edge: the round turns 90 degrees, its chord is r sqrt 2
+        self.assertAlmostEqual(core.chord_radius(2 * math.sqrt(2), math.pi / 2), 2.0)
+        # 60 degrees: the chord is as long as the radius
+        self.assertAlmostEqual(core.chord_radius(3, math.pi / 3), 3.0)
+        # nearly flat: a big radius; flat: refused
+        self.assertGreater(core.chord_radius(1, 0.01), 50)
+        with self.assertRaises(core.SurfaceModifyError):
+            core.chord_radius(1, 0.0)
 
     def test_fillet_needs_a_radius(self):
         with self.assertRaises(core.NeedsPick):

@@ -35,8 +35,8 @@ def _surface4_values(here, kind, values):
             if value not in ("equal", "two", "angle"):
                 schema._fail(here, "'chamfer_type' must be equal, two or angle")
         elif key == "radius_type":
-            if value not in ("constant", "variable"):
-                schema._fail(here, "'radius_type' must be constant or variable")
+            if value not in ("constant", "chord", "variable"):
+                schema._fail(here, "'radius_type' must be constant, chord or variable")
         elif key in ("flip", "tangent_chain"):
             if not isinstance(value, bool):
                 schema._fail(here, "%r is true or false" % key)

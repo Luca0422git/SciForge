@@ -41,7 +41,7 @@ keys in `docs/sciforge/dev/research/fusion-surface.md`), **F** = Autodesk Commun
 | **Split Body**: Body to Split = solid or open bodies; Splitting Tool = a body (solid or open), a plane, a profile, a face; Extend Splitting Tool | A surface body is a Splitting Tool: a click on a face of a surface body (not the body being split) takes the whole surface body. Extend Splitting Tool (on) carries the open edges that touch or run inside the body on (Natural where the surface allows, else Tangent, `surface_geom.extend`) far enough to cross the body, so a sculpted surface smaller than the body still cuts it in two; edges already outside the body stay as they are (carrying a twisted loft on would curl it back into the body). A surface body can be split too: its pieces become surface bodies | A |
 | Splitting a solid with a sculpted surface (the "hybrid" workflow) | Kept piece = the bigger one (as for any split); the tool body stays a surface | A, G (which piece stays) |
 | **Delete** on the SURFACE tab: SurfaceDeleteFaceFeature, faces removed without healing; a solid becomes a surface body at the first deleted face. On SOLID, Delete heals (DeleteFaceFeature, fails if it cannot) | Decided by the tab Delete runs from (`ribbon.current_tab()`, read when Del / the menu runs): SURFACE removes the faces (a "Delete Face" step, `SurfaceDeleteFace`; a solid becomes a surface body), SOLID keeps healing. Faces of a surface body are never healed, whatever the tab (there is no solid to close). Every other Delete (bodies, steps, sketch curves) is unchanged | A, F; G (a surface body on the SOLID tab) |
-| **Fillet / Chamfer** of edges of a surface body (Surface > Modify > Fillet / Chamfer; the SOLID dialog) | A step of its own (`SurfaceFillet` / `SurfaceChamfer`): FreeCAD's PartDesign::Fillet refuses a body that is not a solid ("Base feature's shape is not a solid", probed), OpenCASCADE's `makeFillet` / `makeChamfer` on the shell work. Radius Type Constant or Variable (Start Radius at the edge's start, End Radius at its end; `makeFillet(r1, r2)`), Chord Length greyed with the reason (fillet); Equal Distance / Two Distances / Distance and Angle with Flip (chamfer); Tangent Chain; a drag arrow with its value box | A |
+| **Fillet / Chamfer** of edges of a surface body (Surface > Modify > Fillet / Chamfer; the SOLID dialog) | A step of its own (`SurfaceFillet` / `SurfaceChamfer`): FreeCAD's PartDesign::Fillet refuses a body that is not a solid ("Base feature's shape is not a solid", probed), OpenCASCADE's `makeFillet` / `makeChamfer` on the shell work. Radius Type Constant, Chord Length or Variable (Start Radius at the edge's start, End Radius at its end; `makeFillet(r1, r2)`). Chord Length: OpenCASCADE has no chord-length fillet, so the radius comes from the angle between the two faces' normals at the edge (chord = 2 r sin(angle / 2)): exact all along where the faces meet at one angle (a box's 90 degrees: r = chord / sqrt 2), from the angle at each end (the radius changing evenly) on one edge whose angle changes; edges at different angles in one fillet are refused with the reason (fillet); Equal Distance / Two Distances / Distance and Angle with Flip (chamfer); Tangent Chain; a drag arrow with its value box | A |
 | Fusion cannot fillet between two separate surface bodies: trim, Stitch, then fillet the shared edge | Same: an edge on the outside of a surface (one face) is refused: "...two separate surface bodies are stitched first (Stitch), as in Fusion" | F |
 | Which command opens it | F / SOLID's Fillet or Chamfer hand over (`fillet_ui.start` -> `surfmod_ui.take_blend`) when the picked edges are on a surface body, or when nothing is picked and the SURFACE tab shows a surface body (or no solid exists at all). In that dialog a first click on a solid's edge hands it back to the SOLID Fillet / Chamfer (Fusion's Fillet rounds solids on the SURFACE tab too) | G |
 | **Press Pull** (Q) on a face of a surface body: an Offset Face / Press Pull feature; the faces around follow | Press Pull hands over at the first pick on a surface body (`presspull_ui._take`). A flat face moves along its normal (+ along it). Among flat polygons (a box, a tray with slanted walls) each corner of the face slides along the edge that leaves it to the moved plane and the faces around are rebuilt with it (exact, like Fusion's offset of a face of a solid); otherwise a neighbour that runs along the move (a round or flat extruded wall) grows by a band or is cut back to the moved face. A face whose neighbours meet it at an angle (the flat lid of a cone, a lampshade) is moved with its neighbours carried on along their own surfaces (exactly for a cone, cylinder or plane; else `surface_geom.extend`) or cut back to the moved plane, and the moved face is the piece of that plane they close round; a neighbour that meets it tangentially (a fillet) is refused with the reason. Several parallel flat faces move together. Flat faces that face different ways (two walls of a box, of a tray) move together among flat polygons, each along its own normal: every corner goes where its faces' planes meet again, a corner on the open edge of a face that stays slides along that edge, the rim between two moved walls stays flat. One curved face is offset (a cup's round wall: the floor grows or is cut back with it). A "Press Pull" step (`SurfacePressPull`) | A (presence, several faces: `OffsetFacesFeatures`), G (the neighbour rule, the rim) |
@@ -82,7 +82,7 @@ saved with the design.
 
 - Scenarios (real input, FreeCAD 1.1.4): `surface4_fillet` (fillet, edit with a parameter
   that the radius then follows, chamfer with a pre-selected edge, a free-edge refusal, Esc,
-  a Variable radius fillet),
+  a Variable radius fillet, edited to Chord Length),
   `surface4_split` (a box split by a curved surface, undo / redo, save with Ctrl+S, reopen),
   `surface4_split_loft` (a box split by a lofted surface, edit with Extend Splitting Tool
   off, the loft itself split by the box's face, a refusal: a face that does not reach it,
@@ -106,7 +106,8 @@ saved with the design.
   Ctrl+Y, SURFACE Delete, Fillet, history turned on again),
   `surface4_step_part` (SURFACE Delete of a face of a STEP part without history: it is taken
   into a body and becomes a surface body; Ctrl+Z / Ctrl+Y; Fillet on it).
-- Golden models `surface4_*.json` (16): fillet + edit + reopen, variable fillet, chamfer +
+- Golden models `surface4_*.json` (17): fillet + edit + reopen, variable fillet, chord
+  length fillet, chamfer +
   SURFACE delete, press pull + edit + reopen, press pull of a tray with slanted walls (its
   floor; two of its walls at once), press pull of a cup's round wall and of a lampshade's
   lid, merge, merge of
@@ -129,8 +130,10 @@ saved with the design.
   refitted (OpenCASCADE's filling through their boundary and sample points), not tangent to
   the faces around them along the outer boundary (it passes through that boundary).
   Fusion's own refit rules are not documented (G).
-- **Surface Fillet options**: Constant and Variable (start / end radius per edge) only;
-  Chord Length (no OpenCASCADE equivalent; greyed with the reason), Variable with points
+- **Surface Fillet options**: Constant, Chord Length and Variable (start / end radius per
+  edge) only. Chord Length is exact where the faces meet at one angle along the edge; on an
+  edge whose angle changes it is exact at the two ends (the radius changes evenly between),
+  and picked edges at different angles must go in separate fillets. Variable with points
   along the edge, Curvature (G2), Setback corners and Rule Fillet are not offered on surface
   bodies (their SOLID implementations build on PartDesign::Fillet / SciForge's rule fillet,
   which need a solid). Fusion's documentation does not confirm Rule Fillet on surfaces (G).

@@ -10,7 +10,9 @@ OK: the area follows; r changed to 1.5: the fillet follows it; back to 2.
 Click another vertical edge (selected), MODIFY > Chamfer: the dialog starts with it; Distance
 2, OK: one face more, area 1600-ish minus 2*2*10 plus the 2 sqrt 2 x 10 bevel. A refusal:
 Fillet, click a top edge (on the outside of the surface: one face): the dialog says why and
-OK is refused; Esc leaves the body as it was. The SOLID Fillet still rounds a solid.
+OK is refused; Esc leaves the body as it was. Fillet on the last corner, Radius Type
+Variable, 1 to 3, OK. Double-click it: Radius Type Chord Length (the field reads Chord
+Length), 2 sqrt 2, OK: the walls meet at 90 degrees, so it is a round of radius 2.
 """
 
 import math
@@ -233,6 +235,42 @@ def variable_made():
     lost = s["area"] - st.area(s["box"])
     # between a constant radius 1 and a constant radius 3 corner
     h.check("the area lies between r 1 and r 3", 4.5 < lost < 14.9, lost)
+    titles = [t for t in st.timeline_titles() if t.startswith("Fillet")]
+    h.check("double-clicked the Variable fillet", titles and st.double_click_timeline(titles[-1]))
+
+
+def chord_type():
+    from SciForgeTests.gui import blend_steps as b
+
+    s4.settle()
+    p = s4.panel()
+    h.check("its dialog", p is not None and p.editing and p.kind == "surface_fillet")
+    if p is None:
+        return
+    b.choose(p.radius_type, "Chord Length")
+    h.check("End Radius hidden", not p.fields["radius2"][0].widget.isVisible())
+    caption = p.fields["radius"][1].text()
+    h.check("the field reads Chord Length", caption == "Chord Length", caption)
+    s4.type_main("%.9f" % (2 * math.sqrt(2)))
+
+
+def chord_ok():
+    s4.settle()
+    text = s4.message()
+    h.check("not refused", "\u26a0" not in text, text)
+    st.ok()
+
+
+def chord_made():
+    from sciforge import surfmod
+
+    h.check("dialog closed", s4.panel() is None)
+    step = s["box"].Tip
+    options = surfmod.options_of(step) if surfmod.is_step(step) else {}
+    h.check("a Chord Length fillet", options.get("radius_type") == "chord", options)
+    lost = s["area"] - st.area(s["box"])
+    # the walls meet at 90 degrees: a chord of 2 sqrt 2 is a radius of 2
+    h.check("the corner of radius 2", s4.near(lost, AREA - fillet_area(2), 1e-6), lost)
 
 
 h.run(
@@ -264,5 +302,8 @@ h.run(
         end_radius,
         variable_ok,
         variable_made,
+        chord_type,
+        chord_ok,
+        chord_made,
     ],
 )
