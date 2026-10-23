@@ -78,7 +78,11 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 
 ## Tests run (FreeCAD 1.1.4, this sandbox)
 
-- `--only unit`: all pass. Golden models: the 32 `sheetmetal_smm_*` pass (with sm-forming's).
+- Final run on the branch with sm-forming and sm-flat merged (09:00 UTC): `--only base` all
+  passed (unit 1906 OK, 9 skipped; golden 505 pass + 2 known xfail, the 32 `sheetmetal_smm_*`
+  among them; smoke, journey, restart).
+- The siblings' 16 scenarios (sheetmetal_* and flatpattern_*) all PASS on this merged branch,
+  and the SHEET METAL ribbon sweep (`SWEEP_TABS=sheet_metal ribbon_sweep`) passes, 109 checks.
 - Scenarios: smmore_bend 44, smmore_bend_two 18, smmore_bend_tab 20, smmore_hem 40,
   smmore_join 25, smmore_corner 37, smmore_round 26, smmore_lofted 27 checks: all PASS.
 
