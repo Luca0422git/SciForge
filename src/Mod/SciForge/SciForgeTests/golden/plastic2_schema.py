@@ -67,6 +67,11 @@ def _check_options(here, values, choices, bools, numbers):
                 schema._fail(here, "'%s' is true or false" % key)
         elif key in numbers:
             schema._check_number(here + "." + key, value)
+        elif key in ("align_point",):
+            if not isinstance(value, list) or len(value) != 3:
+                schema._fail(here, "'%s' is [x, y, z]" % key)
+            for v in value:
+                schema._check_number(here + "." + key, v)
         elif key == "angles":
             if not isinstance(value, list):
                 schema._fail(here, "'angles' is a list of numbers")

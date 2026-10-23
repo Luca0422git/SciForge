@@ -348,6 +348,7 @@ class SnapFitPanel(Panel):
     def clear_field(self, name):
         if name == "align":
             self.options["align_point"] = None
+            self.options["align_line"] = None
             self.align_field.set_text("")
             self.activate("points")
             self._changed()
@@ -371,17 +372,23 @@ class SnapFitPanel(Panel):
         self._picks_changed()
 
     def _align_picked(self, obj, short):
+        line = None
         try:
             shape = bodies.global_shape(obj)
             item = shape.getElement(short) if short else shape
             if item.ShapeType == "Vertex":
                 at = item.Point
+            elif item.ShapeType == "Edge" and type(item.Curve).__name__ in ("Line", "LineSegment"):
+                ends = [v.Point for v in item.Vertexes]
+                at = (ends[0] + ends[-1]) * 0.5
+                line = [(q.x, q.y, q.z) for q in (ends[0], ends[-1])]
             else:
                 at = item.CenterOfMass if hasattr(item, "CenterOfMass") else item.BoundBox.Center
         except Exception as exc:
             self.message.setText("⚠ Pick a point, an edge or a face to align to: %s" % exc)
             return
         self.options["align_point"] = (at.x, at.y, at.z)
+        self.options["align_line"] = line
         self.align_field.set_text("%s %s" % (obj.Label, short) if short else obj.Label)
         self.activate("points")
         self._changed()

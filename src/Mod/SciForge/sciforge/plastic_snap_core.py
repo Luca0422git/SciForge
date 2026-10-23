@@ -369,6 +369,17 @@ def aligned_x(point, reference, normal, outward=True):
     return d if outward else _scale(d, -1.0)
 
 
+def nearest_on_line(point, a, b):
+    """The point of the line through a and b nearest to `point` (Aligned to a line: each
+    catch faces straight away from it)."""
+    d = _sub(b, a)
+    length2 = _dot(d, d)
+    if length2 < 1e-24:
+        return a
+    t = _dot(_sub(point, a), d) / length2
+    return (a[0] + d[0] * t, a[1] + d[1] * t, a[2] + d[2] * t)
+
+
 def angles_for(options, count):
     """The rotation angle of each of `count` snap fits."""
     if options.get("rotation") == "independent":

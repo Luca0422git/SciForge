@@ -78,15 +78,16 @@ item 11).
 | Fusion | SciForge |
 |---|---|
 | Sketch points between the bodies | Click the sketch (its browser row or any of it): **Automatic** takes every point; **Manual**: click the points one by one (a second click takes one off). A sketch selected before the command is taken at once (with its picked points: Manual). |
-| The hook body | The body behind the first point (the sketch normal's side); **Flip** puts the hook on the other side. The other body is found as the one the groove would cut (Parallel / Perpendicular) or the one under the loop (Hook and Loop) and named in the dialog. |
+| The hook body | Found: the body behind the first point (the sketch normal's side); **Flip** puts the hook on the other side; or click the **Hook Body** box and a body. The other body is found as the one the groove would cut (Parallel / Perpendicular) or the one under the loop (Hook and Loop), or picked in the section's **Body** box; it is named in the dialog. |
 | Types (S2, S11 G) | **Parallel Hook and Groove**: the beam runs along a wall of the other body, the catch goes into a groove cut in it (a window when the wall is thinner than the groove). **Perpendicular Hook and Groove**: the beam passes through a slot in a wall across it, the catch hooks under that wall ("Hook Undercut"). **Hook and Loop**: a frame (Loop Thickness) is built on the other body in front of the catch, standing on it, with an opening the catch snaps through. |
-| Rotation Uniform / Independent / Aligned | Rotation Angle turns every catch about the sketch normal from the sketch's X; **Independent**: an Angles field, one angle per point in order; **Aligned**: each catch faces away from the middle of the points (**Face In**: towards it), so snaps round a box all face out. |
+| Rotation Uniform / Independent / Aligned | Rotation Angle turns every catch about the sketch normal from the sketch's X, also with a **rotation handle** (with its value box) at the first snap fit; **Independent**: a rotation handle per snap fit (and an Angles field, one angle per point in the sketch's order); **Aligned**: each catch faces away from the middle of the points, or from what is picked in **Align To** (a point; a straight edge: straight away from its line; a face: its centre) (**Face In**: towards it), so snaps round a box all face out. |
 | Extent To Next / Distance | To Next: the base block runs from the parting plane to the body (and half a thickness into it); Distance: that long. |
 | Hook sizes | Beam Length, Beam Width, Thickness at Root, Thickness at Catch (taper), Catch Depth, Catch Length, Insertion Angle, Retention Angle (90 = permanent), Draft Angle (the beam's sides narrow towards the tip), Base Fillet Radius (round the root; away from the catch side when all round cannot be made, a note otherwise). |
-| Groove / Hook Undercut / Loop | The checkbox makes that side; Clearance (all round); Loop Thickness (loop). |
+| Groove / Hook Undercut / Loop | The checkbox makes that side; Clearance (all round); Loop Thickness (loop); its Body box. |
+| "Visibility controls" (S13, meaning unknown) | **Hide Other Body**: the other body hidden while the dialog is open, to see the hooks (shown again on OK / Cancel). |
 | Rule values (S8) | Thickness at Root and at Catch, Draft Angle, Base Fillet Radius (Nominal Radius), Clearance and Loop Thickness start from the component's rule and **follow it** (changing the rule changes the snap fit) until a value is typed. The rule is named in the dialog. |
 | Strain (S12) | The strain at the root while the catch is pushed in is shown against the rule material's allowable strain; above it, a yellow warning (SciForge addition; Fusion does stress in Simulation). |
-| Manipulators | Blue arrows with value boxes: Beam Length (along the insertion axis) and Catch Depth. |
+| Manipulators | Blue arrows with value boxes: Beam Length (along the insertion axis) and Catch Depth; rotation handles (above). |
 | Timeline | One step "Snap Fit N" in the hook body; the groove / loop is a hidden step of the other body (ModifyFollower: rolls back, suppresses, moves and deletes with the snap fit). Double-click edits; Change Parameters lists Beam Length, Width, Thickness, Catch Depth, Clearance. |
 | Refusals | In the dialog, OK waits: catch shorter than its lead-in ramp, catch longer than the beam, a draft that closes the beam, angles out of range, no point, no body behind the point ("use Flip or a Distance extent"). Notes (not refusals): a snap fit that finds no wall / floor on the other body, a base fillet that cannot be made. |
 
@@ -95,8 +96,8 @@ item 11).
 | Fusion | SciForge |
 |---|---|
 | Pick tangent edges | Click the rim's edges; **Tangent Chain** (on) takes the edges joined smoothly to the one clicked (a filleted rim in one click). Edges of one body; they must lie on one flat face (the rim, the parting face) and join end to end (a closed loop or an open chain). |
-| Lip / Groove / Lip And Groove | **Lip**: a lip stands on the rim from the picked edges towards the wall. **Groove**: a groove cut into the rim (its own Groove Width / Depth). **Lip And Groove**: the lip on this body and the groove (lip + Clearance each side, + Clearance Height deeper, the same drafts) in the body touching the rim, found and named in the dialog; **Swap Lip and Groove** puts the lip on the other body. |
-| Guide Type | **Pull Direction**: the section is swept along the rim's normal. **Face Guide**: built the same way where the walls stand square to the rim (see Known gaps). |
+| Lip / Groove / Lip And Groove | **Lip**: a lip stands on the rim from the picked edges towards the wall. **Groove**: a groove cut into the rim (its own Groove Width / Depth). **Lip And Groove**: the lip on this body and the groove (lip + Clearance each side, + Clearance Height deeper, the same drafts) in the body touching the rim, found and named in the dialog, or picked in its **Other Body** box; **Swap Lip and Groove** puts the lip on the other body. |
+| Guide Type | **Pull Direction**: the section is extruded along the rim's normal, or along a direction picked in the **Direction** box (a plane, flat face or straight edge; one along the rim is refused). **Face Guide**: the section leans with the wall beside the edges (a drafted wall: the lip's faces go on at the wall's angle, the groove's too); walls of different draft along the chain are refused with the reason. |
 | Advanced | Lip Width, Lip Height, Inner Draft, Outer Draft, Clearance, Clearance Height, Groove Width, Groove Depth, Tip Radius (round on the lip's top edges). |
 | Rule values (L9) | Lip Width = Thickness / 2, Lip Height = Reveal Height, Clearance and Clearance Height = Clearance, drafts = Draft Angle; they follow the rule until typed. |
 | Manipulators | Arrows with value boxes: Lip Height and Lip Width. |
@@ -126,18 +127,29 @@ measured again on the exact shape (the display triangles cut corners off round f
 ## Tests
 
 - Scenarios (real mouse and keyboard, FreeCAD 1.1.4 under xvfb):
-  `plastic2_snap` (52 checks: a snap fit on an enclosure wall and its groove, Beam Length
-  typed, the catch depth arrow dragged, OK, undo / redo, edit from the timeline, Esc,
-  save / reopen), `plastic2_snap_options` (49: Manual, Hook and Loop, Perpendicular,
-  Automatic, Aligned, Independent, a refusal, Esc, components, an empty design),
-  `plastic2_lip` (57: lip on a base and groove in its lid, drafts, height typed and dragged,
-  Swap, Groove, Lip, the wall refusal, OK, undo / redo, edit, Esc, save / reopen),
-  `plastic2_advice` (53: checks, click-to-zoom, options, a body left out, browser eye,
-  reopen from the browser, the analysis follows the design, save / reopen, refusal, empty
-  design).
-- Golden models (hand-derived volumes): `plastic2_snap_parallel`, `plastic2_snap_edit_taper`,
-  `plastic2_snap_loop`, `plastic2_snap_two_points`, `plastic2_lip_and_groove`,
-  `plastic2_lip_drafted`, `plastic2_lip_swap`, `plastic2_groove_only`.
+  - `plastic2_snap` (63 checks): a snap fit on an enclosure wall and its groove; Beam Length
+    typed; the catch depth arrow dragged; OK; undo / redo; edit from the timeline; Esc;
+    save / reopen; the design's rule changed (linked values follow, typed ones stay); Change
+    Parameters lists it; timeline Delete takes its groove step too.
+  - `plastic2_snap_options` (78): Manual (a point clicked), Hook and Loop, Perpendicular,
+    Automatic, Aligned, Independent (angles typed, a rotation handle dragged), Align To a
+    clicked face and a clicked edge, the other body picked, Hide Other Body, the catch-length refusal, Esc,
+    components (a moved component), Hook Body picked (refused, then Flip), an empty design.
+  - `plastic2_lip` (85): lip on a base and groove in its lid; drafts; height typed and
+    dragged; the edges' body refused as the other body; Swap; Groove; Lip; the wall refusal;
+    Face Guide; a direction picked along the rim refused; OK; undo / redo; edit; Esc; save /
+    reopen; a lip ring on a cone's round rim (Pull Direction exact, Face Guide leaning with
+    the cone, exact); walls of different draft refused.
+  - `plastic2_advice` (69): checks, colours, click-to-zoom, Draft unticked, Thickness display,
+    a body left out and back, the pull direction picked and flipped, browser eye, reopen from
+    the browser, it follows the design (and waits while hidden), save / reopen, the empty
+    bodies refusal, an empty design.
+  - `ribbon_sweep` with `SWEEP_TABS=plastic` (112): every PLASTIC command opens with no
+    pop-up or error.
+- Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 14):
+  snap fit parallel, edit (taper + draft), Hook and Loop, two points Aligned, Distance
+  extent, Perpendicular through a panel; Lip And Groove, drafted, Swap, Groove alone, open
+  chain, round rim, tip radius, Face Guide on a tapered rim.
 - Unit tests: `SciForgeTests/unit/test_plastic2_core.py` (31).
 
 ## Known gaps
@@ -145,16 +157,18 @@ measured again on the exact shape (the display triangles cut corners off round f
 - **Fusion's exact Snap Fit and Lip dialogs could not be read** (no page access, no API
   objects): labels, defaults and the Parallel / Perpendicular geometry are SciForge's
   reading (G rows above). Luca's screenshots can correct them.
-- **Face Guide** builds the section along the rim's normal; on walls that lean (drafted
-  walls) Fusion keeps the section at the wall's angle. SciForge refuses Face Guide on a
-  slanted wall with the reason (use Pull Direction).
+- **Face Guide** leans the section with the wall when the wall has one draft along the whole
+  chain; walls of different draft along one chain are refused (Fusion's per-wall behaviour
+  there is not documented).
 - **Lip edges must lie on one flat face** (the usual flat parting face). A parting line that
   steps or runs over a curved face is refused.
-- **Snap Fit "visibility controls"** (S13): meaning unknown, not built.
-- **Independent rotation** takes its angles in a field (one per point), not a manipulator
-  per snap fit.
-- **Aligned** aligns to the middle of the points (out or in), not to a picked plane, line or
-  point.
+- **Snap Fit "visibility controls"** (S13): meaning unknown; SciForge's reading is Hide
+  Other Body.
+- **Aligned to a plane or face** uses the face's centre as a point; a picked straight edge
+  is a line (each catch faces straight away from it).
+- **Lip Root Radius** (a blend where the lip meets the rim) is not built; Tip Radius is.
 - **Design Advice thickness** is sampled (up to 8 points a face), not a continuous map; a
-  thin spot between samples can be missed. No alert badge on the component in the browser.
+  thin spot between samples can be missed; the Thickness display colours whole faces. No
+  alert badge on the component in the browser (a shared file). A hidden Design Advice waits
+  and checks again when shown. On big parts (hundreds of faces) a check takes seconds.
 - **Injection-moulding simulation** is out of scope (outline 8).

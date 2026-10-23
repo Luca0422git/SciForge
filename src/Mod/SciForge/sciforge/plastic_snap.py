@@ -114,8 +114,11 @@ def frames(sketch, options, indices=()):
                 c = c + p
             c = c * (1.0 / len(points))
             ref = (c.x, c.y, c.z)
+    line = options.get("align_line") if options.get("rotation") == "aligned" else None
     for k, (_i, p) in enumerate(points):
         if ref is not None:
+            if line:
+                ref = core.nearest_on_line((p.x, p.y, p.z), line[0], line[1])
             try:
                 x_k = core.aligned_x((p.x, p.y, p.z), ref, n, not options.get("align_inward"))
                 axes = core.frame(n, x_k, options["angle"], options["flip"])
@@ -312,6 +315,8 @@ def options_of(obj):
     out["linked"] = list(meta.get("linked", out["linked"]))
     if meta.get("align_point") is not None:
         out["align_point"] = tuple(meta["align_point"])
+    if meta.get("align_line"):
+        out["align_line"] = [tuple(q) for q in meta["align_line"]]
     out["align_inward"] = bool(meta.get("align_inward", False))
     return out
 
@@ -344,6 +349,8 @@ def write_options(obj, options):
     meta = bodies.load_meta(obj, META)
     meta["linked"] = list(options.get("linked", []))
     meta["align_point"] = list(options["align_point"]) if options.get("align_point") else None
+    line = options.get("align_line")
+    meta["align_line"] = [list(q) for q in line] if line else None
     meta["align_inward"] = bool(options.get("align_inward", False))
     bodies.save_meta(obj, META, meta)
 

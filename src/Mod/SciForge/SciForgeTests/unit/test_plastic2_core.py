@@ -141,6 +141,10 @@ class SnapFrames(unittest.TestCase):
         d = snap.aligned_x((2, 20, 20), (30, 20, 20), (0, 0, 1), outward=False)
         self.assertEqual(tuple(round(v, 9) for v in d), (1, 0, 0))
 
+    def test_nearest_on_line(self):
+        self.assertEqual(snap.nearest_on_line((5, 7, 0), (0, 0, 0), (10, 0, 0)), (5, 0, 0))
+        self.assertEqual(snap.nearest_on_line((5, 7, 0), (0, 0, 0), (0, 0, 0)), (0, 0, 0))
+
     def test_independent_angles(self):
         o = dict(snap.defaults(), rotation="independent", angles=[10, 20], angle=5)
         self.assertEqual(snap.angles_for(o, 3), [10.0, 20.0, 5])

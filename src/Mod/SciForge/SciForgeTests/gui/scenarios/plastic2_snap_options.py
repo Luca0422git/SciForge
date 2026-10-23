@@ -193,6 +193,33 @@ def align_cleared():
     p = ps.snap_panel()
     cut = -base_change()
     h.check("cleared: the middle of the points again", ps.near(cut, 2 * ps.GROOVE, 1e-6), cut)
+    ps.ui.click(p.align_field.button)
+
+
+def click_front_edge():
+    h.fit()
+    h.click_edge(V(45, 0, 20))
+
+
+def aligned_to_edge():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    text = p.align_field.button.text()
+    h.check("aligned to the clicked edge", "Edge" in text, (text, ps.message(p)))
+    line = p.options.get("align_line")
+    h.check("a line: each catch faces straight away from it", bool(line), line)
+    placed = __import__("sciforge.plastic_snap", fromlist=["x"]).frames(
+        p.sketch, p.options, p.indices
+    )
+    dirs = [round(axes[0].y, 6) for _o, axes in placed]
+    h.check("all three catches face +Y (away from the front edge)", dirs == [1.0, 1.0, 1.0], dirs)
+    ps.ui.click(p.align_field.clear)
+
+
+def edge_cleared():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("cleared again", ps.near(-base_change(), 2 * ps.GROOVE, 1e-6), base_change())
     ps.ui.click(p.other_field.button)
 
 
@@ -367,6 +394,9 @@ h.run(
         click_right_face,
         aligned_to_face,
         align_cleared,
+        click_front_edge,
+        aligned_to_edge,
+        edge_cleared,
         click_base_as_other,
         other_picked,
         other_hidden,
