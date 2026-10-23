@@ -142,5 +142,10 @@ Traps for the scenarios:
   clear the selection before opening the dialog).
 - On the SURFACE tab there is no Create Sketch big button: switch to SOLID first.
 
-Tests added: `surface3_qa` (86 checks), `surface3_qa2` (55), `surface3_qa3` (58); golden
-`surface3_sweep_rail_perpendicular`.
+Tests added: `surface3_qa` (86 checks), `surface3_qa2` (55), `surface3_qa3` (58),
+`surface3_qa4` (27); golden `surface3_sweep_rail_perpendicular`. Re-run after the fixes:
+every `surface*` scenario (the six part-3 ones and the twelve before), the base run (unit
+1862 OK, golden 451 pass + 2 known xfail, smoke, journey).
+
+Left for Luca's Fusion to settle: Revolve Project Axis on by default (Fusion's API starts it
+off), Ruled's default type, Extrude Match Shape (not found in Fusion's documentation).

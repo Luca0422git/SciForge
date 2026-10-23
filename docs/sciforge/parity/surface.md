@@ -108,7 +108,11 @@ while the dialog is open: New Body / Cut / Intersect / New Body, Esc restores ev
 an edit that moves a Join stitch back to New Body, undo / redo), `surface3_qa3` (Extrude of
 a flat face with a hole, To Object with Extend Faces, edit read-back, Cancel, undo / redo;
 Patch per-edge Continuity: refused with the mix explained on 70 degree walls, built on 15
-degree walls, saved, reopened, read back, Esc).
+degree walls, saved, reopened, read back, Esc), `surface3_qa4` (Revolve To with Two Sides
+whose sides would overlap: refused, OK waits, Esc leaves nothing; Environmental Map undone and
+redone). Also checked by probe: Sweep Path + Guide Surface on a curved guide (a radial
+profile along a wavy path round a cylinder stays radial within 0.01 mm; Single Path tilts it
+1 mm).
 
 ## Part 2: Extrude, Revolve, Sweep and Loft options (wave 5, branch `sf/surface-2`)
 
