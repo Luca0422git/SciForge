@@ -134,6 +134,45 @@ def block_back():
     ps.settle(ps.advice_panel)
     p = ps.advice_panel()
     h.check("a second click takes it back", p.bodies_field.button.text() == "2 bodies")
+    ps.ui.click(p.direction_field.button)
+
+
+def click_front_for_pull():
+    h.check("the Pull Direction box takes the clicks", ps.advice_panel().active == "direction")
+    h.fit()
+    h.click(V(30, 0, 10))
+
+
+def pulled_along_y():
+    ps.settle(ps.advice_panel)
+    p = ps.advice_panel()
+    text = p.direction_field.button.text()
+    h.check("the pull is the front face's normal", "Face" in text, text)
+    h.check("back to the Bodies box", p.active == "bodies")
+    pull = p.analysis.PullVector
+    h.check("pulled along Y", abs(abs(pull.y) - 1.0) < 1e-9, pull)
+    c = counts()
+    h.check("pulled along Y the box's inside is an undercut", c["undercut"] > 0, c)
+    ps.toggle(p.flip)
+
+
+def flipped():
+    ps.settle(ps.advice_panel)
+    p = ps.advice_panel()
+    h.check("Flip turns the pull round", p.analysis.Flip, p.analysis.Flip)
+    ps.ui.click(p.direction_field.clear)
+
+
+def pull_cleared():
+    ps.settle(ps.advice_panel)
+    p = ps.advice_panel()
+    h.check("cleared: Z again", p.direction_field.button.text() == "Z (default)")
+    h.check("no undercut along Z", counts()["undercut"] == 0, counts())
+    ps.toggle(p.flip)
+
+
+def unflipped():
+    ps.settle(ps.advice_panel)
     ps.ok()
 
 
@@ -287,6 +326,11 @@ h.run(
         thickness_map,
         block_left_out,
         block_back,
+        click_front_for_pull,
+        pulled_along_y,
+        flipped,
+        pull_cleared,
+        unflipped,
         kept,
         hidden,
         shown_again,
