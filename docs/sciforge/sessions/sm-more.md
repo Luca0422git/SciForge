@@ -61,6 +61,11 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
   the axis (its bend end is then a circle arc) gives true cylinders.
 - Folding a relief cut back at a mitred corner (sm-flat's `refold`) can leave specks of a few
   millionths of a mm3 beside the mitre; Corner Closure drops pieces under 0.001 T^3.
+- Booleans next to tangent geometry can go quietly wrong: a relief slot whose side touched a round
+  notch at a tangent was "cut" and then came back in the fuse (16.75 mm3 too much). Every Bend
+  now checks that its pieces add up (bent zone = flat zone x ((R + T)^2 - R^2) / (2 (R + K T) T))
+  and refuses otherwise; a hole in the zone is laid on the bend slightly bigger than that exact
+  ratio (0.06 mm3 on a 1 mm hole), so a fifth of the holes' volume is allowed.
 - sm-flat's `unfold` can raise a raw OpenCASCADE "Wire is not closed" on some cut corners from
   one side of the sheet and lay the same part flat from the other side (a note for sm-flat).
 - Selection inside a component: after a PickPanel `_sync`, FreeCAD can report a later click as

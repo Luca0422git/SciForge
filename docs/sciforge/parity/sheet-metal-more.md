@@ -41,6 +41,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Bend Radius from the rule | Same, with an Override Bend Radius row (G: Fusion's API shows no radius) | F[F5], G |
 | Bend Relief (per line) / Corner Relief checkboxes | Bend Relief (default on, and per line through Values For): where a bend ends beside sheet that stays (a tab), the rule's bend relief is cut into that sheet at both ends: a slot of the rule's Relief Width from the rule's Relief Depth below the zone to its far side, Straight or Round-ended (research 4.5), or the rule's Tear: a split along the bend's end, cut as a 0.01 mm hairline across the zone (one solid cannot hold two faces touching); off on a tab is refused with the reason. Corner Relief is stored (crossing lines are refused, Known gaps) | A[R31], A[R1], research 4.5 |
 | A zone that is not flat sheet | Refused: "The bend zone crosses something that is not flat sheet ... Move the bend line onto a flat part of the sheet." | G |
+| A bend that would run the sheet into itself | Refused: every bend is checked to add up (the bent zone holds ((R + T)^2 - R^2) / (2 (R + K T) T) of its flat volume at any angle), so an overlap or a failed cut is refused with "This bend would run the sheet into itself, or it could not be built cleanly here" | G |
 | Timeline Bend<n>, the sketch consumed | "Bend 1"; the bend lines' sketch is hidden | G |
 
 ### Hem (SHEET METAL > CREATE > Hem)
@@ -127,9 +128,10 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 2. **Bend: Corner Relief where bend lines meet.** Lines that meet at a corner of the sheet (a
    box folded from a plus-shaped blank) work with Bend Line Start or End: the zones lie in the
    arms and never overlap (golden `sheetmetal_smm_bend_box`). With Center the zones overlap at
-   the corners and the second bend is refused ("The bend zone crosses something that is not
-   flat sheet"): Fusion cuts its corner relief there first; SciForge does not yet (the checkbox
-   is stored). Lines that cross inside the sheet are refused the same way.
+   the corners and the bend is refused with the reason: Fusion cuts its corner relief there
+   first; SciForge does not yet (the checkbox is stored; a trial that cut the rule's round
+   relief first left booleans that did not add up, so it was not shipped). Lines that cross
+   inside the sheet are refused the same way.
 3. **Bend: Bend Relief.** Built for a tab (the sheet beyond the bend narrower than the sheet
    the line crosses): Straight and Round reliefs, and Tear as a 0.01 mm hairline split (the
    Flat hem's reason, gap 5); the rule's Relief Remnant is not applied. A tongue cut inside a plate (sheet that stays
