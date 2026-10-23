@@ -302,9 +302,10 @@ def nothing_touched(options, what="extrusion"):
 
 
 def step_times(doc):
-    """{name: place in the design timeline} of every timeline step, and of every follower
-    (at the place of its extrude): the order the timeline shows across all bodies."""
-    from . import timeline_ops
+    """{name: place in the design timeline} of every timeline step, of every follower (at
+    the place of its extrude) and of every split-off piece (at the place of its Split Body):
+    the order the timeline shows across all bodies."""
+    from . import split, timeline_ops
 
     try:
         names = timeline_ops.timeline(doc, deps=False).names()
@@ -316,6 +317,19 @@ def step_times(doc):
             lead = getattr(obj, "Source", None)
             if lead is not None and lead.Name in times:
                 times[obj.Name] = times[lead.Name]
+        elif split.is_piece(obj):
+            # A body split off later starts with this hidden step (and the body's own
+            # FeatureBase holding it, below): without a time they read as older than every
+            # step, so editing the first Extrude of the split body found its own later piece
+            # "in the way" (journey_surface3: "Bodies to Join is empty", the edit refused).
+            made_by = getattr(obj, "Split", None)
+            if made_by is not None and made_by.Name in times:
+                times[obj.Name] = times[made_by.Name]
+    for obj in doc.Objects:
+        if obj.TypeId == "PartDesign::FeatureBase" and obj.Name not in times:
+            held = getattr(obj, "BaseFeature", None)
+            if held is not None and held.Name in times:
+                times[obj.Name] = times[held.Name]
     return times
 
 
