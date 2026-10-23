@@ -145,6 +145,10 @@
         "count": 3
       },
       "options": {
+        "lip_width": 1,
+        "lip_height": 1,
+        "clearance": 0.1,
+        "clearance_height": 0.1,
         "inner_draft": 0,
         "outer_draft": 0
       }

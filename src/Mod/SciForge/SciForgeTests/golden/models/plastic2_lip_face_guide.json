@@ -41,6 +41,10 @@
         "count": 1
       },
       "options": {
+        "lip_width": 1,
+        "lip_height": 1,
+        "clearance": 0.1,
+        "clearance_height": 0.1,
         "type": "lip",
         "guide": "face",
         "inner_draft": 0,

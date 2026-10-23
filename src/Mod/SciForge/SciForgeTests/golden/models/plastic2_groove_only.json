@@ -129,7 +129,9 @@
       "options": {
         "type": "groove",
         "inner_draft": 0,
-        "outer_draft": 0
+        "outer_draft": 0,
+        "groove_width": 1.1,
+        "groove_depth": 1.1
       }
     }
   ],

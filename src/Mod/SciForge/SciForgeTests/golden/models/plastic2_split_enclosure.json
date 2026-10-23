@@ -163,6 +163,10 @@
         "count": 4
       },
       "options": {
+        "lip_width": 1,
+        "lip_height": 1,
+        "clearance": 0.1,
+        "clearance_height": 0.1,
         "inner_draft": 0,
         "outer_draft": 0
       }
@@ -181,6 +185,14 @@
       "options": {
         "fillet": 0,
         "draft": 0,
+        "thickness": 2,
+        "tip_thickness": 2,
+        "clearance": 0.1,
+        "loop_thickness": 2,
+        "length": 12,
+        "width": 6,
+        "catch_depth": 1,
+        "catch_length": 3,
         "type": "loop"
       }
     },

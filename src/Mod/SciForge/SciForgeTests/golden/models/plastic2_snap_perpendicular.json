@@ -67,8 +67,15 @@
       "options": {
         "fillet": 0,
         "draft": 0,
-        "type": "perpendicular",
-        "length": 5.1
+        "thickness": 2,
+        "tip_thickness": 2,
+        "clearance": 0.1,
+        "loop_thickness": 2,
+        "length": 5.1,
+        "width": 6,
+        "catch_depth": 1,
+        "catch_length": 3,
+        "type": "perpendicular"
       }
     },
     {

@@ -78,7 +78,15 @@
       ],
       "options": {
         "fillet": 0,
-        "draft": 0
+        "draft": 0,
+        "thickness": 2,
+        "tip_thickness": 2,
+        "clearance": 0.1,
+        "loop_thickness": 2,
+        "length": 12,
+        "width": 6,
+        "catch_depth": 1,
+        "catch_length": 3
       }
     },
     {
