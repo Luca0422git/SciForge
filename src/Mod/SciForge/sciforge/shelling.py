@@ -52,6 +52,17 @@ class ShellError(ValueError):
     """The shell cannot be made; the message says why and what to try."""
 
 
+class Unshelled(ShellError):
+    """OpenCASCADE gave a wall back as the part itself, unshelled, with no error (its sharp
+    join does this on a half pipe; a too-thick inside wall does it with either join)."""
+
+
+SHARP_UNSHELLED = (
+    "Sharp corners cannot be built here: FreeCAD's geometry kernel gives the part back "
+    "unshelled. Choose Shell Type Rounded."
+)
+
+
 def default_options():
     return {
         "inside": 1.0,
@@ -161,14 +172,30 @@ def too_thick(what, value):
     )
 
 
+def _unchanged(solid, result):
+    """True when `result` is `solid` as it was (same faces, same volume): no wall made."""
+    try:
+        return len(result.Faces) == len(solid.Faces) and abs(
+            result.Volume - solid.Volume
+        ) <= 1e-9 * max(1.0, abs(solid.Volume))
+    except Exception:
+        return False
+
+
 def _thick(solid, faces, offset, join, what):
     try:
-        return solid.makeThickness(faces, offset, TOL, False, False, 0, join)
+        result = solid.makeThickness(faces, offset, TOL, False, False, 0, join)
     except Exception:
         raise ShellError(
             "The shell cannot be made with a %g mm %s wall here. Try a thinner wall or "
             "take away other faces." % (abs(offset), what)
         )
+    if _unchanged(solid, result):
+        # No error and a "valid" part, but nothing shelled (plastic-1: a half pipe with
+        # Join Intersection). Both used to fuse it with the other wall: the part came back
+        # whole. build() says why.
+        raise Unshelled(too_thick(what, abs(offset)))
+    return result
 
 
 def _offset(solid, offset, join, what):
@@ -180,6 +207,8 @@ def _offset(solid, offset, join, what):
         raise ShellError(too_thick(what, abs(offset)))
     if result.Volume <= TOL:
         raise ShellError(too_thick(what, abs(offset)))
+    if _unchanged(solid, result):
+        raise Unshelled(too_thick(what, abs(offset)))
     return result.Solids[0]
 
 
@@ -265,6 +294,16 @@ def build(shape, names, options, tags=None):
                 "The face %s no longer exists (an earlier step changed the part). "
                 "Pick the faces again." % name
             )
+    try:
+        return _walls(shape, solid, faces, names, opts, join, tags)
+    except Unshelled:
+        if join == 2 and _rounded_works(shape, names, opts):
+            raise ShellError(SHARP_UNSHELLED)
+        raise
+
+
+def _walls(shape, solid, faces, names, opts, join, tags):
+    inside, outside = thicknesses(opts)
     if faces:
         walls = []
         if inside > 0:
