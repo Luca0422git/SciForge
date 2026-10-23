@@ -210,8 +210,8 @@ def make(body, base, face, choice=TEMPLATE, name="ConvertToSheetMetal"):
     if component is not None and _is_sheet_metal_component(component):
         comp_rule = sheetmetal.active_rule_name(doc, component)
     if sheetmetal.is_sheet_metal_body(body):
-        rule = sheetmetal.find_rule(doc, sheetmetal.body_rule_name(body))
-    elif comp_rule:
+        raise ConvertError("%s is sheet metal already" % body.Label)
+    if comp_rule:
         # Fusion: in a sheet metal component the component's active rule is used
         rule = sheetmetal.find_rule(doc, comp_rule) or core.library_rule(comp_rule)
     if rule is not None and not _same_thickness(rule, info["thickness"]):

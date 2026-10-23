@@ -73,6 +73,13 @@ class ConvertPanel(SheetPanel):
             self.say("Pick a wide flat face of the part.")
             self._fill_rules()
             return
+        from . import sheetmetal
+
+        if sheetmetal.is_sheet_metal_body(self.body):
+            self.thickness.setText("-")
+            self.say("⚠ %s is sheet metal already." % self.body.Label)
+            self._fill_rules()
+            return
         try:
             self.info_data = sm_convert.detect(self.base.Shape, face)
         except sm_convert.ConvertError as exc:

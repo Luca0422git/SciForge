@@ -1,0 +1,88 @@
+{
+  "id": "sm_flat_k_factor",
+  "title": "Flat pattern follows the rule's K-factor (0.33 instead of 0.44)",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "rules"
+  ],
+  "steps": [
+    {
+      "op": "sf_sheet_rule",
+      "name": "Steel K 0.33",
+      "from": "Steel (mm)",
+      "set": {
+        "k_factor": "0.33"
+      },
+      "active": true
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1772.6748,
+    "bbox": [
+      0,
+      0,
+      -1,
+      59.08916,
+      30,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "as sm_flat_edge_flange with K 0.33: BA = pi/2 (1 + 0.33) = 2.08916, flat 48 + BA + 9 = 59.08916"
+  }
+}
