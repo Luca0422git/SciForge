@@ -75,7 +75,8 @@ class RulesDialog(QtWidgets.QDialog):
         self.setWindowTitle("Sheet Metal Rules")
         self.setWindowIcon(ui_icon("sm_rules"))
         self.resize(460, 560)
-        doc.openTransaction("Sheet Metal Rules")
+        # the undo step opens at the first change (one opened here was closed, empty, by
+        # FreeCAD when the ribbon's command returned: the changes then went unrecorded)
         self._changed = False
         self.editing = None  # ("design" | "library", old name or None)
         layout = QtWidgets.QVBoxLayout(self)
@@ -189,6 +190,14 @@ class RulesDialog(QtWidgets.QDialog):
             return sheetmetal.find_rule(self.doc, name)
         return rules.find_library_rule(name)
 
+    def _begin(self):
+        """Open the visit's undo step before the design changes (once)."""
+        try:
+            if App.getActiveTransaction() is None:
+                self.doc.openTransaction("Sheet Metal Rules")
+        except Exception as exc:
+            warn("Sheet Metal Rules: %s" % exc)
+
     def _safe(self, fn, key):
         try:
             self.message.setText("")
@@ -229,6 +238,7 @@ class RulesDialog(QtWidgets.QDialog):
             got = rules.copy_to_library(self.doc, name)
             self.message.setText("'%s' copied to the library as '%s'." % (name, got))
         else:
+            self._begin()
             got = rules.copy_to_design(self.doc, name)
             self._changed = True
             self.message.setText("'%s' copied into this design as '%s'." % (name, got))
@@ -237,6 +247,7 @@ class RulesDialog(QtWidgets.QDialog):
     def delete_rule(self, key):
         name = self._picked(key)
         if key == "design":
+            self._begin()
             rules.delete_design_rule(self.doc, name)
             self._changed = True
         else:
@@ -246,6 +257,7 @@ class RulesDialog(QtWidgets.QDialog):
 
     def set_active(self, key):
         name = self._picked("design")
+        self._begin()
         sheetmetal.set_active_rule(self.doc, name, self._component())
         self._changed = True
         self.reload()
@@ -299,6 +311,15 @@ class RulesDialog(QtWidgets.QDialog):
                 form.addRow(LABELS[key], widget)
                 self.fields[key] = widget
         scroll.setWidget(holder)
+        # the dark look's background, not the scroll area's light default (labels unreadable)
+        scroll.setFrameShape(QtWidgets.QFrame.NoFrame)
+        holder.setAutoFillBackground(False)
+        scroll.viewport().setAutoFillBackground(False)
+        holder.setObjectName("SciForgeSheetMetalRules_fields")
+        scroll.setStyleSheet(
+            "QScrollArea { background: transparent; } "
+            "QWidget#SciForgeSheetMetalRules_fields { background: transparent; }"
+        )
         outer.addWidget(scroll, 1)
         row = QtWidgets.QHBoxLayout()
         row.addStretch(1)
@@ -372,6 +393,7 @@ class RulesDialog(QtWidgets.QDialog):
         key, old = self.editing
         rule = self.editor_rule()
         if key == "design":
+            self._begin()
             rules.save_design_rule(self.doc, rule, old_name=old)
             self._changed = True
             self.doc.recompute()

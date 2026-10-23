@@ -63,15 +63,14 @@ def save_library_rule(rule, old_name=None):
     problems = core.validate(rule)
     if problems:
         raise ValueError(problems[0])
-    if is_builtin(rule["name"]) or (old_name and is_builtin(old_name)):
-        raise ValueError(
-            "'%s' is one of SciForge's built-in rules: copy it (New) to make your own"
-            % (old_name or rule["name"])
-        )
-    taken = [r["name"] for r in library_rules() if r["name"] != (old_name or rule["name"])]
+    taken = [r["name"] for r in library_rules() if r["name"] != old_name]
     problem = core.check_name(rule["name"], taken)
     if problem:
         raise ValueError(problem)
+    if old_name and is_builtin(old_name):
+        raise ValueError(
+            "'%s' is one of SciForge's built-in rules: copy it (New) to make your own" % old_name
+        )
     rules = [r for r in user_library() if r["name"] not in (old_name, rule["name"])]
     rules.append(dict(rule))
     _write_user_library(rules)
@@ -99,7 +98,7 @@ def save_design_rule(doc, rule, old_name=None):
     if problems:
         raise ValueError(problems[0])
     names = [r["name"] for r in sheetmetal.design_rules(doc)]
-    taken = [n for n in names if n != (old_name or rule["name"])]
+    taken = [n for n in names if n != old_name]
     problem = core.check_name(rule["name"], taken)
     if problem:
         raise ValueError(problem)

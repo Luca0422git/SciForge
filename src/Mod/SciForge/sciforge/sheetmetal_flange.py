@@ -187,6 +187,8 @@ class FlangeFeature:
         add("App::PropertyLinkSubListGlobal", "Profiles", "Flange", "Sketch profiles or curves")
         add("App::PropertyLinkSubList", "Edges", "Flange", "Edges of the sheet metal body")
         add("App::PropertyLinkSubGlobal", "Target", "Flange", "To Object: face or plane")
+        if add("App::PropertyLinkGlobal", "SciForgeRules", "Base", "The design's rules"):
+            obj.setEditorMode("SciForgeRules", 2)
         for key, (prop, group) in ENUMS.items():
             if add("App::PropertyEnumeration", prop, group, key):
                 setattr(obj, prop, list(LABELS[key].values()))
@@ -512,6 +514,8 @@ def make(
     FlangeFeature(step)
     _attach_view_provider(step)
     made = "new" if made_body is not None else ("marked" if marked is not None else "existing")
+    # a rule edit (and its undo) recomputes the flange: it depends on the design's rule store
+    step.SciForgeRules = sheetmetal.rules_object(doc, create=True)
     bodies.save_meta(step, META, {"body": made})
     try:
         _set_refs(step, kind, refs, target)
