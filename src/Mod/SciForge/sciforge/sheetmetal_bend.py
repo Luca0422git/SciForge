@@ -402,9 +402,111 @@ def _bend_zone_solid(
 LINE_KEYS = ("angle", "position", "flip")
 
 
-def fold(shape, face_name, stationary_point, lines, options, thickness, radius, k_factor):
+def _extent(shape, along):
+    """(min, max) of a shape measured along a direction (points on its edges)."""
+    lo = hi = None
+    for edge in shape.Edges:
+        for p in edge.discretize(9):
+            d = p.dot(along)
+            lo = d if lo is None else min(lo, d)
+            hi = d if hi is None else max(hi, d)
+    return lo, hi
+
+
+def _moving_spans(result, zone, origin, along, across, normal, s1, thickness, big):
+    """Where the sheet goes on past the bend zone, along the line: [(m0, m1)] measured from
+    `origin`, or None when that covers the whole zone (a bend right across the sheet)."""
+    if zone.isNull() or zone.Volume < 1e-9:
+        return None
+    step = min(0.05, thickness / 4.0)
+    cap = result.common(
+        frame_box(origin, across, along, normal, s1, s1 + step, -big, big, -big, big)
+    )
+    if cap.isNull() or not cap.Solids:
+        return None
+    base = origin.dot(along)
+    spans = []
+    for solid in cap.Solids:
+        lo, hi = _extent(solid, along)
+        spans.append([lo - base, hi - base])
+    spans.sort()
+    merged = [spans[0]]
+    for lo, hi in spans[1:]:
+        if lo <= merged[-1][1] + 1e-6:
+            merged[-1][1] = max(merged[-1][1], hi)
+        else:
+            merged.append([lo, hi])
+    z0, z1 = _extent(zone, along)
+    z0, z1 = z0 - base, z1 - base
+    covered = sum(min(hi, z1) - max(lo, z0) for lo, hi in merged if hi > z0 and lo < z1)
+    if covered >= (z1 - z0) - 1e-6:
+        return None
+    return [(lo, hi) for lo, hi in merged]
+
+
+def _partial_zone(
+    stationary, zone, spans, origin, along, across, normal, s0, s1, big, values, relief, thickness
+):
+    """A bend narrower than the sheet it crosses: only the zone in front of what moves bends;
+    the rest of the zone stays, and the rule's bend relief is cut at each end of the bend
+    where sheet stays beside it. Returns (stationary, zone)."""
+    import Part
+
+    keep = [frame_box(origin, across, along, normal, s0, s1, m0, m1, -big, big) for m0, m1 in spans]
+    tool = keep[0] if len(keep) == 1 else keep[0].fuse(keep[1:])
+    zone_in = zone.common(tool)
+    zone_out = zone.cut(tool)
+    if zone_out.isNull() or zone_out.Volume < 1e-9:
+        return stationary, zone
+    if not values.get("bend_relief", True):
+        raise SheetMetalError(
+            "This bend is narrower than the sheet it crosses (it bends a tab): turn on Bend "
+            "Relief so the rule's relief is cut at its ends."
+        )
+    relief = relief or {}
+    shape = relief.get("shape", "round")
+    width = float(relief.get("width") or thickness)
+    depth = float(relief.get("depth") or 0.0)
+    if shape == "tear":
+        raise SheetMetalError(
+            "The rule's bend relief is Tear, which SciForge cannot cut yet: set the rule's "
+            "Bend Relief Shape to Straight or Round, or bend right across the sheet."
+        )
+    if width <= 0:
+        raise SheetMetalError("The rule's bend relief width must be more than 0.")
+    slots = []
+    for m0, m1 in spans:
+        for a, b in ((m0 - width, m0), (m1, m1 + width)):
+            beside = zone_out.common(
+                frame_box(origin, across, along, normal, s0, s1, a, b, -big, big)
+            )
+            if beside.isNull() or beside.Volume < 1e-9:
+                continue
+            start = s0 - depth
+            if shape == "round":
+                r = width / 2.0
+                slots.append(
+                    frame_box(origin, across, along, normal, start + r, s1, a, b, -big, big)
+                )
+                centre = origin + across * (start + r) + along * (a + r) - normal * big
+                slots.append(Part.makeCylinder(r, 2 * big, centre, normal))
+            else:
+                slots.append(frame_box(origin, across, along, normal, start, s1, a, b, -big, big))
+    stationary = fuse_all(stationary, [zone_out], refine=False)
+    if slots:
+        stationary = stationary.cut(slots)
+    return stationary, zone_in
+
+
+def fold(
+    shape, face_name, stationary_point, lines, options, thickness, radius, k_factor, relief=None
+):
     """The body's solid bent along `lines` (body-local [(a, b)] or [(a, b, values)]: a line's
     own angle / position / flip, Fusion's row per bend line, over the common `options`).
+
+    A line whose far side is narrower than the sheet it crosses (a tab) bends only that width:
+    the rule's bend relief (`relief`: {"shape", "width", "depth"}) is cut into the sheet that
+    stays, at both ends of the bend (Bend Relief on), else it is refused with the reason.
     Raises SheetMetalError."""
     for line in lines:
         values = dict(options)
@@ -468,6 +570,23 @@ def fold(shape, face_name, stationary_point, lines, options, thickness, radius, 
             )
         if stationary.isNull() or stationary.Volume < 1e-9:
             raise SheetMetalError("Nothing stays: click the stationary face on the side to keep.")
+        spans = _moving_spans(result, zone, origin, along, across, normal, s1, thickness, big)
+        if spans:
+            stationary, zone = _partial_zone(
+                stationary,
+                zone,
+                spans,
+                origin,
+                along,
+                across,
+                normal,
+                s0,
+                s1,
+                big,
+                values,
+                relief,
+                thickness,
+            )
         faces = _zone_faces(zone, plane_point, normal)
         area = sum(f.Area for f in faces)
         if not faces or abs(zone.Volume - area * thickness) > 1e-3 * max(1.0, zone.Volume):
@@ -617,7 +736,7 @@ def build(obj):
         raise SheetMetalError("There is no sheet to bend before this step.")
     body = bodies.body_of(obj)
     opts = options_of(obj)
-    thickness, radius, k, _rule = rule_values(
+    thickness, radius, k, rule = rule_values(
         body, opts["radius"] if opts["override_radius"] else None
     )
     link = obj.StationaryFace
@@ -634,6 +753,11 @@ def build(obj):
         thickness,
         radius,
         k,
+        relief={
+            "shape": str(rule.get("bend_relief_shape", "round")),
+            "width": float(rule.get("bend_relief_width", thickness)),
+            "depth": float(rule.get("bend_relief_depth", thickness / 2.0)),
+        },
     )
     if obj.Refine:
         try:
