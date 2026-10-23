@@ -1518,8 +1518,21 @@ breakdown for him: `docs/sciforge/sessions/wave6-overnight.md`.
   and QA agent ran its scenarios and the regressions of the shared files it touched (all
   PASS; numbers in their session logs). QA fixed 78 bugs in all (sm-forming 16, plastic-1
   16, sm-more 13, sm-flat 12, plastic-2 10, surface-3 6, surface-4 5). On the merged tree:
-  unit all OK, golden 584 pass + 2 known xfail, check_install OK, `ribbon_sweep` over SHEET
+  unit 1995 OK, golden 586 pass + 2 known xfail, check_install OK, `ribbon_sweep` over SHEET
   METAL / PLASTIC / SURFACE / FLAT PATTERN 374 checks PASS. GitHub runs: "Results" below.
+- Journeys (whole parts, real clicks): `journey_sheetmetal` 151 (rule, plate, mitred
+  flanges, hem, corner closure, hole, flat pattern 73.89 x 59.39 checked by hand, DXF,
+  thickness change followed by part and flat, save/reopen, timeline edit),
+  `journey_sheetmetal_convert` 44, `journey_sheetmetal_tray` 46, `journey_plastic` 215
+  (two-component enclosure: ABS rule, shells, 4 boss pairs, snap fit, lip, rest, Design
+  Advice), `journey_plastic_rule` 291, `journey_plastic_timeline` 218, `journey_surface` 123
+  (split by a surface, delete without healing, fillet / chamfer, patch, stitch Join, early
+  edits), `journey_surface2` 92, `journey_surface3` 53: all PASS. They fixed 6 cross-tool
+  bugs: an Extrude edit after a Split Body refused, Delete's wrong reason for a chamfer, a
+  Rest filling a shelled box, Extrude New Body leaving an empty body, a component's browser
+  eye showing everything under it, deleting a Snap Fit breaking the Lip after it.
+- `extrude_multibody_edit` path E (drag timing on a 144-hole plate, 11-13 s against 8 s)
+  fails locally under load, also on develop before wave 6.
 
 #### FreeCAD / OpenCASCADE facts found (more in the area session logs)
 - One OpenCASCADE solid cannot hold two touching layers: a flat hem and a Tear relief keep a
