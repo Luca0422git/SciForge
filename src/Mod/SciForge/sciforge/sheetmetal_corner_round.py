@@ -60,12 +60,16 @@ def round_shape(shape, kind, sets, thickness):
     """The solid with every set's edges filleted (kind 'fillet', value = radius) or chamfered
     ('chamfer', value = distance). sets: [{"edges": [names], "value": mm}]."""
     if not sets or not any(s.get("edges") for s in sets):
-        raise sb.SheetMetalError("Pick the corner edges to %s." % ("round" if kind == "fillet" else "chamfer"))
+        raise sb.SheetMetalError(
+            "Pick the corner edges to %s." % ("round" if kind == "fillet" else "chamfer")
+        )
     targets = []
     for entry in sets:
         value = float(entry.get("value", 0.0))
         if value <= 0:
-            raise sb.SheetMetalError("Each %s must be more than 0." % ("radius" if kind == "fillet" else "distance"))
+            raise sb.SheetMetalError(
+                "Each %s must be more than 0." % ("radius" if kind == "fillet" else "distance")
+            )
         for name in entry.get("edges", []):
             why = thickness_edge(shape, name, thickness)
             if why:
@@ -186,14 +190,19 @@ def apply(obj, base, sets):
     bodies.save_meta(
         obj,
         META,
-        {"sets": [{"edges": list(s.get("edges", [])), "value": float(s.get("value", 0))}
-                  for s in sets]},
+        {
+            "sets": [
+                {"edges": list(s.get("edges", [])), "value": float(s.get("value", 0))} for s in sets
+            ]
+        },
     )
 
 
 def make(body, base, kind, sets, name=None):
     """A sheet metal Fillet / Chamfer step. sets: [{"edges": [...], "value": mm}]."""
-    obj = bodies.insert_after_tip(body, TYPE, name or ("SMFillet" if kind == "fillet" else "SMChamfer"))
+    obj = bodies.insert_after_tip(
+        body, TYPE, name or ("SMFillet" if kind == "fillet" else "SMChamfer")
+    )
     RoundFeature(obj, kind)
     obj.BaseFeature = base
     apply(obj, base, sets)

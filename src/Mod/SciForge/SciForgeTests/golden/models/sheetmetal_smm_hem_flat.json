@@ -1,0 +1,59 @@
+{
+  "id": "sheetmetal_smm_hem_flat",
+  "title": "Hem: Flat hem on the 40 mm edge of a 100 x 40 plate (default values)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_sm_hem",
+      "id": "h1",
+      "edges": [
+        [
+          100,
+          20,
+          1
+        ]
+      ],
+      "options": {
+        "type": "flat"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4143.060172,
+    "bbox": [
+      0.0,
+      0.0,
+      0.0,
+      100.0,
+      40.0,
+      2.01
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "plate 4000 - the strip cut back (Inside: R_hem + T) x 40 + the hem's cross-section (centre-line length x T) x 40 (sheetmetal_bend_core.hem_profile)"
+  }
+}

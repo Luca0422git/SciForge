@@ -89,8 +89,16 @@ def edge_strips(shape, edge_names, segs, x0, thickness, miter_gap, flip, what):
         if x0 < -1e-9:
             trims.append(
                 sb.frame_box(
-                    origin, xdir, along, up,
-                    x0, big, 0.0, fr["length"], -thickness * 1.5, thickness * 0.5,
+                    origin,
+                    xdir,
+                    along,
+                    up,
+                    x0,
+                    big,
+                    0.0,
+                    fr["length"],
+                    -thickness * 1.5,
+                    thickness * 0.5,
                 )
             )
         strip = sb.strip_solid(pieces, thickness, origin, xdir, up, along * fr["length"])

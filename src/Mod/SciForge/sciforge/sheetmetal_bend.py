@@ -24,8 +24,6 @@ pick them in that order; SciForge sorts them).
 Also here: the helpers the other forming tools share (frames, strips of sheet, edge analysis).
 """
 
-import math
-
 import FreeCAD as App
 
 from . import bodies, log, sheetmetal, sheetmetal_bend_core as core
@@ -137,7 +135,8 @@ def one_solid(shape, what):
     solids = list(shape.Solids) if not shape.isNull() else []
     if len(solids) != 1:
         raise SheetMetalError(
-            "%s would split the body into %d pieces; check where it is placed." % (what, len(solids))
+            "%s would split the body into %d pieces; check where it is placed."
+            % (what, len(solids))
         )
     solid = solids[0]
     if not solid.isValid():
@@ -178,7 +177,7 @@ def face_thickness(shape, face, thickness, tol=1e-3):
     return False
 
 
-# -- edges of a sheet (Hem, Join by Bend, Corner Closure) -------------------------------------------
+# -- edges of a sheet (Hem, Join by Bend, Corner Closure) -----------------------------------
 def edge_frame(shape, edge_name, thickness, tol=1e-3):
     """What a picked edge of a sheet is: a straight edge where a top / bottom face (the
     'big' face) meets a side face as wide as the thickness. Returns a dict:
@@ -303,7 +302,7 @@ def _map_edge(edge, to_uv, surface):
         a = to_uv(edge.Vertexes[0].Point)
         b = to_uv(edge.Vertexes[-1].Point)
         return Part.Geom2d.Line2dSegment(Base.Vector2d(*a), Base.Vector2d(*b)).toShape(surface)
-    count = max(12, int(edge.Length / 0.5))
+    count = max(24, int(edge.Length / 0.5))
     count = min(count, 80)
     pts = edge.discretize(count)
     uv = [Base.Vector2d(*to_uv(p)) for p in pts]
@@ -315,8 +314,9 @@ def _map_edge(edge, to_uv, surface):
     return curve.toShape(surface)
 
 
-def _bend_zone_solid(zone_faces, origin, along, across, normal, s0, s1, axis_pt, top_radius,
-                     thickness, rn, up, angle):
+def _bend_zone_solid(
+    zone_faces, origin, along, across, normal, s0, s1, axis_pt, top_radius, thickness, rn, up, angle
+):
     """The zone laid onto the bend's cylinders: the full-width slab revolved round the bend's
     axis (exact planes and cylinders), less the parts of the slab that are not sheet (holes,
     notches, a slanted outline), each mapped onto the cylinders and cut away."""
@@ -469,8 +469,19 @@ def fold(shape, face_name, stationary_point, lines, options, thickness, radius, 
             axis_pt = origin + across * s0 - normal * (radius + thickness)
             top_radius = radius + thickness
         bent_zone = _bend_zone_solid(
-            faces, origin, along, across, normal, s0, s1, axis_pt, top_radius, thickness, rn,
-            up, angle,
+            faces,
+            origin,
+            along,
+            across,
+            normal,
+            s0,
+            s1,
+            axis_pt,
+            top_radius,
+            thickness,
+            rn,
+            up,
+            angle,
         )
         moved = moving.copy()
         moved.translate(across * (-ba))
@@ -486,7 +497,7 @@ def _distance_to_line(point, a, b):
     return (rel - d * rel.dot(d)).Length
 
 
-# -- the step ---------------------------------------------------------------------------------------
+# -- the step -------------------------------------------------------------------------------
 class BendFeature:
     """Saved in files as "sciforge.sheetmetal_bend.BendFeature": keep the name and properties."""
 

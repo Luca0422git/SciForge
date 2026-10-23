@@ -267,9 +267,8 @@ def _solve(f, lo, hi, steps=80):
 
 def _lowest_tip(pieces, end, thickness):
     """Lowest y of the strip's end cap (the tip of the hem's last run)."""
-    x, y, heading = end
-    h = math.radians(heading)
-    nx, ny = -math.sin(h) * thickness / 2.0, math.cos(h) * thickness / 2.0
+    _x, y, heading = end
+    ny = math.cos(math.radians(heading)) * thickness / 2.0
     return min(y + ny, y - ny)
 
 

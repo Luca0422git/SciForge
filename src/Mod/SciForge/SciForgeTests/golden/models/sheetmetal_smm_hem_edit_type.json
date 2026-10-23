@@ -1,0 +1,67 @@
+{
+  "id": "sheetmetal_smm_hem_edit_type",
+  "title": "Hem: made Open, then edited to Rolled from the timeline (flipped under the sheet)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_sm_hem",
+      "id": "h1",
+      "edges": [
+        [
+          100,
+          20,
+          1
+        ]
+      ],
+      "options": {
+        "type": "open"
+      }
+    },
+    {
+      "op": "sf_sm_more_edit",
+      "target": "h1",
+      "set": {
+        "type": "rolled",
+        "flip": true
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4351.238898,
+    "bbox": [
+      0.0,
+      0.0,
+      -5.0,
+      100.0,
+      40.0,
+      1.0
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "the rolled hem's volume does not depend on the side it rolls to"
+  }
+}

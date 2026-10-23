@@ -56,11 +56,15 @@ def end_frame(shape, edge_name, thickness):
         raise sb.SheetMetalError("Pick a straight edge at the end of a flange.")
     faces = [f for f in shape.ancestorsOfType(edge, Part.Face) if sb.is_plane(f)]
     if len(faces) != 2:
-        raise sb.SheetMetalError("Pick an edge at the end of a flange, where its face meets its end.")
+        raise sb.SheetMetalError(
+            "Pick an edge at the end of a flange, where its face meets its end."
+        )
     walls = [f for f in faces if sb.face_thickness(shape, f, thickness)]
     ends = [f for f in faces if f not in walls]
     if len(walls) != 1 or len(ends) != 1:
-        raise sb.SheetMetalError("Pick an edge at the end of a flange, where its face meets its end.")
+        raise sb.SheetMetalError(
+            "Pick an edge at the end of a flange, where its face meets its end."
+        )
     wall, end = walls[0], ends[0]
     if abs(sb.plane_normal(wall).dot(sb.plane_normal(end))) > 1e-4:
         raise sb.SheetMetalError("The flange's end must be square to the flange.")
@@ -142,19 +146,31 @@ def closure_shape(shape, dominant, submissive, options, thickness, miter_gap):
             if ydir.Length < 1e-9:
                 ydir = normal.cross(fr["out"])
             keep = sb.frame_box(
-                corner + normal * reach, normal, sb.unit(ydir), sb.unit(normal.cross(sb.unit(ydir))),
-                0.0, big, -big, big, -big, big,
+                corner + normal * reach,
+                normal,
+                sb.unit(ydir),
+                sb.unit(normal.cross(sb.unit(ydir))),
+                0.0,
+                big,
+                -big,
+                big,
+                -big,
+                big,
             )
             pieces.append(prism.common(keep))
     elif alignment == "overlap":
         overlap = float(options.get("overlap", 1.0))
         end_d = fd["side"].CenterOfMass
-        planes = [(fs["start"] - end_d).dot(fd["out"]),
-                  (fs["start"] - fs["normal"] * thickness - end_d).dot(fd["out"])]
+        planes = [
+            (fs["start"] - end_d).dot(fd["out"]),
+            (fs["start"] - fs["normal"] * thickness - end_d).dot(fd["out"]),
+        ]
         far = max(planes) - core.closure_reach("overlap", gap, thickness, overlap, True)
         end_s = fs["side"].CenterOfMass
-        planes = [(fd["start"] - end_s).dot(fs["out"]),
-                  (fd["start"] - fd["normal"] * thickness - end_s).dot(fs["out"])]
+        planes = [
+            (fd["start"] - end_s).dot(fs["out"]),
+            (fd["start"] - fd["normal"] * thickness - end_s).dot(fs["out"]),
+        ]
         near = min(planes) - gap
         if far > 1e-6:
             pieces.append(fd["side"].extrude(fd["out"] * far))
@@ -253,8 +269,9 @@ def build(obj):
         raise sb.SheetMetalError("Pick the Dominant Edge and the Submissive Edge.")
     shape = base.Shape.copy()
     shape.Placement = App.Placement()
-    result = closure_shape(shape, d[1][0], s[1][0], options_of(obj), thickness,
-                           float(rule["miter_gap"]))
+    result = closure_shape(
+        shape, d[1][0], s[1][0], options_of(obj), thickness, float(rule["miter_gap"])
+    )
     if obj.Refine:
         try:
             result = result.removeSplitter()

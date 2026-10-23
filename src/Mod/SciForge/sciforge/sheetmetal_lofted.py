@@ -299,9 +299,11 @@ def _die(w1, w2, thickness, orientation):
     if w1.isClosed():
         ring = _align_closed(_polyline(w1, "facet_number", 1), _polyline(w2, "facet_number", 1))
         w2 = _rewire_from(w2, ring[0])
-    sides = [(thickness / 2.0, 1.0), (thickness / 2.0, -1.0)] if orientation == "center" else [
-        (thickness, 1.0 if orientation == "side1" else -1.0)
-    ]
+    sides = (
+        [(thickness / 2.0, 1.0), (thickness / 2.0, -1.0)]
+        if orientation == "center"
+        else [(thickness, 1.0 if orientation == "side1" else -1.0)]
+    )
     if not w1.isClosed():
         # an open profile (a straight line has no plane of its own to thicken in): very
         # fine facets, which look smooth
@@ -467,9 +469,7 @@ def build(obj):
     thickness = sb.rule_values(body)[0]
     opts = options_of(obj)
     obj.Developable = opts["forming"] == "brake"
-    solid = lofted_shape(
-        profile_edges(obj.Profile1), profile_edges(obj.Profile2), opts, thickness
-    )
+    solid = lofted_shape(profile_edges(obj.Profile1), profile_edges(obj.Profile2), opts, thickness)
     local = bodies.to_local(solid, body)
     base = obj.BaseFeature
     if obj.Join and base is not None and not base.Shape.isNull() and base.Shape.Solids:
@@ -484,9 +484,26 @@ def build(obj):
     return local
 
 
+def _whole(links):
+    """[(owner, [edge names])]: an owner given with no names stands for all its edges (a
+    link with no sub-elements would be dropped by FreeCAD)."""
+    out = []
+    for owner, subs in links:
+        subs = [s for s in subs if s]
+        if not subs:
+            try:
+                if owner.Shape.isNull():
+                    owner.recompute()
+            except Exception:
+                pass
+            subs = ["Edge%d" % i for i in range(1, len(owner.Shape.Edges) + 1)]
+        out.append((owner, subs))
+    return out
+
+
 def apply(obj, profile1, profile2, options):
-    obj.Profile1 = [(o, list(s)) for o, s in profile1]
-    obj.Profile2 = [(o, list(s)) for o, s in profile2]
+    obj.Profile1 = _whole(profile1)
+    obj.Profile2 = _whole(profile2)
     obj.FormingType = core.FORMING_LABELS[options.get("forming", "brake")]
     obj.FacetControl = core.FACET_LABELS[options.get("control", "chord_tolerance")]
     obj.FacetValue = float(options.get("value", core.FACET_DEFAULTS["chord_tolerance"]))
@@ -505,9 +522,7 @@ def target_body(doc, operation, active=None, rule_name=None):
         return active
     component = components.active_component(doc) if App.GuiUp else None
     body = components.new_body_in(doc, component)
-    sheetmetal.make_sheet_metal_body(
-        body, rule_name or sheetmetal.active_rule_name(doc, component)
-    )
+    sheetmetal.make_sheet_metal_body(body, rule_name or sheetmetal.active_rule_name(doc, component))
     return body
 
 

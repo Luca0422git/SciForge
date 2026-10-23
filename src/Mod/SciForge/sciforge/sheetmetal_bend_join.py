@@ -205,8 +205,9 @@ def build(obj):
     thickness_b = sb.rule_values(other_body)[0]
     shape_a = bodies.global_shape(base)
     shape_b = bodies.global_shape(other)
-    joined = join_shapes(shape_a, first[1][0], shape_b, second[1][0], thickness, radius,
-                         thickness_b)
+    joined = join_shapes(
+        shape_a, first[1][0], shape_b, second[1][0], thickness, radius, thickness_b
+    )
     if obj.Refine:
         try:
             joined = joined.removeSplitter()

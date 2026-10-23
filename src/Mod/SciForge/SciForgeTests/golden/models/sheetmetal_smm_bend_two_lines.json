@@ -1,0 +1,83 @@
+{
+  "id": "sheetmetal_smm_bend_two_lines",
+  "title": "Bend: two bend lines on one plate (a U), bent farthest first",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            30,
+            -5,
+            30,
+            45
+          ]
+        },
+        {
+          "line": [
+            70,
+            -5,
+            70,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        20,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "center"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4007.539822,
+    "bbox": [
+      0.0,
+      0.0,
+      0.0,
+      30.869,
+      40.0,
+      41.7381
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "two 90 degree bends: the flat plate 4000 less two flat zones (2 x 2.26195 x 40) plus two bent zones (2 x 94.2478)"
+  }
+}
