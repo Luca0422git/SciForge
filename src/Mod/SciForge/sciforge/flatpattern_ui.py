@@ -372,8 +372,9 @@ class CreateFlatPatternPanel(SheetPanel):
             )
             return
         try:
+            flatpattern.check_folded(self.body)
             result = unfolder.unfold(self.base.Shape, face, _k(self.body))
-        except unfolder.UnfoldError as exc:
+        except (unfolder.UnfoldError, flatpattern.FlatPatternError) as exc:
             self.say("⚠ %s" % exc)
             return
         frame = unfolder.flat_frame(result)

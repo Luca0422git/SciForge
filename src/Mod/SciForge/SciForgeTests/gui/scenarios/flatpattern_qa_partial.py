@@ -5,7 +5,9 @@ the browser (QA paths the builder's scenarios left out), real input only. A U ch
 
 1. SHEET METAL > Unfold, a click on the floor (Stationary Entity) and on the inside of the
    right bend only: the right wall lies flat, the left one stays up (88.26 long: 2 + 56 + BA
-   + 28, 30 high), OK. Refold, OK: the channel is folded again (same volume).
+   + 28, 30 high), OK. Create Flat Pattern now is refused ("Refold it first": the flat of a
+   half-unfolded part lost the bend lines of the bends laid flat), Esc. Refold, OK: the
+   channel is folded again (same volume).
 2. The Unfold edited from the timeline (its folder opened): Unfold All Bends ticked, OK: two
    bends laid flat, the Refold after it still folds the channel back (valid, same volume).
    Ctrl+Z: one bend again, still folded.
@@ -72,6 +74,30 @@ def one_bend_flat():
 
 def unfold_ok():
     fs.ok()
+
+
+def flat_while_unfolded():
+    fs.settle()
+    h.check("Unfold closed", not fs.dialog_open())
+    Gui.Selection.clearSelection()
+    h.ribbon("Create Flat Pattern")
+
+
+def flat_click_unfolded():
+    h.fit()
+    h.click(fs.U_TOP)
+
+
+def flat_refused_unfolded():
+    fs.settle()
+    text = fs.message()
+    h.check("Create Flat Pattern while unfolded: Refold first", "Refold it first" in text, text)
+    fs.esc()
+
+
+def flat_none():
+    fs.settle()
+    h.check("Esc closes it, no flat pattern", not fs.dialog_open() and fs.flat_patterns() == [])
 
 
 def refold():
@@ -245,6 +271,10 @@ h.run(
         click_bend,
         one_bend_flat,
         unfold_ok,
+        flat_while_unfolded,
+        flat_click_unfolded,
+        flat_refused_unfolded,
+        flat_none,
         refold,
         refold_ok,
         refolded,
