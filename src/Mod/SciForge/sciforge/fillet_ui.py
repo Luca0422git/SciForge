@@ -15,6 +15,9 @@ A size dragged or typed past what fits stops at the largest size that works (Luc
 2026-10-21; Fusion refuses it instead), and the dialog says so: "Largest that fits here: 3.47
 mm" (value_limits.py). A size from a formula is not rewritten: it is reported in the dialog,
 with that limit, and OK waits for a fix. Nothing is printed to the Report view.
+While an arrow is dragged the round (or bevel) follows the mouse as a live picture
+(fillet_live.py, a few milliseconds per move) and the exact solid is built once the mouse
+rests or is let go, as Draft's does (2026-10-23).
 
 Fusion's selection box has rows ("+" adds one): each row is a selection set with its own
 size and type, one step in the timeline, one undo step. The Fillet dialog also has

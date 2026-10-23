@@ -256,7 +256,8 @@ def dragged_far():
     reached = [k for k, x in enumerate(samples) if abs(x["value"] - r) < 1e-9]
     after = samples[reached[0] :] if reached else []
     past = [x["live"] for x in after if x["live"] is not None and x["live"] > r + 1e-9]
-    h.check("the drag reached the limit while held", bool(after), [x["value"] for x in samples][-6:])
+    tail = [x["value"] for x in samples][-6:]
+    h.check("the drag reached the limit while held", bool(after), tail)
     h.check("once the limit is known, no picture past it", bool(after) and not past, past[:4])
     exact_shown("held at the limit", one_edge(r))
 
