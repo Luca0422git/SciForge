@@ -21,13 +21,14 @@ editing the rule recomputes every flange that follows it.
 
 import FreeCAD as App
 
-from . import bodies, curves, log, sheetmetal, warn
+from . import bodies, curves, log, preview, sheetmetal, warn
 from . import sheetmetal_core as core
 from . import sheetmetal_form as form
 from .sheetmetal_form import FormError
 
 TYPE = "PartDesign::FeaturePython"
 SCIFORGE_TYPE = "Flange"
+META = "SciForgeFlange"
 KINDS = ("base", "contour", "edge")
 OPERATIONS = ("new_body", "new_component", "join")
 
@@ -186,6 +187,8 @@ class FlangeFeature:
         add("App::PropertyLinkSubListGlobal", "Profiles", "Flange", "Sketch profiles or curves")
         add("App::PropertyLinkSubList", "Edges", "Flange", "Edges of the sheet metal body")
         add("App::PropertyLinkSubGlobal", "Target", "Flange", "To Object: face or plane")
+        if add("App::PropertyLinkGlobal", "SciForgeRules", "Base", "The design's rules"):
+            obj.setEditorMode("SciForgeRules", 2)
         for key, (prop, group) in ENUMS.items():
             if add("App::PropertyEnumeration", prop, group, key):
                 setattr(obj, prop, list(LABELS[key].values()))
@@ -242,9 +245,52 @@ def options_of(obj):
     return out
 
 
+# what each kind of flange uses (the rest is hidden in the property view and in Change
+# Parameters, which skips hidden properties)
+USES = {
+    "base": {"Orientation"},
+    "contour": {"Orientation", "Distance", "Distance2", "Direction", "Flip", "BendRadius"},
+    "edge": {
+        "Height",
+        "HeightExtent",
+        "HeightDatum",
+        "BendPosition",
+        "Angle",
+        "Flip",
+        "WidthType",
+        "Width",
+        "Width1",
+        "Width2",
+        "TargetOffset",
+        "BendRadius",
+        "ReliefShape",
+        "ReliefWidth",
+        "ReliefDepth",
+        "ReliefRemnant",
+        "CornerReliefShape",
+        "CornerReliefPlacement",
+        "CornerReliefSize",
+        "Corner3ReliefShape",
+        "Corner3ReliefRadius",
+    },
+}
+
+
+def _editor_modes(obj, kind):
+    props = [p for p, _g in ENUMS.values() if p != "FlangeType"]
+    props += [p for p, _g, _d in LENGTHS.values()] + ["Angle", "Flip"]
+    for prop in props:
+        try:
+            obj.setEditorMode(prop, 0 if prop in USES.get(kind, ()) else 2)
+        except Exception:
+            pass
+
+
 def apply_options(obj, options):
     """Write options into the step's properties (only what changed)."""
     check_options(options)
+    if "kind" in options:
+        _editor_modes(obj, options["kind"])
     for key, (prop, _group) in ENUMS.items():
         if key in options:
             text = LABELS[key][options[key]]
@@ -510,10 +556,14 @@ def make(
     step = bodies.insert_after_tip(body, TYPE, name or "Flange")
     FlangeFeature(step)
     _attach_view_provider(step)
+    made = "new" if made_body is not None else ("marked" if marked is not None else "existing")
+    # a rule edit (and its undo) recomputes the flange: it depends on the design's rule store
+    step.SciForgeRules = sheetmetal.rules_object(doc, create=True)
+    bodies.save_meta(step, META, {"body": made})
     try:
         _set_refs(step, kind, refs, target)
         apply_options(step, opts)
-        doc.recompute()
+        preview.recompute(doc)
         problem = problem_of(step)
         if problem:
             raise FormError(problem)
@@ -525,6 +575,21 @@ def make(
     hide_sketches(refs if kind != "edge" else [])
     log("flange (%s) %s made in %s" % (kind, step.Name, body.Label))
     return step
+
+
+def discard(step):
+    """Take a flange made in an open dialog away again (its picks changed kind or were
+    cleared): with the body it made, or the sheet metal mark it gave the sketch's body."""
+    if not bodies.alive(step):
+        return
+    made = bodies.load_meta(step, META).get("body", "existing")
+    body = owner_body(step)
+    if made == "new" and body is not None:
+        _undo_make(step, body)
+        return
+    bodies.remove_step(step)
+    if made == "marked" and body is not None:
+        setattr(body, sheetmetal.RULE_PROP, "")
 
 
 def _empty(body):

@@ -609,7 +609,7 @@ SHEET_METAL_CREATE = group(
         _same(ASSEMBLE, "New Component"),
         _same(SOLID_CREATE, "Create Sketch"),
         SEP,
-        item("Flange", None, None),  # owner: sm-forming
+        item("Flange", "SciForge_Flange", "sm_flange"),  # owner: sm-forming
         # owner: sm-more
         item("Lofted Flange", "SciForge_SheetMetalLoftedFlange", "sm_lofted_flange"),
         item("Bend", "SciForge_SheetMetalBend", "sm_bend"),  # owner: sm-more
@@ -653,7 +653,7 @@ SHEET_METAL_MODIFY = group(
         _same(SOLID_MODIFY, "Appearance"),
         _same(SOLID_MODIFY, "Manage Materials"),
         SEP,
-        item("Sheet Metal Rules", None, None),  # owner: sm-forming
+        item("Sheet Metal Rules", "SciForge_SheetMetalRules", "sm_rules"),  # owner: sm-forming
         _same(SOLID_MODIFY, "Change Parameters"),
         _same(SOLID_MODIFY, "Compute All"),
     ],

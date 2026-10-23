@@ -1,0 +1,76 @@
+{
+  "id": "sheetmetal_edge_flange_tray",
+  "title": "Edge flanges on all four edges of a plate: a tray with four mitred corners",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ],
+        [
+          25,
+          30,
+          1
+        ],
+        [
+          0,
+          15,
+          1
+        ],
+        [
+          25,
+          0,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2893.718336,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      11
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "plate 1500 - strips 2 x 60 + 2 x 100 + the four 2 x 2 corners counted twice = 1196; four flanges 2 x 30 + 2 x 50 long at 11.356 per mm; each corner cuts both its flanges as in sheetmetal_edge_flange_miter"
+  }
+}

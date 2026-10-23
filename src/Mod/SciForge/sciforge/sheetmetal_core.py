@@ -313,6 +313,10 @@ def bend_start_x(position, angle_deg, inner_radius, thickness):
     half = math.radians(angle_deg) / 2.0
     if position == "adjacent":
         return 0.0
+    if position in ("inside", "outside") and angle_deg >= 180.0 - 1e-6:
+        raise ValueError(
+            "at 180 degrees the faces never meet: use Bend Position Adjacent or Tangent"
+        )
     if position == "outside":
         return -inner_radius * math.tan(half)
     if position == "tangent" and angle_deg >= 90.0 - 1e-9:

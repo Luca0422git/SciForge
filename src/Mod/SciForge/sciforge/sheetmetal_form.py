@@ -478,7 +478,10 @@ def bend_wall(frame, t0, t1, thickness, radius, angle, length, position="inside"
         raise FormError("The flange width must be more than 0.")
     T, R = thickness, radius
     a = math.radians(angle)
-    xc = core.bend_start_x(position, angle, R, T)
+    try:
+        xc = core.bend_start_x(position, angle, R, T)
+    except ValueError as exc:
+        raise FormError("Bend Position: %s." % exc)
     center = (xc, T + R)
     outer = arc(center, R + T, -math.pi / 2.0, a)
     end = seg_end(outer)
@@ -575,7 +578,10 @@ def _wall_length(frame, opts, rule, angle):
         if not target:
             raise FormError("To Object: pick the face or plane the flange runs to.")
         point, normal = V(target[0]), V(target[1]).normalize()
-        xc = core.bend_start_x(opts["position"], angle, R, T)
+        try:
+            xc = core.bend_start_x(opts["position"], angle, R, T)
+        except ValueError as exc:
+            raise FormError("Bend Position: %s." % exc)
         a = math.radians(angle)
         start2d = (xc + (R + T / 2.0) * math.sin(a), T + R - (R + T / 2.0) * math.cos(a))
         start = frame.point(start2d[0], start2d[1], frame.length / 2.0)
