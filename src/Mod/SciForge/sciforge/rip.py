@@ -92,7 +92,9 @@ def _edge_tool(solid, edge, gap):
     n1 = unfolder.normal_at(faces[0], mid)
     n2 = unfolder.normal_at(faces[1], mid)
     if n1.dot(n2) > 1 - 1e-6:
-        raise RipError("the faces at that edge are tangent: rip the bend face instead (Face)")
+        # where a wall runs into a bend: a slot of the gap's width centred on that line,
+        # straight through the sheet, the whole length of the edge
+        return _points_tool(solid, edge.Vertexes[0].Point, edge.Vertexes[-1].Point, gap)
     d = edge.Vertexes[-1].Point - edge.Vertexes[0].Point
     d.normalize()
     m = n1 - n2

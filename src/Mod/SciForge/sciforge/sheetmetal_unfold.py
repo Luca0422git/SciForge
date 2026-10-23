@@ -267,12 +267,15 @@ def _collinear(points, tol=1e-6):
     return True
 
 
-def _map_edge(edge, fn, oriented=True):
+def _map_edge(edge, fn, lines_stay=True):
     """The edge with every point sent through fn, as a line when it stays straight, else a
-    B-spline through samples."""
+    B-spline through samples. lines_stay: fn keeps straight edges straight (developing a
+    bend: only its axial lines are straight); folding onto a bend does not."""
     curve = edge.Curve
-    if isinstance(curve, Part.Line) or isinstance(curve, Part.LineSegment):
+    if isinstance(curve, (Part.Line, Part.LineSegment)) and lines_stay:
         count = 2
+    elif isinstance(curve, (Part.Line, Part.LineSegment)):
+        count = max(12, min(96, int(edge.Length / 0.2) + 4))
     else:
         span = abs(edge.LastParameter - edge.FirstParameter)
         count = max(12, min(96, int(edge.Length / 0.5) + 4, int(span * 24) + 12))
@@ -283,6 +286,10 @@ def _map_edge(edge, fn, oriented=True):
     bs = Part.BSplineCurve()
     if closed:
         bs.interpolate(pts[:-1], PeriodicFlag=True)
+    elif not lines_stay:
+        # the same parameters on the inner and the outer copy: a ruled face between them
+        # then joins each point to its own copy (straight through the thickness)
+        bs.interpolate(pts, Parameters=[i / float(len(pts) - 1) for i in range(len(pts))])
     else:
         bs.interpolate(pts)
     return bs.toShape()
@@ -779,26 +786,81 @@ def _fold_piece(fmap, piece, T, gap):
     lo_r = fmap.inner_radius - gap
     hi_r = fmap.inner_radius + T + gap
     for wire in wires:
-        # dense steps: a straight edge of the flat across the bend folds into an arc
-        step = max(0.01, min(0.2, fmap.rn * 0.03))
-        pts = wire.discretize(Distance=step)
-        if len(pts) > 1 and (pts[0] - pts[-1]).Length < 1e-7:
-            pts = pts[:-1]
-        if len(pts) < 3:
-            continue
-        rings = []
-        for radius in (lo_r, hi_r):
-            h = radius - fmap.radius
-            ring = [fmap.fold_local(p + fmap.rho0 * (h - (p - base).dot(fmap.rho0))) for p in pts]
-            ring.append(ring[0])
-            rings.append(Part.makePolygon(ring))
         try:
-            tool = Part.makeLoft(rings, True, True)
-            if tool.Volume < 0:
-                tool.reverse()
-            tools.append(tool)
+            tools.append(_fold_wire(fmap, wire, base, lo_r, hi_r))
+            continue
+        except Exception:
+            pass  # a polygon through dense points below is always possible
+        try:
+            tools.append(_fold_polygon(fmap, wire, base, lo_r, hi_r))
         except Exception as exc:
             raise UnfoldError(
                 "the cut across bend %d could not be folded: %s" % (fmap.index + 1, exc)
             )
     return tools
+
+
+def _to_radius(fmap, base, radius):
+    h = radius - fmap.radius
+
+    def fn(p):
+        return fmap.fold_local(p + fmap.rho0 * (h - (p - base).dot(fmap.rho0)))
+
+    return fn
+
+
+def _fold_wire(fmap, wire, base, lo_r, hi_r):
+    """The cut's outline folded edge by edge onto the inner and outer radius (a straight
+    edge across the bend becomes a smooth curve), joined by ruled faces through the
+    thickness: a few clean faces on the folded part."""
+    rings = []
+    caps = []
+    source = []
+    for e in wire.OrderedEdges:
+        if e.isClosed():  # a hole: four open pieces, so both rings start at the same place
+            a, b = e.FirstParameter, e.LastParameter
+            source += [
+                e.Curve.toShape(a + (b - a) * i / 4, a + (b - a) * (i + 1) / 4) for i in range(4)
+            ]
+        else:
+            source.append(e)
+    for radius in (lo_r, hi_r):
+        fn = _to_radius(fmap, base, radius)
+        edges = [_map_edge(e, fn, False) for e in source]
+        rings.append(edges)
+        cylinder = Part.Cylinder()
+        cylinder.Center = fmap.center
+        cylinder.Axis = fmap.axis
+        cylinder.Radius = radius
+        cap = Part.Face(cylinder, Part.Wire(edges))
+        cap.validate()
+        caps.append(cap)
+    sides = [Part.makeRuledSurface(a, b) for a, b in zip(rings[0], rings[1])]
+    shell = Part.Shell(sides + caps)
+    shell.fix(1e-7, 1e-7, 1e-7)
+    tool = Part.Solid(shell)
+    if tool.Volume < 0:
+        tool.reverse()
+    if not tool.isValid() or tool.Volume < 1e-9:
+        raise UnfoldError("ruled tool not valid")
+    return tool
+
+
+def _fold_polygon(fmap, wire, base, lo_r, hi_r):
+    # dense steps: a straight edge of the flat across the bend folds into an arc
+    step = max(0.01, min(0.2, fmap.rn * 0.03))
+    pts = wire.discretize(Distance=step)
+    if len(pts) > 1 and (pts[0] - pts[-1]).Length < 1e-7:
+        pts = pts[:-1]
+    if len(pts) < 3:
+        raise UnfoldError("the cut's outline is too small")
+    rings = []
+    for radius in (lo_r, hi_r):
+        fn = _to_radius(fmap, base, radius)
+        ring = [fn(p) for p in pts]
+        ring.append(ring[0])
+        rings.append(Part.makePolygon(ring))
+    tool = Part.makeLoft(rings, True, True)
+    if tool.Volume < 0:
+        tool.reverse()
+    return tool

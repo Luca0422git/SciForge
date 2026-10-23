@@ -1,12 +1,13 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Rip Between Points and a flat pattern inside a component, real input only: a sheet metal
-tube (40 x 30 x 20, corner radius 2, 1 mm) in its own component "Box". SHEET METAL > Rip,
-Type Between Points, a click on the front wall's top edge and on its bottom edge, both
-offsets typed 18 (the middle of the 36 mm wall): a 1 mm slot cuts the wall from top to
-bottom (20 mm3 gone), OK. Along Edge on a bend's tangent edge is refused ("rip the bend face
-instead"). Create Flat Pattern from the right wall: 123 + 4 BA = 132.0478 long (the front
-wall in two halves 17.5 long), 4 bends; the Flat Pattern lives in the component and its
-browser row is under it."""
+"""Rip Along Edge and Between Points, and a flat pattern inside a component, real input only:
+a sheet metal tube (40 x 30 x 20, corner radius 2, 1 mm) in its own component "Box". SHEET
+METAL > Rip, Along Edge (the default), a click on the line where the right wall meets the
+corner bend: a 1 mm gap there through the sheet (20 mm3, preview); a curved edge is refused
+("a straight edge"); Cancel. Rip, Type Between Points, a click on the front wall's top edge
+and on its bottom edge, both offsets typed 18 (the middle of the 36 mm wall): a 1 mm slot
+cuts the wall from top to bottom (20 mm3 gone), OK. Create Flat Pattern from the right wall:
+123 + 4 BA = 132.0478 long (the front wall in two halves 17.5 long), 4 bends; the Flat
+Pattern lives in the component and its browser row is under it."""
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -109,14 +110,29 @@ def edge_click():
     h.click_edge(V(40, 2, 10))
 
 
-def edge_refused():
+def edge_preview():
     fs.settle()
-    text = fs.message()
     p = fs.sheet_panel()
     picked = p.pick("edge") if p is not None else ""
     h.check("an edge picked", picked.startswith("Edge"), p and p.picks)
-    h.check("tangent edge refused: rip the bend face", "bend face" in text, text)
-    h.check("no rip step made", p is not None and p.target is None)
+    v = fs.volume()
+    h.check(
+        "Along Edge: a 1 mm gap where the wall meets the bend (20 mm3)",
+        fs.close(v, s["volume"] - 20, 2e-4),
+        (v, s["volume"] - 20),
+    )
+    h.check("no message", "⚠" not in fs.message(), fs.message())
+
+
+def click_arc():
+    # the corner bend's curved top rim: Along Edge needs a straight edge
+    h.click_edge(V(fs.TUBE_CORNER.x, fs.TUBE_CORNER.y, 20))
+
+
+def arc_refused():
+    fs.settle()
+    text = fs.message()
+    h.check("a curved edge is refused with the reason", "straight edge" in text, text)
 
 
 def edge_cancel():
@@ -125,7 +141,7 @@ def edge_cancel():
 
 def edge_after():
     fs.settle()
-    h.check("Cancel: unchanged", fs.close(fs.volume(), s["ripped"]), fs.volume())
+    h.check("Cancel: unchanged", fs.close(fs.volume(), s["volume"]), fs.volume())
 
 
 def flat():
@@ -182,6 +198,13 @@ h.run(
     [
         setup,
         in_component,
+        edge_rip,
+        edge_click,
+        edge_preview,
+        click_arc,
+        arc_refused,
+        edge_cancel,
+        edge_after,
         rip,
         rip_points,
         click_top_edge,
@@ -191,11 +214,6 @@ h.run(
         slot_preview,
         rip_ok,
         ripped,
-        edge_rip,
-        edge_click,
-        edge_refused,
-        edge_cancel,
-        edge_after,
         flat,
         flat_click,
         flat_ok,
