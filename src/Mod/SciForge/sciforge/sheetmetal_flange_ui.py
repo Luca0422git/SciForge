@@ -71,6 +71,8 @@ class FlangePanel(Panel):
         self.overlay = None
         self._quiet = False
         self.rows = {}
+        self.formula_inputs = {}
+        self.formulas = {}  # field key -> formula typed ("" once a number replaced it)
         self.owns_body = False
         if feature is not None:
             try:
@@ -85,6 +87,12 @@ class FlangePanel(Panel):
                 # the flange that made its body: its Rule box swaps the body's rule (Fusion
                 # swaps rules, never detaches them)
                 self.owns_body = flange.made_body(feature)
+                for key, (prop, _g, _d) in list(flange.LENGTHS.items()) + [
+                    ("angle", ("Angle", None, None))
+                ]:
+                    text = preview.formula_of(feature, prop)
+                    if text:
+                        self.formulas[key] = text
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self._build_form()
@@ -136,7 +144,31 @@ class FlangePanel(Panel):
         field = DistanceField(value, unit=unit, on_change=self._value_typed)
         self._row(key, label, field.widget)
         setattr(self, "f_" + key, field)
+        # a parameter or a formula typed here drives the value (Fusion's value fields)
+        self.formula_inputs[key] = preview.FormulaInput(self, key, field)
         return field
+
+    # -- formulas typed in the fields (preview.FormulaInput) ----------------------------------
+    def formula_typed(self, key, text, value):
+        self.formulas[key] = text
+        self._changed(new_geometry=True)
+
+    def formula_cleared(self, key):
+        if key in self.formulas:
+            self.formulas[key] = ""
+            self._changed(new_geometry=True)
+
+    def formula_failed(self, key, message):
+        self.message.setText("⚠ %s" % message)
+
+    def _store_formulas(self):
+        """Put the formulas on the step's properties (an empty one removes it)."""
+        if self.target is None:
+            return
+        for key, text in self.formulas.items():
+            prop = "Angle" if key == "angle" else flange.LENGTHS.get(key, (None,))[0]
+            if prop:
+                preview.set_formula(self.target, prop, text)
 
     def _check(self, key, text, value):
         box = curve_pick.checkbox(text, value)
@@ -626,6 +658,7 @@ class FlangePanel(Panel):
                 flange.update(self.target, refs=self.refs, options=options, target=self.to_object)
                 if not self.to_object:
                     self.target.Target = None
+            self._store_formulas()
             self.error = ""
         except (form.FormError, curves.CurveError, ValueError) as exc:
             self.error = str(exc)
@@ -742,15 +775,11 @@ class FlangePanel(Panel):
         )
 
     def _box_typed(self, key, text):
+        """A number, parameter or formula typed in the arrow's value box: as if typed in
+        the field."""
         if self._closed:
             return
-        field = getattr(self, "f_" + key)
-        try:
-            value = field.parse(text.strip().lstrip("="))
-        except ValueError as exc:
-            self.message.setText("⚠ " + str(exc))
-            return
-        field.take(value)
+        self.formula_inputs[key].take(text)
 
     @safe
     def _height_dragged(self, distance):
@@ -762,6 +791,8 @@ class FlangePanel(Panel):
 
     def _dragged(self, key, distance):
         value = max(0.1, abs(round(distance, 2)))
+        if self.formulas.get(key):
+            self.formulas[key] = ""  # dragging gives a plain value: the formula goes
         self._quiet = True
         try:
             getattr(self, "f_" + key).set_value(value)
