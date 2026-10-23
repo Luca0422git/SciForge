@@ -219,6 +219,11 @@ def type_formula():
         QtTest.QTest.keyClick(p.radius.widget, QtCore.Qt.Key_Tab)  # leave the box: taken
 
 
+# the hint of the largest radius comes with the error after the rest and a search (a few
+# hundred ms each): the next check waits for it (timing is judged by Luca, not here)
+type_formula.wait_ms = 4000
+
+
 def formula_explained():
     p = panel()
     text = p.message.text() if p else ""
