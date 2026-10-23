@@ -373,6 +373,10 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
             if self.picked or self.editing or not self._usable_body(body):
                 self.help.setText("This %s works on %s." % (self.title, self.body.Label))
                 return False
+            if self.target is not None:
+                # the last pick was dropped a moment ago and the preview has not removed the
+                # new step yet: it belongs to the other body, so it goes now (QA)
+                self._drop_target()
             self.switch_body(body, body.Tip)
             pickpanel.activate(body)
         name = self._name_on_base(obj, short)
@@ -561,6 +565,14 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
             self.show_status()
 
     # -- preview ------------------------------------------------------------------------------
+    def _drop_target(self):
+        """The new step goes (nothing is picked on its body any more)."""
+        target, self.target = self.target, None
+        self._looks.restore()
+        self._ghost = False
+        bodies.remove_step(target)
+        self.quiet_recompute()
+
     def _preview(self):
         if self._closed or self.base is None:
             return
@@ -568,11 +580,7 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
         if not self.picked:
             self.error = None
             if self.target is not None and not self.editing:
-                target, self.target = self.target, None
-                self._looks.restore()
-                self._ghost = False
-                bodies.remove_step(target)
-                self.quiet_recompute()
+                self._drop_target()
                 self.prepare_display()
             self.show_preview(False)
             self.show_status()
@@ -718,7 +726,9 @@ def take_blend(kind, selection_picks, solid_ready):
     picks = surface_picks(selection_picks)
     doc = App.ActiveDocument
     if picks:
-        open_panel(kind, picks=[p for p in picks if p[1].startswith("Edge")], doc=doc)
+        # on the body picked (a face picked alone: its body, not the first one shown; QA)
+        edges = [p for p in picks if p[1].startswith("Edge")]
+        open_panel(kind, body=surface_body_of(picks[0][0]), picks=edges, doc=doc)
         return True
     if selection_picks:
         return False

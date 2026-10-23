@@ -108,3 +108,56 @@ face chain that reaches an open edge; Merge of faces that meet at a sharp edge (
 smoothly are refitted); surface Fillet's Variable-with-points, G2, Setback and Rule options;
 Merge offered with history on (Fusion hides it); a surface body's steps are not baked into
 a Base Feature when history is off (`direct.freeze` bakes solids only).
+
+## QA pass (branch `sf/surface-4-qa`, 2026-10-23)
+
+An independent QA session ran every surface4 scenario, the unit tests and the golden models
+on the builder's head (all passed: 16 scenarios, 517 checks; unit 1866 OK; golden 462 + 2
+xfail), read the whole diff, probed the geometry headless (Press Pull of slanted, filleted
+and two-wall cases, Chord Length, chamfer types, refusals: all matched the maths) and added
+two scenarios for the paths not walked yet.
+
+Fixed (details in the parity doc's "QA pass"):
+
+- Deleting a step from the timeline broke the surface steps after it: a Press Pull whose
+  floor the deleted Fillet had changed lost its pick (red), and a Delete Face after it kept
+  its face number while the faces were numbered again, so it silently deleted the left wall
+  instead of the right one. Each surface-4 step now remembers a point inside each pick
+  (hidden `SciForgePickPoints`, flag NoRecompute so writing it in `execute` touches nothing)
+  and finds its picks again by it (`surfmod._names_on`, `refound_picks`, `_checked`).
+- Suppress Features on a surface-4 step blanked the body (FreeCAD's PartDesign passes a
+  suppressed step's base through as a solid: a shell comes out empty) and turned the steps
+  after it red. `SurfaceModifyFeature.onChanged` puts the surface before it back when FreeCAD
+  empties a suppressed step; `surfmod.effective_base` skips a suppressed empty step. The
+  other surface steps (surface.py) still come out empty when suppressed: for surface-3.
+- Press Pull of a wall next to a fillet now says the real reason (a tangent neighbour).
+- F with a face of a surface body selected opened the dialog on another surface body.
+- The surface dialog could leave its new step behind in the first body when the user
+  dropped the last pick and clicked another body before the preview ran.
+
+FreeCAD facts: a PropertyLinkSub to a deleted step is emptied by FreeCAD (delete.py re-links
+it first only when the element is unchanged in the step before); a property added with
+attribute 4 | 16 (Hidden | NoRecompute) can be written in `execute` without leaving the
+document touched; PartDesign's Suppressed on a PartDesign::FeaturePython never calls its
+`execute`: it sets the Shape to the base's solid (empty for a shell) and calls `onChanged`.
+
+New scenarios: `surface4_qa` (empty design; edits cancelled with Esc for Fillet, Press Pull,
+Delete Face; one Ctrl+Z after a cancelled edit; Press Pull of a floor with a rounded corner;
+the Fillet deleted in the timeline under a Press Pull and a Delete Face; Suppress and
+Unsuppress Features on the Press Pull; Merge; save,
+close, reopen, edit) and `surface4_qa_reopen` (Mirror Join with Stitch Tolerance 0.5 and
+Split Body by a surface across a save and a reopen; a Split Body edit cancelled with Esc).
+
+QA results with the fixes (FreeCAD 1.1.4, run one at a time): `surface4_qa` 87 PASS,
+`surface4_qa_reopen` 41 PASS, the builder's 16 surface4 scenarios all PASS (the same counts as
+above), regression fillet 67, fillet_chamfer 48, extrude_presspull_presspull 53,
+surface_stitch 63, surface_misc 70 all PASS; `--only base`: unit 1866 OK (9 skipped), golden
+462 pass + 2 xfail, smoke 79 PASS, journey 25 PASS, restart both phases PASS. Each fix was
+shown on the code before it: a headless probe (the Press Pull red and the wrong wall deleted
+after deleting the Fillet) and `surface4_qa` on the old `surfmod.py` (the body blank, area 0,
+after Suppress Features).
+
+Left for later (also in the parity doc's Known gaps): suppressing a surface.py step
+(Extrude, Patch, Stitch...) still empties it (surface-3's files); surface Fillet / Chamfer
+take edges only (Fusion also takes faces); Scale merges a surface body's coplanar faces
+(Refine), Fusion keeps them; the builder's gaps above.

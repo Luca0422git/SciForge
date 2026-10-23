@@ -27,6 +27,9 @@ from .surfmod_core import NeedsPick, SurfaceModifyError  # noqa: F401 (re-export
 TYPE = "PartDesign::FeaturePython"
 META = "SciForgeSurfaceModify"
 SAME = 1e-6
+# where each pick was (a point inside it, body coordinates), to find it again when the step
+# it was picked on is deleted from the timeline (QA: a Press Pull after a deleted Fillet)
+MEMORY = "SciForgePickPoints"
 
 
 # -- shapes ----------------------------------------------------------------------------------
@@ -627,6 +630,28 @@ def _slide_corners(shape, picked, planes, d):
     return sew(faces)
 
 
+TANGENT_NEIGHBOUR = (
+    "A face next to it meets it smoothly (tangent), so it cannot follow the move. "
+    "Change that face itself (a fillet: its radius), or use Offset (SURFACE > CREATE)."
+)
+
+
+def _tangent_neighbour(shape, face, n):
+    """True when a face next to `face` meets it smoothly (a fillet): it runs on from the
+    shared edge square to the normal `n`, so it cannot be carried on to the moved plane."""
+    for edge in face.Edges:
+        for other in faces_of_edge(shape, edge):
+            if other.isSame(face):
+                continue
+            try:
+                into = _into(other, edge, _edge_mid(edge))
+                if abs(into.dot(n)) < 1e-3:
+                    return True
+            except Exception:
+                continue
+    return False
+
+
 def _meets_at_angle(shape, face, n):
     """True when a face next to `face` does not run along its normal `n` at their shared
     edge (the band / trim way cannot be used)."""
@@ -666,6 +691,8 @@ def _retrim(shape, face, origin, n, d):
     for edge in face.Edges:
         owners = [f for f in faces_of_edge(shape, edge) if not f.isSame(face)]
         if len(owners) != 1:
+            if _tangent_neighbour(shape, face, n):  # the real reason (QA: a wall by a fillet)
+                raise SurfaceModifyError(TANGENT_NEIGHBOUR)
             raise SurfaceModifyError(
                 "That face has an open edge, and the faces next to it meet it at an angle: "
                 "SciForge cannot tell where its open edge should go. Use Offset (SURFACE > "
@@ -680,11 +707,7 @@ def _retrim(shape, face, origin, n, d):
         mid = _edge_mid(edge)
         into = _into(other, edge, mid)
         if abs(into.dot(n)) < 1e-3:
-            raise SurfaceModifyError(
-                "A face next to it meets it smoothly (tangent), so it cannot follow the move. "
-                "Change that face itself (a fillet: its radius), or use Offset (SURFACE > "
-                "CREATE)."
-            )
+            raise SurfaceModifyError(TANGENT_NEIGHBOUR)
         grown = other
         if core.press_pull_action(into.dot(n), d) == "extend":
             reach = abs(d) / abs(into.dot(n)) * 1.5 + 1.0
@@ -1312,6 +1335,8 @@ class SurfaceModifyFeature:
             bodies.mark(obj, core.TYPES[kind])
         kind = kind_of(obj)
         add("App::PropertyLinkSub", "Picks", "The picked edges or faces (on the step before)")
+        # hidden, and a change of it does not ask for a recompute (it is set in execute)
+        add("App::PropertyString", MEMORY, "Where the picks were", "Base", 4 | 16)
         if kind == "surface_fillet":
             if add("App::PropertyLength", "Radius", "Radius"):
                 obj.Radius = 1.0
@@ -1338,12 +1363,31 @@ class SurfaceModifyFeature:
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
 
+    def onChanged(self, obj, prop):
+        """Suppressed in the timeline: FreeCAD's PartDesign passes the step before through as
+        a solid, so a surface body's shell came out empty and the body (with every step
+        after it) went blank. The step then shows the surface before it (QA)."""
+        if prop != "Shape" or getattr(self, "_passing", False):
+            return
+        try:
+            if not getattr(obj, "Suppressed", False) or not obj.Shape.isNull():
+                return
+            base = effective_base(obj)
+            if base is not None and has_faces(base.Shape):
+                self._passing = True
+                obj.Shape = base.Shape.copy()
+        except Exception:
+            pass
+        finally:
+            self._passing = False
+
     def execute(self, obj):
         try:
-            base = obj.BaseFeature
+            base = effective_base(obj) or obj.BaseFeature
             if base is None or base.Shape.isNull() or not base.Shape.Faces:
                 raise SurfaceModifyError("There is no body before this step.")
             obj.Shape = compute(obj, base.Shape)
+            remember_picks(obj, base.Shape, _names_on(obj, base.Shape))
         except Exception:
             bodies.pass_through(obj)  # the body as it was before it; the step shows red
             raise
@@ -1356,6 +1400,20 @@ class SurfaceModifyFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def effective_base(obj):
+    """The step this one builds on: its BaseFeature, or, when that is suppressed in the
+    timeline and holds nothing (a surface step suppressed by FreeCAD's PartDesign comes out
+    empty), the first step before it that holds the surface."""
+    base = getattr(obj, "BaseFeature", None)
+    seen = set()
+    while base is not None and base.Name not in seen:
+        seen.add(base.Name)
+        if has_faces(base.Shape) or not bodies.is_suppressed(base):
+            return base
+        base = getattr(base, "BaseFeature", None)
+    return getattr(obj, "BaseFeature", None)
 
 
 def kind_of(obj):
@@ -1395,11 +1453,107 @@ def options_of(obj):
     return o
 
 
+def remember_picks(obj, shape, names):
+    """Keep a point inside each pick (an edge's middle) in the step's MEMORY."""
+    import json
+
+    from . import drafting
+
+    rows = []
+    for name in names:
+        try:
+            elem = shape.getElement(name)
+            point = drafting._inner_point(elem) if elem.ShapeType == "Face" else _edge_mid(elem)
+        except Exception:
+            rows = None  # not all of them are there: nothing is remembered (no wrong guess)
+            break
+        rows.append([elem.ShapeType, round(point.x, 9), round(point.y, 9), round(point.z, 9)])
+    text = json.dumps(rows) if rows is not None else ""
+    if MEMORY in obj.PropertiesList and getattr(obj, MEMORY) != text:
+        setattr(obj, MEMORY, text)
+
+
+def _memory(obj):
+    import json
+
+    try:
+        rows = json.loads(getattr(obj, MEMORY, "") or "[]")
+        return [(r[0], Part.Vertex(App.Vector(r[1], r[2], r[3]))) for r in rows]
+    except Exception:
+        return []
+
+
+def _element_at(shape, kind, point):
+    """The name of the face (edge) of `shape` through `point`, or ''."""
+    items = shape.Faces if kind == "Face" else shape.Edges
+    best = None
+    for i, item in enumerate(items, start=1):
+        try:
+            gap = item.distToShape(point)[0]
+        except Exception:
+            continue
+        if gap < 1e-6 and (best is None or gap < best[0]):
+            best = (gap, i)
+    return "%s%d" % (kind, best[1]) if best is not None else ""
+
+
+def refound_picks(obj, shape):
+    """The picks found again on `shape` where they were (MEMORY), after the step they were
+    picked on was deleted (FreeCAD then empties the link), or [] when one is not there."""
+    names = []
+    for kind, point in _memory(obj):
+        name = _element_at(shape, kind, point)
+        if not name:
+            return []
+        if name not in names:
+            names.append(name)
+    return names
+
+
+def _checked(obj, shape, names):
+    """`names` on `shape`, each one that is no longer where its pick was (an earlier step
+    was deleted or changed and the faces were numbered again: a Delete Face would take
+    another wall) replaced by the element that is there now. A pick that moved with an
+    edit (nothing else is where it was) keeps its name."""
+    rows = _memory(obj)
+    if len(rows) != len(names):
+        return names
+    out = []
+    for name, (kind, point) in zip(names, rows):
+        try:
+            elem = shape.getElement(name)
+            if elem.ShapeType == kind and (
+                elem.distToShape(point)[0] < 1e-6 or _on_its_surface(elem, point.Point)
+            ):
+                out.append(name)  # where it was, or the same surface grown / cut back
+                continue
+        except Exception:
+            pass
+        other = _element_at(shape, kind, point)
+        out.append(other if other and other not in out else name)
+    return out
+
+
+def _on_its_surface(elem, point):
+    """True when `point` lies on the surface (curve) the face (edge) is a piece of: the pick
+    is that piece still, only bigger or smaller (Split Face moved, a Press Pull edited)."""
+    try:
+        if elem.ShapeType == "Face":
+            u, v = elem.Surface.parameter(point)
+            return (elem.Surface.value(u, v) - point).Length < 1e-6
+        t = elem.Curve.parameter(point)
+        return (elem.Curve.value(t) - point).Length < 1e-6
+    except Exception:
+        return False
+
+
 def _names_on(obj, base_shape):
     """The picked element names, on the shape this step builds on."""
     source, names = picks_of(obj)
-    if source is None or source is obj.BaseFeature:
-        return names
+    if source is None:  # the step they were picked on was deleted: where they were
+        return refound_picks(obj, base_shape) or names
+    if source is obj.BaseFeature:
+        return _checked(obj, base_shape, names)
     found = []
     for name in names:  # picked on an earlier step: the same element on the base now
         try:
@@ -1474,6 +1628,8 @@ def apply(obj, base, names, options):
     current = picks_of(obj)
     if current[0] is not base or current[1] != list(names):
         obj.Picks = (base, list(names))
+        if base is not None and has_faces(base.Shape):
+            remember_picks(obj, base.Shape, list(names))  # where the new picks are
     if kind == "surface_fillet":
         if abs(obj.Radius.Value - float(options["radius"])) > 1e-12:
             obj.Radius = float(options["radius"])
@@ -1529,9 +1685,16 @@ def make(kind, body, base, names, options, name=None, check=True):
 
 
 def read(step):
-    """(base, names, options) of an existing step."""
+    """(base, names, options) of an existing step. Picks whose step was deleted are found
+    again on the step before, where they were."""
     source, names = picks_of(step)
-    return source or step.BaseFeature, names, options_of(step)
+    base = step.BaseFeature
+    if base is not None and has_faces(base.Shape):
+        try:
+            names = _names_on(step, base.Shape)  # on the step before, where they are now
+        except SurfaceModifyError:
+            pass
+    return base or source, names, options_of(step)
 
 
 def _attach_view_provider(step):

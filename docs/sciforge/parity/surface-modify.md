@@ -127,6 +127,16 @@ Results and check counts: `docs/sciforge/sessions/surface-4.md`.
     Ctrl+Y, SURFACE Delete, Fillet, history turned on again.
   - `surface4_step_part`: SURFACE Delete of a face of a STEP part without history (taken
     into a body, it becomes a surface body), Ctrl+Z / Ctrl+Y, Fillet on it.
+  - `surface4_qa` (QA): an empty design (Fillet, Q and Del open no surface dialog and raise
+    nothing); a Fillet edited to another radius then Esc (the radius and the shape come
+    back, one Ctrl+Z then removes the fillet); Q on a floor with a rounded corner (the
+    fillet grows with the walls); a Press Pull edit and a Delete Face edit cancelled with
+    Esc; the Fillet deleted in the timeline while a Press Pull and a Delete Face come after
+    it (both keep working on the same faces); Suppress / Unsuppress Features on the Press
+    Pull (the body is not blank); Merge; save, close, reopen, edit again.
+  - `surface4_qa_reopen` (QA): Mirror Join with Stitch Tolerance 0.5 and Split Body by a
+    surface, a Split Body edit (Extend off) cancelled with Esc, save, close, reopen: still
+    stitched with 0.5, the pieces kept; the Mirror edits with Join and 0.5 read back.
 - Golden models `surface4_*.json`, 22: fillet + edit + reopen, variable fillet, chord length
   fillet, chamfer + SURFACE delete, press pull + edit + reopen, press pull of a tray with
   slanted walls (its floor; two of its walls at once), of a cup's round wall, of a
@@ -166,3 +176,53 @@ Results and check counts: `docs/sciforge/sessions/surface-4.md`.
   into one Base Feature as a solid's are (`direct.freeze` bakes solids only; that file
   belongs to the direct-modify area): they stay hidden while history is off and show in the
   timeline again when it is turned back on.
+- **Scale of a surface body merges faces that end up in one plane** (Refine, as SciForge's
+  Scale does on solids: the two floor halves of a mirrored and stitched box become one face).
+  Fusion's Scale keeps every face; a face split on purpose (Split Face) is joined again by a
+  Scale after it. Left as built (the solid Scale behaves the same; G).
+- **Suppressing a surface step that is not surface-4's** (surface.py: Extrude, Patch,
+  Stitch...) still leaves it empty (FreeCAD passes a suppressed step's base through as a
+  solid): the body after it is built on the step before it, but a suppressed surface Stitch
+  that is the body's last step shows nothing. The fix belongs in surface.py (as
+  `SurfaceModifyFeature.onChanged` does) or in the timeline's Suppress.
+- **Surface Fillet / Chamfer take edges only**: Fusion's selection also takes a face (all
+  its edges). A face of a surface body selected before F opens the dialog on that body with
+  nothing picked: click the edges.
+
+## QA pass (branch `sf/surface-4-qa`, 2026-10-23)
+
+Found and fixed:
+
+- **A step deleted from the timeline broke the surface steps after it, or made them take
+  another face.** Deleting a Fillet under a Press Pull emptied the Press Pull's picks (its
+  floor had been changed by the fillet, so Delete could not re-link it): the step went red,
+  "Select a face of a surface body". Worse, a Delete Face after it kept its face *number*
+  while the faces were numbered again, and silently deleted the left wall instead of the
+  right one. Every surface-4 step now remembers a point inside each pick (hidden property
+  `SciForgePickPoints`, written when it computes and when its picks change): a pick whose
+  step was deleted is found again where it was, and a pick whose number now names a face
+  somewhere else is replaced by the face that is where it was (`surfmod._names_on`,
+  `refound_picks`, `_checked`). The edit dialog reads the picks the same way. Files saved
+  before have no memory: they behave as before until their first recompute.
+- **Suppress Features on a surface step blanked the body.** FreeCAD's PartDesign passes a
+  suppressed step's base through as a solid; a surface body's shell came out empty, so the
+  body showed nothing and the steps after it went red. A suppressed surface-4 step now shows
+  the surface before it (`SurfaceModifyFeature.onChanged`), and a surface-4 step after a
+  suppressed step that came out empty builds on the first step before it that holds the
+  surface (`surfmod.effective_base`). Still open (not surface-4's files): the other surface
+  steps (surface.py's Extrude, Patch, Stitch...) come out empty the same way when suppressed.
+- Press Pull of a wall next to a fillet (a flat face with an open edge and a tangent
+  neighbour) was refused with "the faces next to it meet it at an angle": it now gives the
+  real reason (a face next to it meets it smoothly).
+- A face of a surface body selected before F / Fillet opened the surface Fillet on the first
+  surface body shown, not on the picked one.
+- The surface dialog switching to another body could leave the new step of the first body
+  behind for a moment (the last pick dropped and another body clicked before the preview
+  ran): the step now goes before the switch.
+
+Checked and found right: Cancel / Esc of every surface dialog after a change (the step's
+values and the shape come back; one undo step per OK), save and reopen of Fillet, Press Pull,
+Delete Face, Merge, Mirror Join (Stitch Tolerance kept) and Split Body by a surface, no
+exception or unprefixed log line in any scenario log, the maths of Press Pull (slanted,
+filleted and two-wall cases), Chord Length and the chamfer types (headless probes).
+
