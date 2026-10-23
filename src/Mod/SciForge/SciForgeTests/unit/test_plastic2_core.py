@@ -14,6 +14,13 @@ from sciforge import plastic_advice_core as advice  # noqa: E402
 from sciforge import plastic_lip_core as lip  # noqa: E402
 from sciforge import plastic_snap_core as snap  # noqa: E402
 
+try:  # Design Advice's ray casting uses numpy (FreeCAD ships it; CI's plain Python may not)
+    import numpy  # noqa: F401
+
+    HAVE_NUMPY = True
+except ImportError:
+    HAVE_NUMPY = False
+
 RULE = {
     "name": "Default (mm)",
     "thickness": 2.0,
@@ -226,6 +233,7 @@ class AdviceChecks(unittest.TestCase):
         self.assertTrue(advice.undercut_issue((1, 0, 0), up, True, True))
         self.assertFalse(advice.undercut_issue((1, 0, 0), up, True, False))
 
+    @unittest.skipUnless(HAVE_NUMPY, "numpy not installed")
     def test_rays(self):
         tri = [((0, 0, 5), (10, 0, 5), (0, 10, 5)), ((0, 0, 9), (10, 0, 9), (0, 10, 9))]
         hits = advice.first_hits([(1, 1, 0), (1, 1, 6), (9, 9, 0)], [(0, 0, 1)] * 3, tri)
@@ -242,6 +250,7 @@ class AdviceChecks(unittest.TestCase):
         self.assertEqual([h[1] for h in hits], [0, 1])
         self.assertAlmostEqual(hits[1][0], 9.0)
 
+    @unittest.skipUnless(HAVE_NUMPY, "numpy not installed")
     def test_nearest_triangle(self):
         tri = ((0, 0, 0), (10, 0, 0), (0, 10, 0))
         self.assertAlmostEqual(advice.point_triangle_distance((2, 2, 3), tri), 3.0)  # above
