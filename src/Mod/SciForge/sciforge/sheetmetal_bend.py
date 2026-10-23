@@ -206,8 +206,39 @@ def edge_frame(shape, edge_name, thickness, tol=1e-3):
         vals = [v.Point.dot(direction) for v in face.Vertexes]
         return max(vals) - min(vals)
 
-    a_side = abs(extent(a, nb) - thickness) < tol
-    b_side = abs(extent(b, na) - thickness) < tol
+    mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
+    along_edge = unit(edge.Vertexes[-1].Point - edge.Vertexes[0].Point)
+
+    def thick_here(face, direction):
+        """The side face is as thick as the sheet at the edge: the whole face (a plain side),
+        or where the edge is (a side that runs on into a flange's side, merged into one face
+        with it: the sheet's outline next to a flange)."""
+        if abs(extent(face, direction) - thickness) < tol:
+            return True
+        try:
+            # from the edge across the side face, away from the other (top) face, whose
+            # outward normal `direction` is
+            inward = direction * -1.0
+            half = mid + inward * (0.5 * thickness)
+            far = mid + inward * thickness
+            beyond = mid + inward * (thickness + 10.0 * tol)
+            if not face.isInside(half, 1e-6, True) or face.isInside(beyond, 1e-6, False):
+                return False
+            # the far side is the sheet's other face: an edge of it lies there, along the edge
+            for other in face.Edges:
+                if not isinstance(other.Curve, (Part.Line, Part.LineSegment)):
+                    continue
+                d = other.Vertexes[-1].Point - other.Vertexes[0].Point
+                if d.Length < 1e-9 or abs(abs(unit(d).dot(along_edge)) - 1.0) > 1e-6:
+                    continue
+                if other.distToShape(Part.Vertex(far))[0] < tol:
+                    return True
+            return False
+        except Exception:
+            return False
+
+    a_side = thick_here(a, nb)
+    b_side = thick_here(b, na)
     if a_side and b_side:
         top, side = (a, b) if a.Area >= b.Area else (b, a)
     elif b_side:

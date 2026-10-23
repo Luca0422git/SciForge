@@ -1,0 +1,66 @@
+{
+  "id": "sheetmetal_smm_hem_beside_flange",
+  "title": "Open hem on a plate edge whose side runs on into an edge flange's side (once refused: 'not on a side as thick as the sheet')",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          100,
+          20,
+          1
+        ]
+      ],
+      "options": {
+        "height": 20
+      }
+    },
+    {
+      "op": "sf_sm_hem",
+      "id": "h1",
+      "edges": [
+        [
+          50,
+          40,
+          1
+        ]
+      ],
+      "options": {
+        "type": "open"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 5152.15484,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4 (QA): the hem adds 0.98 of what it adds on a plain 100 mm plate edge (the edge stops 2 mm short, where the flange's bend starts)"
+  }
+}
