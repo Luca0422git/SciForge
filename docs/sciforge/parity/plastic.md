@@ -168,40 +168,49 @@ follows a rule once its component gets one (QA pass).
   their own, but `default_for` / `rule_for_body` of such a body give no rule (no
   inheritance). Fusion's behaviour for sub-components is not documented.
 
-
 ## QA pass (sf/plastic-1-qa, 2026-10-23)
 
-Fixed: a rule without draft drove Draft to 0 (refused when opening Draft, and a linked
-Draft silently stopped drafting: valid, volume of the undrafted box); Boss / Rest edits
-showed the values stored when they were made, not the rule's values they are built with
-after a rule edit or reassignment (root radius 1.0 shown, 1.25 built); a new boss's root
-radius was clamped to T / 2 in the dialog while the step used the nominal radius; Rest did
-not say which rule it used and took the active body's rule rather than the rule of the body
-it builds in; rule refusals named the internal keys ("nominal_radius: ...") and a Thickness
-typed as "Thickness / 2" said "unknown name 'Thickness'"; Major Draft Angle (A-api) was not
-built and not listed as a gap; Flip with a body picked in a Side box kept the body on the
-side number (so it was looked for on the wrong side of the plane: an error) instead of on its
-side of the plane; switching a new rule's Units kept the numbers (2 mm became 2 in), they are
-converted now (G); Assign showed the library's values for a library rule the design already
-holds under that name, while the component takes the design's copy (it says so now); a boss
-whose two bodies are in components with different rules was built with each body's rule but
-showed the active body's rule's values for both sides (each side shows its own rule's values
-now, and the dialog names both rules); turning on the default ribs of a boss 10 mm from the
-case's edge refused the whole boss (the rib ends 0.25 mm from the wall cannot be rounded by
-OpenCASCADE): those rib ends are left square now, said in the dialog; a Hex / Hex Washer
-fastener head in a counterbore was 6 mm across flats in a 6.5 mm counterbore, so its corners
-cut 0.2 mm into the counterbore wall (the screw collided with the part): it is sized across
-its corners now; a Flat (countersunk) head on a counterbore's floor or on the outside face
-sank its cone 22-26 mm3 into the part: a Flat head now needs Side 1's Hole Type Countersink
-(refused with the reason otherwise); a Boss or Rest in a component without a rule followed
-the library's default rule at every recompute, so Set As Default in the user's library (a
-setting, not the design) re-sized them in every design without a rule: they now keep the
-values they were made with (from the default rule at the time) until the component gets a
-rule. The test harness's `prepare()` now resets the user's plastic library and default rule
-(`plastic.reset_for_tests()`), so a scenario after a failed plastic one in a CI shard
-(plastic-2's too) starts from the built-in default. New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
-golden `plastic_boss_major_draft`, unit tests. Every builder scenario, the plastic golden
-models, the unit tests and the shared dialogs' scenarios pass after the fixes.
+Fixed (each with a scenario path, a golden model or a unit test):
+
+- A rule without draft (FDM PLA / PETG, 0 deg) drove Draft to 0: Draft opened at 0 (which it
+  refuses) and a Draft linked to the rule silently stopped drafting (valid, the undrafted
+  volume). Draft now keeps its own angle then (`plastic.usable`).
+- Boss / Rest edits showed the values stored when they were made, not the rule's values they
+  are built with after a rule edit or reassignment (root radius 1.0 shown, 1.25 built). A new
+  boss's root radius was clamped to T / 2 in the dialog while the step used the nominal
+  radius.
+- A Boss or Rest in a component without a rule re-read the library's default rule at every
+  recompute: Set As Default in the user's library (a setting, not the design), or the file
+  opened on another computer, re-sized them. They now keep the values they were made with
+  until the component gets a rule.
+- Rest did not say which rule it used and took the active body's rule rather than the rule
+  of the body it builds in. A boss whose two bodies are in components with different rules
+  showed one rule's values for both sides (each side now shows its own, both rules named).
+- Major Draft Angle (A-api, the counterbore wall's draft) was neither built nor listed as a
+  gap: built (0 by default).
+- Flip with a body picked in a Side box kept the body on the side number, so it was looked
+  for on the wrong side of the plane (an error): the pick now stays on its side of the plane.
+- The default ribs of a boss 10 mm from the case's edge refused the whole boss (their ends,
+  0.25 mm from the wall, cannot be rounded by OpenCASCADE): those rib ends are left square,
+  said in the dialog.
+- Fastener: a Hex / Hex Washer head was 6 mm across flats in a 6.5 mm counterbore, its
+  corners cutting 0.2 mm into the wall (the screw collided with the part): sized across its
+  corners now. A Flat (countersunk) head on a counterbore's floor or the outside face sank
+  22-26 mm3 into the part: a Flat head now needs Side 1's Hole Type Countersink (refused
+  with the reason).
+- Rules: refusals named the internal keys ("nominal_radius: ..."); a Thickness typed as
+  "Thickness / 2" said "unknown name 'Thickness'"; switching a new rule's Units kept the
+  numbers (2 mm became 2 in), converted now (G); Assign showed the library's values for a
+  library rule the design already holds under that name, while the component takes the
+  design's copy (it says so now).
+- Tests: the harness's `prepare()` resets the user's plastic library and default rule
+  (`plastic.reset_for_tests()`), so a scenario after a failed plastic one in a CI shard
+  (plastic-2's too) starts from the built-in default.
+
+New tests: scenarios `plastic_qa_rules` and `plastic_qa_tools`, golden models
+`plastic_boss_major_draft` and `plastic_rest_cut`, four unit tests. Every builder scenario,
+the plastic golden models, the unit tests, `--only base` and the shared dialogs' scenarios
+pass after the fixes.
 
 ## Findings while building
 
