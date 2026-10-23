@@ -80,9 +80,11 @@ class Rim:
         self.shape = shape
         self.edges = list(edges)
         self.closed = wire.isClosed()
-        self.face = self._rim_face(shape, edges)
-        u0, u1, v0, v1 = self.face.ParameterRange
-        n = self.face.normalAt(0.5 * (u0 + u1), 0.5 * (v0 + v1))
+        self.faces = []
+        first = self._rim_face(shape, edges)
+        u0, u1, v0, v1 = first.ParameterRange
+        n = first.normalAt(0.5 * (u0 + u1), 0.5 * (v0 + v1))
+        self.face = first if len(self.faces) == 1 else _fused(self.faces)
         self.normal = V(n.x, n.y, n.z)
         self.normal.normalize()
         self.side = self._side()
@@ -111,21 +113,45 @@ class Rim:
         except Exception:
             return None
 
-    @staticmethod
-    def _rim_face(shape, edges):
-        for face in shape.Faces:
-            if type(face.Surface).__name__ != "Plane":
-                continue
-            ok = True
+    def _rim_face(self, shape, edges):
+        """The flat rim the edges bound: one face, or several faces in one plane (a rim split
+        by a notch or a step of the same height). Sets self.faces; returns the face whose
+        normal is the rim's (the others are in its plane)."""
+        import Part
+
+        def planar_faces(edge):
+            return [
+                f
+                for f in shape.ancestorsOfType(edge, Part.Face)
+                if type(f.Surface).__name__ == "Plane"
+            ]
+
+        def normal(face):
+            u0, u1, v0, v1 = face.ParameterRange
+            m = face.normalAt(0.5 * (u0 + u1), 0.5 * (v0 + v1))
+            return V(m.x, m.y, m.z)
+
+        for first in planar_faces(edges[0]):
+            n0 = normal(first)
+            origin = first.Vertexes[0].Point
+            chosen = []
             for edge in edges:
-                if not any(edge.isSame(e) for e in face.Edges):
-                    ok = False
+                found = None
+                for face in planar_faces(edge):
+                    same = normal(face).dot(n0) > 1.0 - 1e-9
+                    if same and abs((face.Vertexes[0].Point - origin).dot(n0)) < 1e-6:
+                        found = face
+                        break
+                if found is None:
                     break
-            if ok:
-                return face
+                if not any(found.isSame(f) for f in chosen):
+                    chosen.append(found)
+            else:
+                self.faces = chosen
+                return first
         raise LipError(
-            "The edges must all lie on one flat face of the body (the rim where the two "
-            "halves meet). Pick the inside edges of the rim."
+            "The edges must all lie on the flat rim of the body (where the two halves meet), "
+            "in one plane. Pick the inside edges of the rim."
         )
 
     def offset(self, d):
@@ -195,6 +221,19 @@ class Rim:
         """True when the band (a, b) lies on the rim face."""
         band = self.band(a, b)
         return band.common(self.face).Area >= band.Area * (1.0 - 1e-4) - 1e-6
+
+
+def _fused(faces):
+    """Coplanar faces as one shape (one face where they join)."""
+    try:
+        out = faces[0]
+        for face in faces[1:]:
+            out = out.fuse(face)
+        return _one_face(out.removeSplitter())
+    except Exception:
+        import Part
+
+        return Part.makeCompound(faces)
 
 
 def _one_face(shape):
@@ -530,7 +569,7 @@ def wall_lean(rim, tol=0.05):
         except Exception:
             continue
         for face in faces:
-            if face.isSame(rim.face):
+            if any(face.isSame(f) for f in rim.faces):
                 continue
             try:
                 u, v = face.Surface.parameter(mid)

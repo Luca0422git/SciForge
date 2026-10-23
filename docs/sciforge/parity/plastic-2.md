@@ -95,7 +95,7 @@ item 11).
 
 | Fusion | SciForge |
 |---|---|
-| Pick tangent edges | Click the rim's edges; **Tangent Chain** (on) takes the edges joined smoothly to the one clicked (a filleted rim in one click). Edges of one body; they must lie on one flat face (the rim, the parting face) and join end to end (a closed loop or an open chain). |
+| Pick tangent edges | Click the rim's edges; **Tangent Chain** (on) takes the edges joined smoothly to the one clicked (a filleted rim in one click). Edges of one body; they must lie on the flat rim (the parting face, one plane) and join end to end (a closed loop or an open chain). |
 | Lip / Groove / Lip And Groove | **Lip**: a lip stands on the rim from the picked edges towards the wall. **Groove**: a groove cut into the rim (its own Groove Width / Depth). **Lip And Groove**: the lip on this body and the groove (lip + Clearance each side, + Clearance Height deeper, the same drafts) in the body touching the rim, found and named in the dialog, or picked in its **Other Body** box; **Swap Lip and Groove** puts the lip on the other body. |
 | Guide Type | **Pull Direction**: the section is extruded along the rim's normal, or along a direction picked in the **Direction** box (a plane, flat face or straight edge; one along the rim is refused). **Face Guide**: the section leans with the wall beside the edges (a drafted wall: the lip's faces go on at the wall's angle, the groove's too); walls of different draft along the chain are refused with the reason. |
 | Advanced | Lip Width, Lip Height, Inner Draft, Outer Draft, Clearance, Clearance Height, Groove Width, Groove Depth, Tip Radius (round on the lip's top edges), Root Radius (blend where the lip meets the rim; the groove's mouth gets the same round, so the clearance is kept). |
@@ -162,8 +162,9 @@ measured again on the exact shape (the display triangles cut corners off round f
 - **Face Guide** leans the section with the wall when the wall has one draft along the whole
   chain; walls of different draft along one chain are refused (Fusion's per-wall behaviour
   there is not documented).
-- **Lip edges must lie on one flat face** (the usual flat parting face). A parting line that
-  steps or runs over a curved face is refused.
+- **Lip edges must lie in one plane** (the usual flat parting face; several faces in that
+  plane are fine). A parting line that steps up and down or runs over a curved face is
+  refused with the reason.
 - **Snap Fit "visibility controls"** (S13): meaning unknown; SciForge's reading is Hide
   Other Body.
 - **Aligned to a plane or face** uses the face's centre as a point; a picked straight edge
