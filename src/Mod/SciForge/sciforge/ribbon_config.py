@@ -613,12 +613,18 @@ SHEET_METAL_CREATE = group(
         _same(SOLID_CREATE, "Create Sketch"),
         SEP,
         item("Flange", "SciForge_Flange", "sm_flange"),  # owner: sm-forming
-        item("Lofted Flange", None, None),  # owner: sm-more
-        item("Bend", None, None),  # owner: sm-more
-        item("Hem", None, None),  # owner: sm-more
-        item("Join by Bend", None, None),  # owner: sm-more
+        # owner: sm-more
+        item("Lofted Flange", "SciForge_SheetMetalLoftedFlange", "sm_lofted_flange"),
+        item("Bend", "SciForge_SheetMetalBend", "sm_bend"),  # owner: sm-more
+        item("Hem", "SciForge_SheetMetalHem", "sm_hem"),  # owner: sm-more
+        item("Join by Bend", "SciForge_SheetMetalJoinBend", "sm_join_bend"),  # owner: sm-more
         SEP,
-        item("Create Flat Pattern", None, None),  # owner: sm-flat
+        item(
+            "Create Flat Pattern",
+            "SciForge_CreateFlatPattern",
+            "sm_flat_pattern",
+            note="Lay the sheet metal part flat from a top or bottom face (FLAT PATTERN tab).",
+        ),  # owner: sm-flat
         SEP,
         _same(SOLID_CREATE, "Extrude"),
         _same(SOLID_CREATE, "Hole"),
@@ -633,14 +639,26 @@ SHEET_METAL_MODIFY = group(
     ["Press Pull", "Unfold", "Refold", "Rip", "Sheet Metal Rules"],
     [
         _same(SOLID_MODIFY, "Press Pull"),
-        _same(SOLID_MODIFY, "Fillet"),  # owner: sm-more (its sheet metal Fillet, if built)
-        _same(SOLID_MODIFY, "Chamfer"),  # owner: sm-more (its sheet metal Chamfer, if built)
+        item("Fillet", "SciForge_SheetMetalFillet", "sm_fillet"),  # owner: sm-more (solid too)
+        item("Chamfer", "SciForge_SheetMetalChamfer", "sm_chamfer"),  # owner: sm-more (solid too)
         SEP,
-        item("Unfold", None, None),  # owner: sm-flat
-        item("Refold", None, None),  # owner: sm-flat
-        item("Rip", None, None),  # owner: sm-flat
-        item("Corner Closure", None, None),  # owner: sm-more
-        item("Convert to Sheet Metal", None, None),  # owner: sm-flat
+        item(
+            "Unfold", "SciForge_Unfold", "sm_unfold", note="Lay bends flat to cut across them."
+        ),  # owner: sm-flat
+        item(
+            "Refold", "SciForge_Refold", "sm_refold", note="Fold the unfolded bends back."
+        ),  # owner: sm-flat
+        item(
+            "Rip", "SciForge_Rip", "sm_rip", note="Open a closed sheet: a face, an edge or a line."
+        ),  # owner: sm-flat
+        # owner: sm-more
+        item("Corner Closure", "SciForge_SheetMetalCornerClosure", "sm_corner_closure"),
+        item(
+            "Convert to Sheet Metal",
+            "SciForge_ConvertToSheetMetal",
+            "sm_convert",
+            note="Make a solid of even thickness sheet metal.",
+        ),  # owner: sm-flat
         SEP,
         _same(SOLID_MODIFY, "Combine"),
         _same(SOLID_MODIFY, "Replace Face"),
@@ -657,6 +675,36 @@ SHEET_METAL_MODIFY = group(
         item("Sheet Metal Rules", "SciForge_SheetMetalRules", "sm_rules"),  # owner: sm-forming
         _same(SOLID_MODIFY, "Change Parameters"),
         _same(SOLID_MODIFY, "Compute All"),
+    ],
+)
+
+# ---------------------------------------------------------------- FLAT PATTERN tab (contextual)
+# Shown alone while a flat pattern is open (sm-flat, flatpattern_ui.py): Fusion's Export DXF
+# sits left of the green Finish Flat Pattern check.
+FLAT_PATTERN_EXPORT = group(
+    "fp_export",
+    "EXPORT",
+    ["Export DXF"],
+    [
+        item(
+            "Export DXF",
+            "SciForge_FlatPatternExportDXF",
+            "fp_export_dxf",
+            note="The flat pattern as DXF for a laser or water-jet cutter, bend lines on layers.",
+        ),
+    ],
+)
+FINISH_FLAT_PATTERN = group(
+    "fp_finish",
+    "FINISH FLAT PATTERN",
+    ["Finish Flat Pattern"],
+    [
+        item(
+            "Finish Flat Pattern",
+            "SciForge_FinishFlatPattern",
+            "fp_finish",
+            note="Back to the folded part.",
+        ),
     ],
 )
 
@@ -1231,6 +1279,12 @@ DRAWING_TEXT = group(
             note="Click an edge, then where the text goes; type the text.",
         ),
         item("Note", None, "dw_text"),
+        item(
+            "Bend Note",
+            "SciForge_DrawingBendNote",
+            "dw_text",
+            note="Click bend centre lines of a flat pattern view: direction, angle and radius.",
+        ),  # owner: sm-flat
     ],
 )
 DRAWING_SYMBOLS = group(
@@ -1259,6 +1313,12 @@ DRAWING_TABLES = group(
             "dw_table",
             note="A parts list of the components a view shows, with balloons.",
         ),
+        item(
+            "Bend Table",
+            "SciForge_DrawingBendTable",
+            "dw_table",
+            note="The bends of a flat pattern view, with their identifiers.",
+        ),  # owner: sm-flat
         item(
             "Balloon",
             "SciForge_DrawingBalloon",
@@ -1365,6 +1425,12 @@ TABS = [
             DRAWING_TABLES,
             DRAWING_EXPORT,
         ],
+    },
+    {
+        "id": "flat_pattern",
+        "title": "FLAT PATTERN",
+        "contextual": True,
+        "groups": [INSPECT, SELECT, FLAT_PATTERN_EXPORT, FINISH_FLAT_PATTERN],
     },
 ]
 

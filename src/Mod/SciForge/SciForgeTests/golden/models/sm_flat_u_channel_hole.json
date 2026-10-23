@@ -1,0 +1,169 @@
+{
+  "id": "sm_flat_u_channel_hole",
+  "title": "Flat pattern of a U channel with a hole in a side wall",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              30
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              60,
+              0
+            ],
+            [
+              60,
+              30
+            ],
+            [
+              59,
+              30
+            ],
+            [
+              59,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": {
+          "axis": "z",
+          "value": 0
+        },
+        "count": 2
+      }
+    },
+    {
+      "op": "fillet",
+      "id": "f2",
+      "radius": 1,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": {
+          "axis": "z",
+          "value": 1
+        },
+        "count": 2
+      }
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          1,
+          0,
+          0
+        ],
+        "at": {
+          "axis": "x",
+          "value": "max"
+        },
+        "count": 1
+      },
+      "at": [
+        60,
+        -10,
+        15
+      ],
+      "diameter": 6,
+      "depth": 3
+    },
+    {
+      "op": "sf_sm_convert",
+      "id": "c1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "rule": "template"
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2302.2035,
+    "bbox": [
+      0,
+      0,
+      -1,
+      116.52389,
+      20,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "56 + 28 + 28 + 2 BA (BA 2.26195) long, 20 wide, T 1, minus the hole pi * 3^2 * 1"
+  }
+}

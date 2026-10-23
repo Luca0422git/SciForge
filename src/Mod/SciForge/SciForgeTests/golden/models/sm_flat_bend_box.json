@@ -1,0 +1,162 @@
+{
+  "id": "sm_flat_bend_box",
+  "title": "Flat pattern of a box folded by Bend lines from a plus-shaped blank: the blank again",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "bend"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              20,
+              0
+            ],
+            [
+              80,
+              0
+            ],
+            [
+              80,
+              20
+            ],
+            [
+              100,
+              20
+            ],
+            [
+              100,
+              80
+            ],
+            [
+              80,
+              80
+            ],
+            [
+              80,
+              100
+            ],
+            [
+              20,
+              100
+            ],
+            [
+              20,
+              80
+            ],
+            [
+              0,
+              80
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              20,
+              20
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            20,
+            -5,
+            20,
+            105
+          ]
+        },
+        {
+          "line": [
+            80,
+            -5,
+            80,
+            105
+          ]
+        },
+        {
+          "line": [
+            -5,
+            20,
+            105,
+            20
+          ]
+        },
+        {
+          "line": [
+            -5,
+            80,
+            105,
+            80
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        50,
+        50,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "start"
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 8400.0,
+    "bbox": [
+      0,
+      0,
+      -1,
+      100,
+      100,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "sm-more's Bend folds the 100 x 100 plus (four 20 x 20 corners off: 8400 mm2) with Bend Line Start; laid flat with the same K-factor it is that blank again, 1 mm thick: 8400 mm3, no corner relief (no Flange made those corners)"
+  }
+}

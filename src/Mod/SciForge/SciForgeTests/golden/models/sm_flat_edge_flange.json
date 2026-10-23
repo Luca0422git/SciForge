@@ -1,0 +1,79 @@
+{
+  "id": "sm_flat_edge_flange",
+  "title": "Flat pattern of a base flange with an edge flange (sm-forming's Flange)",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1777.8584,
+    "bbox": [
+      0,
+      0,
+      -1,
+      59.26195,
+      30,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "plate 48 (trimmed R + T = 2 by the Inside bend) + BA 2.26195 + flange wall 10 - R = 9, 30 wide, T 1"
+  }
+}

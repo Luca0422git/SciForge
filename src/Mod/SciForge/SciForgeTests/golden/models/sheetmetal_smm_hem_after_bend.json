@@ -1,0 +1,92 @@
+{
+  "id": "sheetmetal_smm_hem_after_bend",
+  "title": "Hem the top edge of a wall made by Bend",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            50,
+            -5,
+            50,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        20,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "center"
+      }
+    },
+    {
+      "op": "sf_sm_hem",
+      "id": "h1",
+      "edges": [
+        [
+          50.869027,
+          20,
+          50.869027
+        ]
+      ],
+      "options": {
+        "type": "rolled"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4355.0088,
+    "bbox": [
+      0.0,
+      0.0,
+      0.0,
+      55.869,
+      40.0,
+      50.869
+    ],
+    "solids": 1,
+    "faces": 12,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: a Rolled hem on the bent wall's top edge (outer face x = 48.869 + R + T, top z = 50.869)",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}

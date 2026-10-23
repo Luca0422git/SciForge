@@ -1,0 +1,87 @@
+{
+  "id": "sm_flat_partial_relief",
+  "title": "Flat pattern of a narrow edge flange with straight bend reliefs",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "flange",
+    "relief"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10,
+        "width_type": "symmetric",
+        "width": 10,
+        "override_bend_relief": true,
+        "relief_shape": "straight",
+        "relief_width": 1,
+        "relief_depth": 0.5,
+        "relief_remnant": 2
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1587.6195,
+    "bbox": [
+      0,
+      0,
+      -1,
+      59.26195,
+      30,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "folded 1588.561945 (sheetmetal_edge_flange_partial_relief) with its 10 wide bend (pi/2 (2^2 - 1^2)/2 x 10) laid flat as BA x 10; the flange reaches 48 + BA + 9 = 59.26195, the plate keeps 0..30 in y"
+  }
+}

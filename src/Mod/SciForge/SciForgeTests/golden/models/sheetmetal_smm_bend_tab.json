@@ -1,0 +1,103 @@
+{
+  "id": "sheetmetal_smm_bend_tab",
+  "title": "Bend a 20 mm tab up on a line across its root (Center): only the tab bends, the rule's round bend reliefs are cut into the plate beside it",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              100,
+              0
+            ],
+            [
+              100,
+              40
+            ],
+            [
+              60,
+              40
+            ],
+            [
+              60,
+              60
+            ],
+            [
+              40,
+              60
+            ],
+            [
+              40,
+              40
+            ],
+            [
+              0,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            -5,
+            40,
+            105,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        10,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "center"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4398.837611,
+    "bbox": [
+      0.0,
+      0.0,
+      0.0,
+      100.0,
+      40.869,
+      20.869
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "T = R = 1, K = 0.44, rule bend relief round, width 1, depth 0.5: plate 4000 + tab 400, the zone (BA x 20) laid on the bend (20 x 2.35619), less two slots 1 wide from 0.5 below the zone to the plate's edge with a round end (BA / 2 x 1 + pi / 8 each)"
+  }
+}

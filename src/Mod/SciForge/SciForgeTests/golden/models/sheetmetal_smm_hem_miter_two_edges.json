@@ -1,0 +1,68 @@
+{
+  "id": "sheetmetal_smm_hem_miter_two_edges",
+  "title": "Hem: Open hems on two edges that meet at a corner, mitred",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_sm_hem",
+      "id": "h1",
+      "edges": [
+        [
+          100,
+          20,
+          1
+        ],
+        [
+          50,
+          40,
+          1
+        ]
+      ],
+      "options": {
+        "type": "open",
+        "miter": true
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4516.4638,
+    "bbox": [
+      0.0,
+      0.0,
+      0.0,
+      100.0,
+      40.0,
+      2.5
+    ],
+    "solids": 1,
+    "faces": 18,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: each hem stops half the rule's miter gap (T) short of the corner's bisector",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}

@@ -1,0 +1,75 @@
+{
+  "id": "sheetmetal_smm_bend_center",
+  "title": "Bend: a 100 x 40 plate bent 90 degrees up on a centre line (Bend Line position Center)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            50,
+            -5,
+            50,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        20,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "center"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4003.769911,
+    "bbox": [
+      0,
+      0,
+      0,
+      50.869027,
+      40,
+      50.869027
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "T = R = 1, K = 0.44: BA = (pi/2)(R + K T) = 2.26195; the zone x 48.869..51.131 is laid on the bend; each wall is 48.869 long (100/2 - BA/2); bent zone volume = (pi/2) x 40 x ((R+T)^2 - R^2)/2 = 94.2478; the wall stands at x = 48.869 + R + T, its top at 1 + R + 48.869 - 1 + 1"
+  }
+}

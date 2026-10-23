@@ -80,6 +80,25 @@ def _exchange_action(name, arg):
         warn("%s: %s" % (name.replace("_", " "), exc))
 
 
+def _flat_pattern_export(obj):
+    """Right-click a Flat Pattern > Export DXF (sheet metal, flatpattern_ui)."""
+    try:
+        from . import flatpattern_ui
+
+        flatpattern_ui.export_dialog(obj)
+    except Exception as exc:
+        warn("flat pattern export: %s" % exc)
+
+
+def _flat_pattern_toggle(obj, prop):
+    try:
+        from . import flatpattern_ui
+
+        flatpattern_ui.toggle(obj, prop)
+    except Exception as exc:
+        warn("flat pattern lines: %s" % exc)
+
+
 def _is_linked(obj):
     try:
         from . import design_insert
@@ -204,6 +223,15 @@ def _objects(doc):
                 "grounded": obj.Name in grounded,
             }
             _joint_row(row, obj)
+            if row["sciforge_type"] == "FlatPattern":  # sheet metal: the flat's size
+                try:
+                    row["describe"] = "Flat %.2f x %.2f mm, %d bend(s)" % (
+                        obj.FlatLength.Value,
+                        obj.FlatWidth.Value,
+                        obj.BendCount,
+                    )
+                except Exception:
+                    pass
             try:
                 from . import sketch_companions
 
@@ -1116,7 +1144,15 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 _later(_open_drawing, obj)  # Fusion: open the drawing (its own tab)
             elif (
                 node["kind"]
-                in ("sketch", "construction", "analysis", "mesh_body", "canvas", "decal")
+                in (
+                    "sketch",
+                    "construction",
+                    "analysis",
+                    "mesh_body",
+                    "canvas",
+                    "decal",
+                    "flat_pattern",
+                )
                 and obj is not None
             ):
                 _later(_edit_object, obj)  # Fusion: double-click a section to edit it
@@ -1200,6 +1236,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "motion_link",
         "contact_set",
         "motion_study",
+        "flat_pattern",
     )
     OBJECT_KINDS = (
         "body",
@@ -1217,6 +1254,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         "motion_link",
         "contact_set",
         "motion_study",
+        "flat_pattern",
     )
 
     def rename(self, item):
@@ -1291,7 +1329,15 @@ class BrowserWidget(QtWidgets.QTreeWidget):
         plain = [
             n["object"]
             for n in nodes
-            if n["kind"] in ("mesh_body", "canvas", "contact_set", "motion_study", "sketch_curves")
+            if n["kind"]
+            in (
+                "mesh_body",
+                "canvas",
+                "contact_set",
+                "motion_study",
+                "sketch_curves",
+                "flat_pattern",
+            )
         ]
         drawings = [n["object"] for n in nodes if n["kind"] == "drawing"]
         Gui.Selection.clearSelection()
@@ -1479,6 +1525,10 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Save As DXF": lambda: _exchange_action("save_as_dxf", (obj, "")),
             "Save As Mesh": lambda: _exchange_action("save_as_mesh", obj),
             "Break Link": lambda: _exchange_action("break_link", obj),
+            "Edit Flat Pattern": lambda: _edit_object(obj),
+            "Export DXF": lambda: _flat_pattern_export(obj),
+            "Show/Hide Bend Lines": lambda: _flat_pattern_toggle(obj, "ShowBendLines"),
+            "Show/Hide Bend Extents": lambda: _flat_pattern_toggle(obj, "ShowBendExtents"),
         }
         isolated = _isolated_names(doc)
         if node["kind"] in ("body", "component") and isolated:

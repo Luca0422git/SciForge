@@ -1,0 +1,100 @@
+{
+  "id": "sm_flat_tray_square_relief",
+  "title": "Flat pattern of a tray whose edge Flange overrides the corner relief: 3 mm Square",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "flange",
+    "corner-relief"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ],
+        [
+          25,
+          30,
+          1
+        ],
+        [
+          0,
+          15,
+          1
+        ],
+        [
+          25,
+          0,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10,
+        "override_corner_relief": true,
+        "corner_shape": "square",
+        "corner_size": 3.0
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "bbox": [
+      0,
+      0,
+      -1,
+      68.52389,
+      48.52389,
+      0
+    ],
+    "volume": 2828.96718,
+    "solids": 1,
+    "faces": 54,
+    "rel_tol": 1e-06,
+    "abs_tol": 0.001,
+    "source": "baseline-freecad-1.1.4",
+    "note": "bbox as sm_flat_tray (46 + 2 (BA + 9) by 26 + 2 (BA + 9)); the Flange's own corner relief (Square, 3 mm, Intersection) is cut at the four corners instead of the rule's 4 mm Round: 8.566 mm3 taken (the rounds take 15.758), 2837.53325 without reliefs"
+  }
+}

@@ -145,3 +145,157 @@ def validate(model):
 
 
 schema.validate = validate
+
+
+# --- sm-more ---
+# Bend, Hem, Join by Bend, Corner Closure, Lofted Flange, sheet metal Fillet / Chamfer
+# (sciforge/ai/ops/sheetmetal_ops.py, its "sm-more" block).
+SMM_OPTIONS = {
+    "sf_sm_bend": {
+        "angle": "number",
+        "position": ("start", "center", "end"),
+        "flip": "bool",
+        "bend_relief": "bool",
+        "corner_relief": "bool",
+        "override_radius": "bool",
+        "radius": "number",
+    },
+    "sf_sm_hem": {
+        "type": ("flat", "open", "rolled", "teardrop", "rope", "double"),
+        "length": "number",
+        "gap": "number",
+        "radius": "number",
+        "angle": "number",
+        "setback": "number",
+        "position": ("inside", "outside", "adjacent", "tangent"),
+        "flip": "bool",
+        "miter": "bool",
+        "override": "bool",
+        "radius_override": "number",
+    },
+    "sf_sm_join_bend": {"use_rule_radius": "bool", "radius": "number"},
+    "sf_sm_corner_closure": {
+        "alignment": ("symmetric", "overlap"),
+        "gap": "number",
+        "overlap": "number",
+        "flip_overlap": "bool",
+        "extend_aligned": "bool",
+        "relief": ("round", "square", "tear", "trim_to_bend"),
+        "relief_size": "number",
+        "placement": ("intersection", "tangent", "vertex"),
+    },
+    "sf_sm_lofted_flange": {
+        "forming": ("brake", "die"),
+        "control": ("chord_tolerance", "facet_angle", "facet_distance", "facet_number"),
+        "value": "number",
+        "orientation": ("side1", "side2", "center"),
+    },
+}
+SMM_POINT = "a point [x, y, z]"
+schema.STEP_KEYS["sf_sm_bend"] = ({"id", "face", "lines"}, {"at", "options", "comment"})
+schema.STEP_KEYS["sf_sm_hem"] = ({"id", "edges"}, {"options", "comment"})
+schema.STEP_KEYS["sf_sm_join_bend"] = ({"id", "first", "other", "second"}, {"options", "comment"})
+schema.STEP_KEYS["sf_sm_corner_closure"] = (
+    {"id", "dominant", "submissive"},
+    {"options", "comment"},
+)
+schema.STEP_KEYS["sf_sm_lofted_flange"] = (
+    {"id", "profile1", "profile2"},
+    {"rule", "operation", "options", "comment"},
+)
+schema.STEP_KEYS["sf_sm_fillet"] = ({"id", "sets"}, {"comment"})
+schema.STEP_KEYS["sf_sm_chamfer"] = ({"id", "sets"}, {"comment"})
+schema.STEP_KEYS["sf_sm_more_edit"] = ({"target", "set"}, {"comment"})
+
+
+def _smm_point_ok(here, value):
+    if not isinstance(value, list) or len(value) != 3:
+        schema._fail(here, "expected %s" % SMM_POINT)
+    for c in value:
+        schema._check_number(here, c)
+
+
+def _smm_options(here, op, values):
+    table = SMM_OPTIONS.get(op, {})
+    if not isinstance(values, dict):
+        schema._fail(here, "'options' is an object")
+    for key, value in values.items():
+        kind = table.get(key)
+        if kind is None:
+            schema._fail(here, "%s option %r is unknown" % (op, key))
+        if kind == "number":
+            schema._check_number(here + "." + key, value)
+        elif kind == "bool" and not isinstance(value, bool):
+            schema._fail(here, "'%s' is true or false" % key)
+        elif isinstance(kind, tuple) and value not in kind:
+            schema._fail(here, "'%s' must be one of %s" % (key, kind))
+
+
+def check_smm_steps(model):
+    where = model.get("id", "<no id>")
+    seen = {}
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "sf_sm_bend":
+            _smm_point_ok(here + ".face", step["face"])
+            if seen.get(step["lines"]) not in ("sketch", "sf_curves"):
+                schema._fail(here, "'lines' must name an earlier sketch step")
+        if op == "sf_sm_hem":
+            if not isinstance(step["edges"], list) or not step["edges"]:
+                schema._fail(here, "'edges' is a list of points [x, y, z]")
+            for point in step["edges"]:
+                _smm_point_ok(here + ".edges", point)
+        if op == "sf_sm_join_bend":
+            _smm_point_ok(here + ".first", step["first"])
+            _smm_point_ok(here + ".second", step["second"])
+            if step["other"] not in seen:
+                schema._fail(here, "'other' must name an earlier step (of the other body)")
+        if op == "sf_sm_corner_closure":
+            _smm_point_ok(here + ".dominant", step["dominant"])
+            _smm_point_ok(here + ".submissive", step["submissive"])
+        if op == "sf_sm_lofted_flange":
+            for key in ("profile1", "profile2"):
+                if seen.get(step[key]) not in ("sketch", "sf_curves"):
+                    schema._fail(here, "'%s' must name an earlier sketch step" % key)
+            if step.get("operation", "new_body") not in ("new_body", "join"):
+                schema._fail(here, "'operation' must be new_body or join")
+        if op in ("sf_sm_fillet", "sf_sm_chamfer"):
+            if not isinstance(step["sets"], list) or not step["sets"]:
+                schema._fail(here, "'sets' is a list of {edges, value}")
+            for entry in step["sets"]:
+                if not isinstance(entry, dict) or set(entry) != {"edges", "value"}:
+                    schema._fail(here, "each set is {'edges': [points], 'value': mm}")
+                schema._check_number(here + ".value", entry["value"])
+                for point in entry["edges"]:
+                    _smm_point_ok(here + ".edges", point)
+        if op in SMM_OPTIONS:
+            _smm_options(here, op, step.get("options", {}))
+        if op == "sf_sm_more_edit":
+            target_op = seen.get(step["target"])
+            if target_op not in (
+                "sf_sm_bend",
+                "sf_sm_hem",
+                "sf_sm_corner_closure",
+                "sf_sm_lofted_flange",
+            ):
+                schema._fail(
+                    here,
+                    "'target' must name an earlier Bend / Hem / Corner Closure "
+                    "/ Lofted Flange step",
+                )
+            _smm_options(here, target_op, step["set"])
+        if "id" in step:
+            seen[step["id"]] = op
+
+
+_validate_before_smm = schema.validate
+
+
+def _validate_smm(model):
+    _validate_before_smm(model)
+    check_smm_steps(model)
+    return model
+
+
+schema.validate = _validate_smm

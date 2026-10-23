@@ -1,0 +1,179 @@
+{
+  "id": "sm_flat_unfold_cut_refold",
+  "title": "Unfold an L bracket, cut a slot across the bend, refold",
+  "tags": [
+    "sheetmetal",
+    "unfold",
+    "refold"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              50,
+              0
+            ],
+            [
+              50,
+              50
+            ],
+            [
+              49,
+              50
+            ],
+            [
+              49,
+              1
+            ],
+            [
+              0,
+              1
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 50
+          },
+          {
+            "axis": "z",
+            "value": 0
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "fillet",
+      "id": "f2",
+      "radius": 1,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 49
+          },
+          {
+            "axis": "z",
+            "value": 1
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "sf_sm_convert",
+      "id": "c1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "rule": "template"
+    },
+    {
+      "op": "sf_unfold",
+      "id": "u1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "all": true
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            48.630973,
+            -15,
+            49.630973,
+            -5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 5,
+      "operation": "cut",
+      "direction": "symmetric"
+    },
+    {
+      "op": "sf_refold",
+      "id": "r1",
+      "unfold": "u1"
+    }
+  ],
+  "expect": {
+    "volume": 1956.7072,
+    "bbox": [
+      0,
+      -20,
+      0,
+      50,
+      0,
+      50
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "a 1 x 10 slot on the bend's centre line in the flat state spans 1/(R + K T) = 1/1.44 rad of the bend; folded it removes (1/1.44) * (2^2 - 1^2)/2 * 10 from 1920 + 15 pi"
+  }
+}
