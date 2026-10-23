@@ -526,7 +526,7 @@ def target_body(doc, operation, active=None, rule_name=None):
     return body
 
 
-def make(body, profile1, profile2, options=None, name="LoftedFlange"):
+def make(body, profile1, profile2, options=None, name="LoftedFlange", hide=True):
     """A Lofted Flange step at the history marker of `body` (a sheet metal body).
     profile1 / profile2: [(sketch, ["Edge1", ...] or [])]."""
     opts = default_options()
@@ -538,14 +538,20 @@ def make(body, profile1, profile2, options=None, name="LoftedFlange"):
         obj.BaseFeature = base
     apply(obj, profile1, profile2, opts)
     _view(obj)
-    for owner, _subs in list(profile1) + list(profile2):
+    if hide:
+        hide_sketches(obj)
+    log("lofted flange %s made" % obj.Name)
+    return obj
+
+
+def hide_sketches(obj):
+    """Hide the profiles' sketches (Fusion consumes them)."""
+    for owner, _subs in list(obj.Profile1 or []) + list(obj.Profile2 or []):
         try:
             if owner.ViewObject is not None:
                 owner.ViewObject.Visibility = False
         except Exception:
             pass
-    log("lofted flange %s made" % obj.Name)
-    return obj
 
 
 def read(obj):

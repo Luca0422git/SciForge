@@ -22,7 +22,7 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
   edges through the thickness; Fillet radius sets ("+ New Set"); on a solid body they open the
   SOLID commands.
 - Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 18 golden models,
-  21 unit tests, 7 scenarios (191 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
+  21 unit tests, 7 scenarios (194 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
 
 ## FreeCAD / OpenCASCADE facts found
 
@@ -51,12 +51,14 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
   "one added and one dropped" at once; the sm-more panel keeps the old picks then
   (`picks_changed`), and re-selects elements with their component path (`rooted`).
 - A sketch line lying exactly on a see-through (ghosted) face is hard to click; the same line
-  on the solid face is fine.
+  on the solid face is fine. The panel makes the part unpickable (its SoPickStyle nodes,
+  Coin only) while a box takes sketch curves only. A step made for the preview must not hide
+  the sketch its next picks come from: the sketches are hidden on OK.
 
 ## Tests run (FreeCAD 1.1.4, this sandbox)
 
 - `--only unit`: all pass. Golden models: the 18 `sheetmetal_smm_*` pass (with sm-forming's).
-- Scenarios: smmore_bend 44, smmore_bend_two 14, smmore_hem 40, smmore_join 25,
+- Scenarios: smmore_bend 44, smmore_bend_two 17, smmore_hem 40, smmore_join 25,
   smmore_corner 24, smmore_round 21, smmore_lofted 23 checks: all PASS.
 
 - sm-flat's unfolder (`sheetmetal_unfold.unfold`, a read-only copy of `sf/sm-flat`'s file in
@@ -66,5 +68,5 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 
 ## Open (see the parity doc's Known gaps)
 
-Per-line Bend values, partial bends with reliefs, Corner Closure reliefs other than Trim To
+Partial bends with reliefs, Corner Closure reliefs other than Trim To
 Bend, Lofted Flange inside the Flange dialog and with real bends between facets.

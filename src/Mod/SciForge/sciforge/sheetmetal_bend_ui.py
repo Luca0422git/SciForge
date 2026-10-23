@@ -40,6 +40,16 @@ class BendPanel(smp.SmPanel):
         return opts
 
     def build_fields(self):
+        self.common = {k: self.options.get(k) for k in sb.LINE_KEYS}
+        self.line_settings = dict(self.options.get("lines") or {})
+        self._loading = False
+        self.add_combo(
+            "line",
+            "Values For",
+            [("All lines", "")],
+            "Fusion's row per bend line: pick a line here to give it its own angle, "
+            "position and flip",
+        )
         self.add_angle("angle", "Angle", "How far the sheet is bent (90° = square)")
         self.add_combo(
             "position",
@@ -68,8 +78,60 @@ class BendPanel(smp.SmPanel):
 
     def fields_changed(self, key):
         self.show_row("radius", bool(self.value("override_radius")))
-        if key in ("angle", "flip", "position"):
+        if getattr(self, "_loading", False):
+            return
+        if key == "line":
+            self._load_line()
+        elif key in sb.LINE_KEYS:
+            chosen = self.value("line")
+            values = {k: self.value(k) for k in sb.LINE_KEYS}
+            if chosen:
+                self.line_settings[chosen] = values
+            else:
+                self.common.update(values)
+        if key in ("angle", "flip", "position", "line"):
             self.after_preview()
+
+    def _load_line(self):
+        """Show the chosen line's own values (or the common ones)."""
+        chosen = self.value("line")
+        values = dict(self.common)
+        if chosen:
+            values.update(self.line_settings.get(chosen, {}))
+        self._loading = True
+        try:
+            for k in sb.LINE_KEYS:
+                if values.get(k) is not None:
+                    self.set_value(k, values[k])
+        finally:
+            self._loading = False
+
+    def _line_items(self):
+        """The Values For list: All lines, then each picked line."""
+        box = self.fields.get("line")
+        if box is None:
+            return
+        keys = [sb.line_key(o, s) for o, s, _p in self.picks["lines"]]
+        current = box.currentData()
+        self._loading = True
+        try:
+            box.clear()
+            box.addItem("All lines", "")
+            for i, key in enumerate(keys, start=1):
+                mark = " *" if key in self.line_settings else ""
+                box.addItem("Line %d%s" % (i, mark), key)
+            index = box.findData(current if current in keys else "")
+            box.setCurrentIndex(max(0, index))
+        finally:
+            self._loading = False
+        self._load_line()
+
+    def _picks_updated(self, schedule=True):
+        try:
+            self._line_items()
+        except Exception as exc:
+            warn("Bend lines list: %s" % exc)
+        super()._picks_updated(schedule)
 
     def hint(self):
         if not self.picks["stationary"]:
@@ -115,16 +177,26 @@ class BendPanel(smp.SmPanel):
     def collect(self):
         opts = super().collect()
         opts["radius"] = float(self.value("radius"))
+        opts.update(getattr(self, "common", {}))
+        keys = set(sb.line_key(o, s) for o, s, _p in self.picks["lines"])
+        opts["lines"] = {k: v for k, v in getattr(self, "line_settings", {}).items() if k in keys}
+        opts.pop("line", None)
         return opts
 
     def check(self, options):
-        problems = core.check_bend(float(options["angle"]), 1.0, 1.0)
-        if problems:
-            raise sb.SheetMetalError(problems[0])
+        for values in [options] + list(options.get("lines", {}).values()):
+            problems = core.check_bend(float(values.get("angle", options["angle"])), 1.0, 1.0)
+            if problems:
+                raise sb.SheetMetalError(problems[0])
 
     def make_feature(self, options):
         face = self.picks["stationary"][0][1]
-        return sb.make(self.body, self.base, face, self._local_point(), self._lines(), options)
+        return sb.make(
+            self.body, self.base, face, self._local_point(), self._lines(), options, hide=False
+        )
+
+    def finished(self, obj):
+        sb.hide_sketches(obj)
 
     def apply_feature(self, options):
         face = self.picks["stationary"][0][1]
@@ -219,7 +291,7 @@ def bend_frame(base, face_name, point, lines, options):
     if not flat:
         return None
     normal = sb.plane_normal(face)
-    a, b = flat[0]
+    a, b = flat[0][0], flat[0][1]
     along = sb.unit(b - a)
     across = normal.cross(along)
     if (point - a).dot(across) > 0:

@@ -30,7 +30,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Fusion | SciForge | Src |
 |---|---|---|
 | Stationary Side: a top or bottom planar face of the sheet; that side stays | Same box; only a planar face with the sheet's thickness behind it lights up. The side of the bend line where the face was clicked stays (the click point is stored) | A[R18], A[R31] |
-| Bend Lines: sketch lines in a plane parallel to the stationary face, several, one row each | Same box (several lines). Lines not parallel to the face are refused with the reason; lines in a parallel plane are projected onto the face | A[R11], A[R31] |
+| Bend Lines: sketch lines in a plane parallel to the stationary face, several, one row each | Same box (several lines); "Values For" picks a line to give it its own angle / position / flip. Lines not parallel to the face are refused with the reason; lines in a parallel plane are projected onto the face | A[R11], A[R31] |
 | Several lines: pick the farthest from the stationary side first | SciForge sorts them itself (farthest bent first), so any picking order works | A[R11] (order), G (sorting) |
 | Bend Line position Start / Center / End (where the line sits on the bend zone in the flat state) | Same three choices, default Center. The zone is BA = angle x (R + K T) wide, placed against the line | A[R31], F[F3] |
 | Angle (default 90°) | Same, with a round angle handle on the bend and its value box | A[R31], G (default) |
@@ -109,7 +109,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Golden | 18 models `sheetmetal_smm_*.json`: bend centre / two lines / flip-start-45 edited to 60 / hole in the zone; the six hem types, two mitred hems, a hem edited to Rolled; join by bend; corner closure symmetric and overlap; lofted brake and die (edited to Face Number 4); fillet + chamfer. Analytic volumes where the shape allows (bends, hems, join, fillet); FreeCAD 1.1.4 baselines for the rest | all pass |
 | Cross-check with sm-flat's unfolder | `sheetmetal_unfold.unfold` (branch `sf/sm-flat`, read-only copy) run on this branch's shapes: a 90° bend, a 45° flipped Start bend, the U (two lines) and a bend with a hole in its zone all lay flat to exactly the 100 x 40 plate they were bent from (volume 4000.0000, holed 3999.2148 = less the hole); the six hems, the join and a filleted plate unfold too (flat lengths = cut-back sheet + neutral-layer length of the strip) | all unfold |
 | Scenario `smmore_bend` | ribbon Bend, waits; stationary face; line; 90° preview (hand-worked volume); type 45; Start; Flip; OK; Bend 1; Ctrl+Z / Ctrl+Y; edit from the timeline back to 90 Center; a line past the sheet refused (OK waits); Esc; save, close, reopen | PASS, 44 checks |
-| Scenario `smmore_bend_two` | Bend in an empty design (no dialog, no error); a plate in a moved component; the lines box first, two lines, then the face: a U; Bend Radius override 2; OK | PASS, 14 checks |
+| Scenario `smmore_bend_two` | Bend in an empty design (no dialog, no error); a plate in a moved component; the face, then two lines: a U; Values For Line 2 at 45 (Line 1 keeps 90; All lines shows the common value); Bend Radius override 2; OK | PASS, 17 checks |
 | Scenario `smmore_hem` | every type from the Type list (volumes from the cross-section), the rows each type shows, the Length arrow dragged (value box), a Length too short refused, a second edge mitred, OK, Hem 1, Ctrl+Z / Ctrl+Y, edit (Flip), Cancel | PASS, 40 checks |
 | Scenario `smmore_join` | CREATE menu Join by Bend; parallel plate refused, Esc; joined (hand-worked volume); the other body hidden; Ctrl+Z / Ctrl+Y; edit to a 3 mm Bend Radius | PASS, 25 checks |
 | Scenario `smmore_corner` | two edge flanges (Flange code) on a notched plate; MODIFY menu Corner Closure; Round relief greyed with its reason; Symmetric Gap (points inside / in the gap); Overlap with a 0 gap; OK; Ctrl+Z / Ctrl+Y; edit back; Cancel | PASS, 24 checks |
@@ -118,9 +118,9 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 
 ## Known gaps
 
-1. **Bend: one set of values for every line.** Fusion gives each bend line its own row (angle,
-   position, flip). SciForge applies the dialog's values to every picked line; for different
-   angles, make two Bend steps.
+1. **Bend: per-line values through a "Values For" list.** Fusion shows a row per bend line;
+   SciForge has one set of fields with a "Values For" list (All lines, Line 1, Line 2, ...):
+   choose a line to give it its own angle, Bend Line position and flip (marked "*").
 2. **Bend: crossing bend lines and Corner Relief.** Lines that cross inside the sheet are not
    supported (the second bend would cross a bend zone: refused with "The bend zone crosses
    something that is not flat sheet"); so Fusion's corner relief where bend lines meet has no
@@ -128,10 +128,8 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 3. **Bend: Bend Relief.** SciForge bends right across the sheet (as Fusion does with Center,
    F[F3]), so a bend never ends inside material and no relief is cut. A bend line that stops
    short of an edge on purpose (a partial bend with reliefs) is not built.
-4. **Bend: a second line drawn exactly on the face can be hard to click once the preview is
-   shown** (the see-through part and the line are at the same depth). Pick the lines first
-   (click the Bend Lines box, then the lines, then the face), as the `smmore_bend_two`
-   scenario does.
+4. (fixed) A second line drawn on the face was hard to click once the preview showed the part
+   see-through: while a box takes sketch curves only, clicks now go through the part.
 5. **Flat hem keeps a 0.01 mm hairline gap.** OpenCASCADE cannot hold two layers of one solid
    touching face to face (they would merge into one thick layer and the sheet could no longer
    be unfolded). The flat length changes by pi x 0.005 mm = 0.016 mm.

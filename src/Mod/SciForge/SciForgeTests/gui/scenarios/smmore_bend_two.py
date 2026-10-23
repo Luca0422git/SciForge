@@ -103,6 +103,55 @@ def u_shape():
     h.shot("smmore-bend-two-u")
 
 
+def line_two_own_angle():
+    p = panel()
+    box = p.fields["line"] if p else None
+    h.check(
+        "Values For lists All lines, Line 1, Line 2",
+        box is not None
+        and [box.itemText(i) for i in range(box.count())] == ["All lines", "Line 1", "Line 2"],
+        box and [box.itemText(i) for i in range(box.count())],
+    )
+    st.choose(p, "line", "Line 2")
+
+
+def type_45():
+    st.type_into(panel(), "angle", "45")
+
+
+def line_two_at_45():
+    import math
+
+    p = panel()
+    st.settle(p)
+    a45 = math.radians(45)
+    want = (
+        4000
+        - st.BA90 * 40
+        - a45 * (st.R + st.K * st.T) * 40
+        + st.BENT90 * 40
+        + a45 * ((st.R + st.T) ** 2 - st.R**2) / 2 * 40
+    )
+    h.check(
+        "Line 2 bent 45, Line 1 still 90",
+        st.close(st.volume(s["body"]), want),
+        (st.volume(s["body"]), want),
+    )
+    st.choose(p, "line", "All lines")
+
+
+def all_lines_back():
+    p = panel()
+    h.check("All lines shows the common 90", p is not None and abs(p.value("angle") - 90) < 1e-9)
+    st.choose(p, "line", "Line 2")
+
+
+def line_two_kept():
+    p = panel()
+    h.check("Line 2 keeps its own 45", p is not None and abs(p.value("angle") - 45) < 1e-9)
+    st.type_into(p, "angle", "90")
+
+
 def override_radius():
     p = panel()
     st.toggle(p, "override_radius")
@@ -151,6 +200,11 @@ h.run(
         line_one,
         click_second,
         u_shape,
+        line_two_own_angle,
+        type_45,
+        line_two_at_45,
+        all_lines_back,
+        line_two_kept,
         override_radius,
         radius_2,
         ok,

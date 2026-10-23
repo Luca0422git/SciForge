@@ -265,7 +265,9 @@ def bend_lines_on(face, lines):
     n = plane_normal(face)
     origin = face.Vertexes[0].Point
     out = []
-    for a, b in lines:
+    for line in lines:
+        a, b = line[0], line[1]
+        extra = line[2] if len(line) > 2 else {}
         d = b - a
         if d.Length < 1e-6:
             raise SheetMetalError("A bend line has no length.")
@@ -274,7 +276,7 @@ def bend_lines_on(face, lines):
                 "A bend line is not parallel to the stationary face; sketch the bend lines on "
                 "that face."
             )
-        out.append((_project(a, origin, n), _project(b, origin, n)))
+        out.append((_project(a, origin, n), _project(b, origin, n), extra))
     return out
 
 
@@ -397,12 +399,19 @@ def _bend_zone_solid(
     return list(out.Solids)
 
 
+LINE_KEYS = ("angle", "position", "flip")
+
+
 def fold(shape, face_name, stationary_point, lines, options, thickness, radius, k_factor):
-    """The body's solid bent along `lines` (body-local [(a, b)]). Raises SheetMetalError."""
-    angle = float(options.get("angle", 90.0))
-    problems = core.check_bend(angle, radius, thickness)
-    if problems:
-        raise SheetMetalError(problems[0])
+    """The body's solid bent along `lines` (body-local [(a, b)] or [(a, b, values)]: a line's
+    own angle / position / flip, Fusion's row per bend line, over the common `options`).
+    Raises SheetMetalError."""
+    for line in lines:
+        values = dict(options)
+        values.update(line[2] if len(line) > 2 else {})
+        problems = core.check_bend(float(values.get("angle", 90.0)), radius, thickness)
+        if problems:
+            raise SheetMetalError(problems[0])
     try:
         face = shape.getElement(face_name)
     except Exception:
@@ -418,18 +427,22 @@ def fold(shape, face_name, stationary_point, lines, options, thickness, radius, 
         raise SheetMetalError("Pick one or more sketch lines to bend along.")
     normal = plane_normal(face)
     plane_point = face.Vertexes[0].Point
-    up = not bool(options.get("flip", False))
-    position = options.get("position", "center")
     rn = radius + k_factor * thickness
-    s0, s1 = core.bend_zone(position, angle, radius, thickness, k_factor)
-    ba = s1 - s0
     flat = bend_lines_on(face, lines)
     point = _project(V(stationary_point), plane_point, normal)
     # farthest from the stationary side first: the lines still to bend stay where they were
     flat.sort(key=lambda ab: -_distance_to_line(point, ab[0], ab[1]))
     big = shape.BoundBox.DiagonalLength * 2.0 + 10.0
     result = shape
-    for a, b in flat:
+    for a, b, extra in flat:
+        values = dict(options)
+        values.update(extra or {})
+        angle = float(values.get("angle", 90.0))
+        up = not bool(values.get("flip", False))
+        s0, s1 = core.bend_zone(
+            values.get("position", "center"), angle, radius, thickness, k_factor
+        )
+        ba = s1 - s0
         along = unit(b - a)
         across = normal.cross(along)
         side = (point - a).dot(across)
@@ -565,10 +578,25 @@ def options_of(obj):
     }
 
 
-def line_points(links):
-    """[(a, b)] body-local end points of the linked sketch lines."""
+META = "SciForgeSmBend"
+
+
+def line_key(owner, sub):
+    return "%s:%s" % (owner.Name, sub)
+
+
+def line_values(obj):
+    """{line key: {angle, position, flip}}: the lines' own values (Fusion's rows)."""
+    meta = bodies.load_meta(obj, META)
+    lines = meta.get("lines") or {}
+    return {k: dict(v) for k, v in lines.items() if isinstance(v, dict)}
+
+
+def line_points(links, values=None):
+    """[(a, b, own values)] body-local end points of the linked sketch lines."""
     import Part
 
+    values = values or {}
     out = []
     for owner, subs in links or []:
         for sub in subs:
@@ -578,7 +606,8 @@ def line_points(links):
                 raise SheetMetalError("A bend line is gone from its sketch; pick it again.")
             if not isinstance(edge.Curve, (Part.Line, Part.LineSegment)):
                 raise SheetMetalError("Bend lines must be straight sketch lines.")
-            out.append((edge.Vertexes[0].Point, edge.Vertexes[-1].Point))
+            own = values.get(line_key(owner, sub), {})
+            out.append((edge.Vertexes[0].Point, edge.Vertexes[-1].Point, own))
     return out
 
 
@@ -600,7 +629,7 @@ def build(obj):
         shape,
         link[1][0],
         obj.StationaryPoint,
-        line_points(obj.BendLines),
+        line_points(obj.BendLines, line_values(obj)),
         opts,
         thickness,
         radius,
@@ -614,9 +643,10 @@ def build(obj):
     return result
 
 
-def make(body, base, face_name, point, lines, options=None, name="Bend"):
+def make(body, base, face_name, point, lines, options=None, name="Bend", hide=True):
     """A Bend step at the history marker of `body`, built on `base` (its step before).
-    lines: [(sketch, ["Edge1", ...])]."""
+    lines: [(sketch, ["Edge1", ...])]. hide: the lines' sketches are hidden (used up); the
+    dialog hides them only on OK, so more lines can still be clicked meanwhile."""
     opts = default_options()
     opts.update(options or {})
     obj = bodies.insert_after_tip(body, TYPE, name)
@@ -624,14 +654,20 @@ def make(body, base, face_name, point, lines, options=None, name="Bend"):
     obj.BaseFeature = base
     apply(obj, base, face_name, point, lines, opts)
     _view(obj)
-    for sketch, _subs in lines:
+    if hide:
+        hide_sketches(obj)
+    log("bend %s made" % obj.Name)
+    return obj
+
+
+def hide_sketches(obj):
+    """Hide the sketches whose lines the bend uses (Fusion consumes them)."""
+    for sketch, _subs in obj.BendLines or []:
         try:
             if sketch.ViewObject is not None:
                 sketch.ViewObject.Visibility = False
         except Exception:
             pass
-    log("bend %s made" % obj.Name)
-    return obj
 
 
 def apply(obj, base, face_name, point, lines, options):
@@ -646,6 +682,12 @@ def apply(obj, base, face_name, point, lines, options):
     obj.OverrideRadius = bool(options.get("override_radius", False))
     if options.get("radius") is not None:
         obj.BendRadius = float(options["radius"])
+    picked = set(line_key(o, sub) for o, subs in lines for sub in subs)
+    own = {}
+    for key, entry in (options.get("lines") or {}).items():
+        if key in picked and isinstance(entry, dict):
+            own[key] = {k: entry[k] for k in LINE_KEYS if k in entry}
+    bodies.save_meta(obj, META, {"lines": own})
 
 
 def read(obj):
@@ -653,7 +695,9 @@ def read(obj):
     link = obj.StationaryFace
     face = link[1][0] if link and link[1] else ""
     lines = [(o, list(subs)) for o, subs in (obj.BendLines or [])]
-    return obj.BaseFeature, face, V(obj.StationaryPoint), lines, options_of(obj)
+    options = options_of(obj)
+    options["lines"] = line_values(obj)
+    return obj.BaseFeature, face, V(obj.StationaryPoint), lines, options
 
 
 def _view(obj):

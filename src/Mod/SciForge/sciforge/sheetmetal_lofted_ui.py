@@ -164,7 +164,9 @@ class LoftedPanel(smp.SmPanel):
         if body is not self.join_body:
             self.made_body = body
         self.body = body
-        return sl.make(body, self._profile("profile1"), self._profile("profile2"), options)
+        return sl.make(
+            body, self._profile("profile1"), self._profile("profile2"), options, hide=False
+        )
 
     def apply_feature(self, options):
         sl.apply(self.target, self._profile("profile1"), self._profile("profile2"), options)
@@ -196,6 +198,7 @@ class LoftedPanel(smp.SmPanel):
             pass
 
     def finished(self, obj):
+        sl.hide_sketches(obj)
         body = bodies.body_of(obj)
         if body is not None and sheetmetal.is_sheet_metal_body(body):
             from . import pickpanel
