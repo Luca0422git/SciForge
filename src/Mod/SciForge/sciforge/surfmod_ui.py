@@ -490,6 +490,8 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
         value = round(value, 2)
         self.fields[key][0].set_value(value)
         self.options[key] = value
+        if self.formulas.pop(key, None):  # a drag gives a plain number (Fusion)
+            self._show_formulas()
         self.schedule()
 
     # -- the arrow ----------------------------------------------------------------------------
