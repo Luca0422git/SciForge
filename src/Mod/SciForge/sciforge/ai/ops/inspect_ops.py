@@ -22,6 +22,7 @@ A pick ("ref") is one of:
       the Physical Material of that step's body (a key of sciforge/material.py LIBRARY), set
       the way the Physical Material dialog does (material.assign)
 """
+
 import FreeCAD as App
 
 from . import selectors

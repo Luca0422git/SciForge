@@ -39,6 +39,7 @@ registered on core.Builder when the package is imported.
       double-click the step in the timeline and change these options (the step may
       change kind, e.g. AdditiveBox -> SubtractiveBox, like the dialog does)
 """
+
 import math
 
 import FreeCAD as App

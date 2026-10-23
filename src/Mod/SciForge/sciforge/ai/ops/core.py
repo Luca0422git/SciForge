@@ -744,3 +744,8 @@ from . import component_ops  # noqa: E402,F401  (whole components: move, paste, 
 from . import modify2_ops  # noqa: E402,F401  (Modify part 2: compute option, draft, ...)
 from . import gear_ops  # noqa: E402,F401  (registers op_sf_gear, op_sf_gear_edit)
 from . import hardware_ops  # noqa: E402,F401  (registers op_sf_hardware, op_sf_hardware_edit)
+from . import sheetmetal_ops  # noqa: E402,F401  (SHEET METAL forming: rules, Flange, Hem, Bend)
+from . import flatpattern_ops  # noqa: E402,F401  (SHEET METAL flat: Unfold, Refold, Rip)
+from . import plastic_ops  # noqa: E402,F401  (PLASTIC: rules, Boss, Rest)
+from . import plastic2_ops  # noqa: E402,F401  (PLASTIC: Snap Fit, Lip)
+from . import surface3_ops  # noqa: E402,F401  (SURFACE part 3)

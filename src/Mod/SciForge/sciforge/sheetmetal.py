@@ -1,0 +1,175 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""Where a design keeps its sheet metal rules, and which bodies are sheet metal (FreeCAD,
+no Qt: the golden-model builder, headless tests and the dialogs all use this).
+
+The contract of the SHEET METAL builders (wave 6; extend it, never rename or remove):
+
+- A design's rules live in one hidden ``App::FeaturePython`` named ``SheetMetalRules``
+  (``RulesJson``: a JSON list of rule dicts, sheetmetal_core.FIELDS; ``ActiveRule``: the
+  rule new sheet metal in the root component gets). A design that never used sheet metal has
+  no such object; it is made on first use with the library's default rule in it (Fusion: a
+  design starts with the default rule "In This Design").
+- A component (``App::Part``) may carry ``SciForgeSheetMetalRule``: its active rule (Fusion
+  keeps the active rule per component). The root component's is ``ActiveRule`` above.
+- A **sheet metal body** is a ``PartDesign::Body`` with a non-empty
+  ``SciForgeSheetMetalRule`` property: the name of the rule it follows. Its solid is made of
+  flat walls and cylindrical bends of the rule's thickness (what the unfolder reads).
+
+    rules_object(doc, create=False)    the store, made on demand
+    design_rules(doc)                  the rules "In This Design" (dicts, as stored)
+    find_rule(doc, name)               one of them, or None
+    save_rule(doc, rule)               add or replace by name; recomputes bodies that use it
+    delete_rule(doc, name)             refused (ValueError) while a body uses it
+    active_rule_name(doc, component)   the component's active rule (root: None)
+    set_active_rule(doc, name, component)
+    is_sheet_metal_body(body)
+    make_sheet_metal_body(body, rule_name)
+    body_rule_name(body)
+    rule_for_body(body)                the body's rule, evaluated (lengths in mm, floats)
+    sheet_metal_bodies(doc)
+"""
+
+import json
+
+from . import bodies, log, sheetmetal_core as core, warn
+
+STORE_NAME = "SheetMetalRules"
+RULE_PROP = "SciForgeSheetMetalRule"
+
+
+def rules_object(doc, create=False):
+    """The design's rule store, or None. create=True makes it (with the default rule)."""
+    if doc is None:
+        return None
+    obj = doc.getObject(STORE_NAME)
+    if obj is not None or not create:
+        return obj
+    obj = doc.addObject("App::FeaturePython", STORE_NAME)
+    obj.Label = "Sheet Metal Rules"
+    obj.addProperty("App::PropertyString", "RulesJson", "SheetMetal", "The design's rules")
+    obj.addProperty("App::PropertyString", "ActiveRule", "SheetMetal", "Root component's rule")
+    obj.RulesJson = json.dumps([core.library_rule(core.DEFAULT_RULE)])
+    obj.ActiveRule = core.DEFAULT_RULE
+    for prop in ("RulesJson", "ActiveRule"):
+        try:
+            obj.setEditorMode(prop, 2)
+        except Exception:
+            pass
+    try:
+        view = obj.ViewObject
+        if view is not None:
+            view.ShowInTree = False
+    except Exception:
+        pass
+    return obj
+
+
+def design_rules(doc):
+    obj = rules_object(doc)
+    if obj is None:
+        return [core.library_rule(core.DEFAULT_RULE)]
+    try:
+        rules = json.loads(obj.RulesJson or "[]")
+        return [r for r in rules if isinstance(r, dict) and r.get("name")]
+    except Exception as exc:
+        warn("sheet metal rules of %s unreadable: %s" % (doc.Name, exc))
+        return [core.library_rule(core.DEFAULT_RULE)]
+
+
+def find_rule(doc, name):
+    for rule in design_rules(doc):
+        if rule["name"] == name:
+            return dict(rule)
+    return None
+
+
+def _uses(doc, name):
+    return [b for b in sheet_metal_bodies(doc) if body_rule_name(b) == name]
+
+
+def save_rule(doc, rule):
+    """Add the rule to the design or replace the one with its name. The bodies that follow it
+    are marked to recompute (their steps read rule_for_body when they run)."""
+    problems = core.validate(rule)
+    if problems:
+        raise ValueError(problems[0])
+    obj = rules_object(doc, create=True)
+    rules = [r for r in design_rules(doc) if r["name"] != rule["name"]]
+    rules.append(dict(rule))
+    obj.RulesJson = json.dumps(rules)
+    for body in _uses(doc, rule["name"]):
+        for feature in getattr(body, "Group", []):
+            try:
+                feature.touch()
+            except Exception:
+                pass
+    log("sheet metal rule '%s' saved" % rule["name"])
+
+
+def delete_rule(doc, name):
+    users = _uses(doc, name)
+    if users:
+        raise ValueError(
+            "'%s' is used by %s; give those bodies another rule first"
+            % (name, ", ".join(b.Label for b in users))
+        )
+    obj = rules_object(doc)
+    if obj is None:
+        return
+    obj.RulesJson = json.dumps([r for r in design_rules(doc) if r["name"] != name])
+
+
+def active_rule_name(doc, component=None):
+    if component is not None and getattr(component, RULE_PROP, ""):
+        return getattr(component, RULE_PROP)
+    obj = rules_object(doc)
+    if obj is not None and obj.ActiveRule:
+        return obj.ActiveRule
+    return core.DEFAULT_RULE
+
+
+def set_active_rule(doc, name, component=None):
+    if component is not None:
+        if not hasattr(component, RULE_PROP):
+            component.addProperty("App::PropertyString", RULE_PROP, "SheetMetal", "Active rule")
+        setattr(component, RULE_PROP, name)
+        return
+    rules_object(doc, create=True).ActiveRule = name
+
+
+def is_sheet_metal_body(body):
+    return bodies.is_body(body) and bool(getattr(body, RULE_PROP, ""))
+
+
+def body_rule_name(body):
+    return getattr(body, RULE_PROP, "") if body is not None else ""
+
+
+def make_sheet_metal_body(body, rule_name):
+    """Flag the body as sheet metal following rule_name (copied into the design from the
+    library when the design does not have it yet)."""
+    doc = body.Document
+    if find_rule(doc, rule_name) is None:
+        rule = core.library_rule(rule_name)
+        if rule is None:
+            raise ValueError("no sheet metal rule named '%s'" % rule_name)
+        save_rule(doc, rule)
+    if not hasattr(body, RULE_PROP):
+        body.addProperty("App::PropertyString", RULE_PROP, "SheetMetal", "Sheet metal rule")
+    setattr(body, RULE_PROP, rule_name)
+
+
+def rule_for_body(body):
+    """The body's rule with lengths in mm (sheetmetal_core.evaluated). A body whose rule was
+    removed from the design gets the default rule (and a warning)."""
+    doc = body.Document
+    name = body_rule_name(body) or active_rule_name(doc)
+    rule = find_rule(doc, name) or core.library_rule(name)
+    if rule is None:
+        warn("sheet metal rule '%s' of %s not found; using the default" % (name, body.Label))
+        rule = core.library_rule(core.DEFAULT_RULE)
+    return core.evaluated(rule)
+
+
+def sheet_metal_bodies(doc):
+    return [b for b in bodies.list_bodies(doc) if is_sheet_metal_body(b)]

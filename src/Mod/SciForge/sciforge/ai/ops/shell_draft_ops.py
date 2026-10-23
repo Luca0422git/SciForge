@@ -22,6 +22,7 @@ core.Builder when the package is imported.
       of the part at [x, y, z]
   {"op": "sf_scale_edit", "target": "sc1", "set": {"factor": 1.5}}
 """
+
 import FreeCAD as App
 
 from . import selectors

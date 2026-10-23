@@ -396,6 +396,9 @@ class RibbonWidget(QtWidgets.QWidget):
         self._drawing_mode = False
         if "drawing" in self.tab_buttons:
             self.tab_buttons["drawing"].setVisible(False)
+        # The FLAT PATTERN tab shows only while a flat pattern is open (sheet metal).
+        if "flat_pattern" in self.tab_buttons:
+            self.tab_buttons["flat_pattern"].setVisible(False)
         self.select_tab("solid")
 
         self._timer = QtCore.QTimer(self)

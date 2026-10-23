@@ -2529,6 +2529,16 @@ def _():
     )
 
 
+# Area icon files: tools/sciforge/icons_<area>.py draw more icons with the helpers above
+# (run here, in this module's namespace, so @icon registers them). One file per area keeps
+# builders working side by side from editing the same lines.
+_HERE = os.path.dirname(os.path.abspath(__file__))
+for _area in sorted(os.listdir(_HERE)):
+    if _area.startswith("icons_") and _area.endswith(".py"):
+        with open(os.path.join(_HERE, _area), encoding="utf-8") as _handle:
+            exec(compile(_handle.read(), os.path.join(_HERE, _area), "exec"), globals())
+
+
 # Icons kept exactly as drawn (main() empties the folder first, so they live here too).
 # palette_check: the tick of a ticked check box (theme.py, sketch_palette.py), 14 px.
 RAW = {
