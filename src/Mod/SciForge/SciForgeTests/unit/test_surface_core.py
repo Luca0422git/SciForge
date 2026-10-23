@@ -552,6 +552,35 @@ class PartThreeTests(unittest.TestCase):
         self.assertEqual(core.corner_shift(square, drawn[:3], centre, centre), (0, False))
 
 
+class IsoCurveTests(unittest.TestCase):
+    """Sketch > Project / Include > Isoparametric Curve: where the curves go (surface_iso)."""
+
+    def test_distributed_spreads_evenly_off_the_edges(self):
+        self.assertEqual(core.iso_fractions(1), [0.5])
+        self.assertEqual(core.iso_fractions(3), [0.25, 0.5, 0.75])
+        for bad in (0, -1, core.MAX_ISO_COUNT + 1):
+            with self.assertRaises(core.SurfaceError):
+                core.iso_fractions(bad)
+
+    def test_single_distance_to_fraction_and_back(self):
+        lengths = [0.0, 10.0, 30.0, 40.0]  # three uneven steps of the parameter
+        self.assertAlmostEqual(core.fraction_at_length(lengths, 0.0), 0.0)
+        self.assertAlmostEqual(core.fraction_at_length(lengths, 10.0), 1.0 / 3.0)
+        self.assertAlmostEqual(core.fraction_at_length(lengths, 20.0), 0.5)
+        self.assertAlmostEqual(core.fraction_at_length(lengths, 40.0), 1.0)
+        for d in (0.0, 5.0, 20.0, 33.0, 40.0):
+            f = core.fraction_at_length(lengths, d)
+            self.assertAlmostEqual(core.length_at_fraction(lengths, f), d)
+        with self.assertRaises(core.SurfaceError):  # past the face
+            core.fraction_at_length(lengths, 41.0)
+        with self.assertRaises(core.SurfaceError):
+            core.fraction_at_length([0.0, 0.0], 0.0)
+
+    def test_clamp(self):
+        self.assertEqual(core.clamp_fraction(-0.2), 0.0)
+        self.assertEqual(core.clamp_fraction(1.7), 1.0)
+
+
 class WordTests(unittest.TestCase):
     def test_count_label(self):
         self.assertEqual(core.count_label(0, "edge"), "")

@@ -907,3 +907,47 @@ def cell_name(index, size, solid):
     """'Cell 2 (125.0 mm³)' / 'Cell 2 (40.0 mm²)' for the cells list."""
     unit = "mm³" if solid else "mm²"
     return "Cell %d (%.1f %s)" % (index + 1, size, unit)
+
+
+# -- Isoparametric Curve (Sketch > Project / Include, surface_iso.py) ---------------------------
+MAX_ISO_COUNT = 50
+
+
+def clamp_fraction(value):
+    return min(1.0, max(0.0, float(value)))
+
+
+def iso_fractions(count):
+    """Distributed: `count` curves at even steps across the face, none on its edges."""
+    n = int(count)
+    if n < 1 or n > MAX_ISO_COUNT:
+        raise SurfaceError("Type how many curves: from 1 to %d." % MAX_ISO_COUNT)
+    return [(i + 1.0) / (n + 1.0) for i in range(n)]
+
+
+def fraction_at_length(lengths, distance):
+    """Single: the parameter fraction (0 .. 1) where the cumulative `lengths` (mm, at even
+    parameter steps from 0 to the face's width) reach `distance`."""
+    total = lengths[-1] if lengths else 0.0
+    d = float(distance)
+    if total < 1e-12:
+        raise SurfaceError("The face has no width that way.")
+    if d < -1e-9 or d > total + 1e-9:
+        raise SurfaceError(
+            "The distance must be from 0 to %.2f mm (the face's width that way)." % total
+        )
+    steps = len(lengths) - 1
+    for i in range(1, len(lengths)):
+        if lengths[i] >= d - 1e-12:
+            span = lengths[i] - lengths[i - 1]
+            part = (d - lengths[i - 1]) / span if span > 1e-12 else 0.0
+            return clamp_fraction((i - 1 + part) / steps)
+    return 1.0
+
+
+def length_at_fraction(lengths, fraction):
+    """The inverse of fraction_at_length: mm from the first edge at a parameter fraction."""
+    steps = len(lengths) - 1
+    x = clamp_fraction(fraction) * steps
+    i = min(int(x), steps - 1)
+    return lengths[i] + (lengths[i + 1] - lengths[i]) * (x - i)

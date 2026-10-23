@@ -1033,6 +1033,9 @@ SKETCH_CREATE = group(
                 item("Intersect", "Sketcher_Intersection", "sk_intersect"),
                 item("Include 3D Geometry", "SciForge_SketchInclude3D", "sk_project"),
                 item("Project to Surface", "SciForge_SketchProjectToSurface", "sk_project"),
+                item(
+                    "Isoparametric Curve", "SciForge_SketchIsoparametricCurve", "isocurve"
+                ),  # owner: surface-3
             ],
         ),
         item("Sketch Dimension", "Sketcher_Dimension", "sk_dimension", "D"),
