@@ -299,9 +299,11 @@ def toggle(fp, prop):
             return
         doc = fp.Document
         doc.openTransaction("Show/Hide Bend Lines")
-        setattr(fp, prop, not getattr(fp, prop))
-        doc.recompute()
-        doc.commitTransaction()
+        try:
+            setattr(fp, prop, not getattr(fp, prop))
+            doc.recompute()
+        finally:
+            doc.commitTransaction()  # the undo step closed even when the recompute failed
     except Exception as exc:
         warn("flat pattern %s: %s" % (prop, exc))
 

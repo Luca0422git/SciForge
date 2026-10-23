@@ -176,8 +176,18 @@ class UnfoldPanel(SheetPanel):
             self.info.setText("%d bend(s) laid flat." % self.target.BendCount)
 
     def ready(self):
+        face = self.pick("face")
+        unfold_all = self.all_bends.isChecked()
+        bends = [] if unfold_all else list(self.picks["bends"])
+        if not face:
+            return "Pick the Stationary Entity: a flat top or bottom face of a wall."
+        if not bends and not unfold_all:
+            return "Pick the bends to unfold, or tick Unfold All Bends."
         if self.target is None:
             return "Pick the stationary face and the bends (or Unfold All Bends) first."
+        # OK keeps what the dialog shows now (QA: a bend cleared or Unfold All Bends unticked
+        # after the preview left the step with the old picks, and OK kept those)
+        sheetmetal_flat.update_unfold(self.target, self.base, face, bends, unfold_all)
         return None
 
 

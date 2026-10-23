@@ -80,8 +80,10 @@ def refind(shape, name, memo):
         if d is not None and (best is None or d < best[0]):
             best = (d, "Face%d" % (i + 1))
     if best is None:
+        # (Edit Flat Pattern only opens the flat pattern: it cannot pick another face)
         raise FlatPatternError(
-            "the stationary face is gone after an edit: pick it again (Edit Flat Pattern)"
+            "the stationary face is gone after an edit: delete the Flat Pattern and create it "
+            "again from another top or bottom face"
         )
     return best[1]
 
