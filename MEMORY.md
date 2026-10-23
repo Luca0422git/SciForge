@@ -1479,7 +1479,7 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 Luca: "the action for experimental failed. Is that something to be worried about? Seems like
 you aren't" - I had pushed without watching CI. **After every push, watch the GitHub run.**
-Three causes, all in the tests, none in SciForge itself:
+Three causes in the tests, and one small real bug (last bullet):
 
 - **Window size leaked between scenarios** (21 + 10 failures): `export_report_card` shrinks the
   window to 1100 x 700 and "maximize" does nothing under xvfb (no window manager); FreeCAD
@@ -1490,8 +1490,15 @@ Three causes, all in the tests, none in SciForge itself:
   FreeCAD run from the module folder, so the path pointed nowhere. Made absolute.
 - **Docs example get_drawing#1**: the title block's DrawnBy is the login name (root here,
   runner on CI); masked like dates.
-- One unit "failure" seen only on CI, not reproduced here (Python 3.12, PowerShell, fresh
-  clone, non-root all pass); run_tests.sh now prints failing unit tests into the CI log.
+- **Real bug, sciforge-cli only**: `tools` and `docs` lost a short answer whenever stdout was
+  a pipe (a script or an AI app reading it): the CLI ends with os._exit, which does not flush.
+  Hidden here because this sandbox sets PYTHONUNBUFFERED=1; reproduced as user `runner` with
+  `env -i`. Fixed (flush before os._exit); the unit test now strips PYTHONUNBUFFERED. The
+  FreeCAD-backed commands (unbuffered stream) and the MCP server (flush per message) were
+  never affected; the SciForge app itself does not use this code. run_tests.sh now prints
+  failing unit tests into the CI log (CI showed only the last 3 lines).
+- **To reproduce CI here**: a user `runner`, `env -i` (no PYTHONUNBUFFERED), python3.12, and
+  pwsh (PowerShell for Linux, from its GitHub release) on PATH: same 11 skips as CI.
 
 ### Session log: Draft in real time, live pictures, safe sketch geometry (branch `experimental`, 2026-10-22/23)
 

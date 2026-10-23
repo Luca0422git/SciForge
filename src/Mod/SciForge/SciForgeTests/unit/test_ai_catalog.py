@@ -533,16 +533,31 @@ class Lists(unittest.TestCase):
 
     def test_cli_tools_prints_the_catalogue(self):
         script = os.path.join(AI, "cli.py")
-        done = subprocess.run([sys.executable, script, "tools"], capture_output=True, timeout=60)
+        # Output buffered as for any program reading it: the CLI ends with os._exit, and a
+        # short answer it did not flush was lost (seen on CI only, where PYTHONUNBUFFERED is unset)
+        env = {k: v for k, v in os.environ.items() if k != "PYTHONUNBUFFERED"}
+        done = subprocess.run(
+            [sys.executable, script, "tools"], capture_output=True, timeout=60, env=env
+        )
         self.assertEqual(done.returncode, 0, done.stderr)
         self.assertEqual(json.loads(done.stdout.decode("utf-8")), catalog.catalogue())
         done = subprocess.run(
             [sys.executable, script, "tools", "--names", "--category", "drawing"],
             capture_output=True,
             timeout=60,
+            env=env,
         )
+        self.assertEqual(done.returncode, 0, done.stderr)
         names = done.stdout.decode("utf-8").split()
         self.assertEqual(names, [t["name"] for t in catalog.TOOLS if t["category"] == "drawing"])
+        done = subprocess.run(
+            [sys.executable, script, "docs", "search", "extrude"],
+            capture_output=True,
+            timeout=60,
+            env=env,
+        )
+        self.assertEqual(done.returncode, 0, done.stderr)
+        self.assertTrue(done.stdout.strip(), "docs search printed nothing")
 
     def test_claude_extension_lists_every_tool_and_carries_the_catalogue(self):
         data = installers.manifest("1.0.0", "/py")

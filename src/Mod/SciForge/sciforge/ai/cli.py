@@ -373,10 +373,13 @@ def _run_as_script():
     except Exception as exc:
         sys.stderr.write("[SciForge] sciforge-cli failed: %s\n" % exc)
         code = 1
-    try:
-        sys.stderr.flush()
-    except Exception:
-        pass
+    # os._exit does not flush: a short answer of `tools` or `docs` (sys.stdout.buffer) was lost
+    # whenever stdout was a pipe, as for a script or an AI app reading it
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.flush()
+        except Exception:
+            pass
     os._exit(code)  # (FreeCAD's command-line program would go on into its own console)
 
 
