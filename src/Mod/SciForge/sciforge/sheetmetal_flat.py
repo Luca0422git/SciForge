@@ -262,7 +262,7 @@ def _group(doc, first, last):
         a, b = names.index(first.Name), names.index(last.Name)
         members = names[min(a, b) : max(a, b) + 1]
         gid = timeline_core.new_group_id(tl)
-        title = "Unfold %s" % first.Label
+        title = first.Label  # the folder is named after its Unfold
         for n in members:
             timeline_ops._set_group(doc.getObject(n), gid, title)
     except Exception as exc:
