@@ -547,6 +547,20 @@ def find_participants(doc, points, normal, offset=0.0):
     return out
 
 
+def auto_participants(refs, options, steps=()):
+    """{+1: body, -1: body} as a new boss would find them (an edited one: its bodies)."""
+    found = {1: None, -1: None}
+    steps = [s for s in steps or () if bodies.alive(s)]
+    if steps:
+        for step in steps:
+            found[1 if step.Toward >= 0 else -1] = bodies.body_of(step)
+        return found
+    sketch = check_refs(refs)
+    points = global_points(refs)
+    _origin, normal, _x = sketch_frame(sketch)
+    return find_participants(sketch.Document, points, normal, float(options.get("offset", 0.0)))
+
+
 # -- the step --------------------------------------------------------------------------------------
 def load_meta(obj):
     return bodies.load_meta(obj, META)

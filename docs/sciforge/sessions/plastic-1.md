@@ -1,0 +1,78 @@
+### Session log: PLASTIC part 1 (branch `sf/plastic-1`, wave 6, 2026-10-23)
+
+Built Fusion's PLASTIC tab part 1: Assign / Manage Plastic Rules, the rule defaults in the
+SOLID dialogs, Boss, Rest and Rule Fillet. Spec and gaps: `docs/sciforge/parity/plastic.md`.
+
+**What a user gets (plain words, for Luca)**
+
+- PLASTIC tab > SETUP > **Assign Plastic Rule**: pick a component (or click one of its
+  bodies), pick a rule (a material with its wall thickness, draft angle, corner radius...),
+  OK. The bodies take the rule's material. From then on Shell opens with the rule's wall,
+  Draft with its angle, Rib / Web with 0.6 x the wall, a thin Extrude with the wall.
+- **Manage Plastic Rules**: the rules of this design and your library; New, Edit (the fields
+  open under the lists; "Thickness / 2" works), Copy, Delete, Copy to Library / Design, Set As
+  Default. A rule in use, or the library's default, cannot be deleted (it says why).
+- CREATE > **Boss**: draw a sketch with points on the plane where the case meets its lid
+  (or just click a flat face: SciForge puts the point there and raises a standoff). Boss
+  builds the screw boss in the lid (head side, counterbored clearance hole, a recess) and in
+  the case (thread side, pilot hole, its tip fitting the recess). Tabs for each side and
+  for ribs; Flip swaps the sides; the blue arrow moves the parting plane.
+- CREATE > **Rest**: a closed sketch above a curved wall becomes a flat landing with an even
+  wall under it.
+- MODIFY > **Rule Fillet**: the Fillet dialog in its Rule Fillet type, the radius from the
+  rule.
+
+**Commits**: a807084 (Boss / Rest geometry), f7c8248 (dialogs, commands, defaults, tab),
+c477760 / d506fba / 59026c1 (scenarios), d103e0f (golden), 3c708d7 (core split, unit tests),
+f3d4434 (critic pass), 1599346, 1c99d05, d22b14a (Boss on a face), then the Side bodies and
+docs.
+
+**FreeCAD facts and traps found**
+
+- `Shape.removeSplitter()` on a boolean result can corrupt the input shapes' shared
+  sub-shapes (FreeCAD 1.1.4): `base.cut(a).fuse(b).removeSplitter()` changed `base`'s volume
+  from 9198 to 21463. Copy the base first (`base.copy()`).
+- PartDesign Thickness with Join = Intersection (SciForge's Shell Type Sharp) leaves a half
+  pipe unshelled and "Valid", no error. Join = Arc works. A silent wrong result in Shell
+  (not fixed here: `shelling.py` is outside the plastic area; noted for the integrator).
+- A ray along a boss axis runs down the boss's own hole: re-finding the bodies of an
+  existing boss that way loses the lid. An edit keeps the bodies its steps are in.
+- A rib that stops a fraction of a millimetre short of a wall leaves no room for the root
+  fillet (OpenCASCADE `StdFail_NotDone`); turning the ribs or using To Next works. The dialog
+  says so.
+- `fillet_ui._select()` blocks the combo's signal: to switch the Fillet dialog's Type the way
+  a click does, set the index directly (`panel.type.setCurrentIndex(...)`).
+- In the iso view the lid covers the parting plane's points: the scenario picks them by
+  clicking the sketch's row in the browser (a sketch picked gives all its points).
+- `PartDesign::Body` faces selected in the view resolve to the body's Tip: a click on the
+  floor during the Boss preview lands on the preview step's copy of the floor, so "the same
+  face" is checked by plane, not by name.
+
+**Research critic pass applied** (scratchpad `research/plastic.md`, "Critic pass"):
+Constant Thickness is not in Fusion (kept as a labelled SciForge extra); the rib shape None
+means no ribs (the dialog offers Chamfer / Fillet, ribs switched by the Side boxes); the head
+side's recess is sized to the thread side's diameter (defaults changed, golden and hand
+formulas updated); To Next ribs are web-shaped; Rule Fillet is a Fillet type (the menu
+entry opens the Fillet dialog in that type).
+
+**Contract additions** (plastic-2 may use them): `plastic.library_rules / library_rule /
+save_library_rule / delete_library_rule / default_rule_name / set_default_rule / is_used /
+unique_name / material_key / apply_material / plastic_components / TOOL_DEFAULTS /
+apply_defaults`; `plastic_core.MATERIAL_KEYS / MATERIALS / LABELS / describe`. Nothing
+renamed or removed. `assign_rule` and `rule_for_component` now also look in the user's
+library and use the user's default rule.
+
+**Shared files touched** (one guarded line each, plus an import line): `shell_ui.py`,
+`draft_ui.py`, `rib_ui.py`, `extrude_ui.py` (`plastic.apply_defaults`); `ribbon_config.py`
+(the five plastic-1 lines only). No FreeCAD core change.
+
+**Tests**: scenarios `plastic_rules` (63), `plastic_boss` (53), `plastic_boss_face`,
+`plastic_rest` (32) pass; golden `plastic_boss_enclosure`, `plastic_rest_cylinder`,
+`plastic_rule_boss_wall`, `plastic_rule_edit_moves_boss` pass (exact, analytic);
+`test_plastic_core.py` (17) passes; `--only base`: unit 1858 OK, golden 444 pass + 2 xfail
+(existing).
+
+**Open** (see the parity doc's Known gaps): Boss fastener component, more boss blends,
+per-rib extents, rule links in the SOLID steps (defaults only), Thicken / Emboss defaults,
+Rib draft, a "Plastic Rule" row in the browser (would share sm-forming's `browser_ui.py`
+lines), the Shell Sharp half-pipe finding.

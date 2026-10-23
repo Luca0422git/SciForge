@@ -100,6 +100,11 @@ class BossPanel(Panel):
         self._quiet = False
         self.value_boxes = ValueBoxes(self, default="offset")
         self.face_sketch = None  # the point sketch made by clicks on a face
+        self.active_box = "points"  # the selection box that takes the clicks
+        self.picked_bodies = {}  # side -> the body picked for it (else found)
+        # {+1, -1: body} found along the sketch normal before the first preview (an edit:
+        # the bodies its steps are in); a ray along a boss's axis later runs down its hole
+        self.auto_found = None
         self.body = commands.find_body() if feature is None else curves.owner_body(feature)
         self.rule = plastic.rule_for_body(self.body) if self.body is not None else None
         if self.rule is None:
@@ -153,6 +158,18 @@ class BossPanel(Panel):
             "The screw's nominal diameter: sets the hole and boss sizes of both sides"
         )
         grid.addRow("Thread Diameter", self.screw.widget)
+        # Fusion's participant bodies: found by themselves (the nearest visible body along
+        # each side's direction), or picked here (click the box, then the body)
+        self.body_fields = {}
+        for side in (1, 2):
+            field = SelectionField(self, "body%d" % side, "Auto")
+            field.button.setObjectName("SciForgeBoss_body%d" % side)
+            field.clear.setObjectName("SciForgeBoss_clear_body%d" % side)
+            field.button.setToolTip(
+                "The body this side joins: Auto finds the nearest one; click here, then a body"
+            )
+            self.body_fields[side] = field
+            grid.addRow("Side %d Body" % side, field.widget)
         self.bodies_label = QtWidgets.QLabel("")
         self.bodies_label.setObjectName("SciForgeBoss_bodies")
         self.bodies_label.setWordWrap(True)
@@ -424,11 +441,39 @@ class BossPanel(Panel):
 
     # -- the selection box -------------------------------------------------------------------------
     def activate(self, name):
-        self.field.set_active(True)
+        self.active_box = name
+        self.field.set_active(name == "points")
+        for side, field in self.body_fields.items():
+            field.set_active(name == "body%d" % side)
+        if name != "points":
+            self.message.setText("Click the body Side %s joins." % name[-1])
 
     def clear_field(self, name):
-        self.refs = []
-        self._picks_changed()
+        if name == "points":
+            self.refs = []
+            self._picks_changed()
+            return
+        side = int(name[-1])
+        self.picked_bodies.pop(side, None)
+        self.body_fields[side].set_text("")
+        self.activate("points")
+        self._changed()
+
+    def _toward(self, side):
+        head = -1 if self.options.get("flip") else 1
+        return head if side == 1 else -head
+
+    def _body_picked(self, obj):
+        side = int(self.active_box[-1])
+        body = obj if pb.bodies.is_body(obj) else pb.bodies.body_of(obj)
+        if body is None or not pb.bodies.has_solid(body):
+            self.message.setText("⚠ Click a solid body for Side %d." % side)
+            return
+        self.picked_bodies[side] = body
+        self.body_fields[side].set_text(body.Label)
+        self.activate("points")
+        self.message.setText("")
+        self._changed()
 
     def _start(self):
         if self.body is None:
@@ -471,6 +516,9 @@ class BossPanel(Panel):
                 return
             Gui.Selection.clearSelection()
             if self.arrow is not None and _dragging(self.arrow):
+                return
+            if self.active_box != "points":
+                self._body_picked(picks[0][0])
                 return
             for obj, short, point in picks:
                 self._picked(obj, short, point)
@@ -572,6 +620,7 @@ class BossPanel(Panel):
                     pb.bodies.remove_step(step)
                 self.steps = []
                 self.participants = None
+                self.auto_found = None
                 self.schedule()
             self._remove_arrow()
             self.error = "Pick the boss points." if self.editing else ""
@@ -601,8 +650,13 @@ class BossPanel(Panel):
         if not self.refs:
             return
         try:
+            if self.auto_found is None:
+                self.auto_found = pb.auto_participants(self.refs, self.options, self.steps)
+            participants = dict(self.auto_found)
+            for side, body in self.picked_bodies.items():
+                participants[self._toward(side)] = body
             self.steps = pb.make(
-                self.refs, self.options, participants=self.participants, steps=self.steps
+                self.refs, self.options, participants=participants, steps=self.steps
             )
             self.participants = {1: None, -1: None}
             for step in self.steps:

@@ -108,6 +108,53 @@ def two_standoffs():
     h.check("two standoffs", ps.near(v, s["v0"] + 2 * standoff_volume(), 1.0), v)
 
 
+def side1_box():
+    p = ps.boss_panel()
+    ps.click(p.body_fields[1].button)
+
+
+def pick_bottom_for_side1():
+    p = ps.boss_panel()
+    h.check("the Side 1 box takes the clicks", p and p.active_box == "body1", p and p.active_box)
+    h.check(
+        "click the body, the dialog says",
+        p and "Click the body Side 1 joins" in p.message.text(),
+        p and p.message.text(),
+    )
+    ps.click_row("Bottom")
+
+
+def bottom_refused_for_side1():
+    p = ps.boss_panel()
+    ps.settle(p)
+    h.check(
+        "the box names the picked body",
+        p and p.body_fields[1].button.text() == "Bottom",
+        p and p.body_fields[1].button.text(),
+    )
+    text = p.message.text() if p else ""
+    h.check("Side 1 meets nothing above the floor: said", "no body found" in text, text)
+    h.check("the points box takes the clicks again", p and p.active_box == "points")
+
+
+def clear_side1():
+    p = ps.boss_panel()
+    ps.click(p.body_fields[1].clear)
+
+
+def side1_auto_again():
+    p = ps.boss_panel()
+    ps.settle(p)
+    h.check(
+        "cleared: Auto again",
+        p and p.body_fields[1].button.text() == "Auto" and not p.picked_bodies,
+    )
+    h.check("no error again", p and p.message.text() == "", p and p.message.text())
+    h.check(
+        "the two standoffs back", ps.near(ps.volume(bottom()), s["v0"] + 2 * standoff_volume(), 1.0)
+    )
+
+
 def click_wall():
     h.click(V(0, 20, 10))
 
@@ -155,6 +202,11 @@ h.run(
         standoff,
         click_floor_again,
         two_standoffs,
+        side1_box,
+        pick_bottom_for_side1,
+        bottom_refused_for_side1,
+        clear_side1,
+        side1_auto_again,
         click_wall,
         wall_refused,
         ok,
