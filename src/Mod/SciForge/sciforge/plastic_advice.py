@@ -90,11 +90,16 @@ class DesignAdvice:
         add("App::PropertyString", "Results", "What was found (JSON)", "")
         add("App::PropertyString", "Summary", "What was found", "")
         add("App::PropertyBool", "Stale", "Not checked again while hidden", False)
+        add("App::PropertyString", "CheckedShapes", "The bodies as last checked", "")
         try:
             obj.setEditorMode("SciForgeType", 2)
-            for name in ("Problem", "Results", "Summary", "Stale"):
+            for name in ("Problem", "Results", "Summary", "Stale", "CheckedShapes"):
                 obj.setPropertyStatus(name, ["Output", "Hidden"])
             obj.setEditorMode("PullVector", 2)
+            # the display only changes the colours drawn from the results kept: no new
+            # check (seconds on a big part). "Output": a change does not touch the analysis
+            # (NoRecompute does not stop a FeaturePython from running again)
+            obj.setPropertyStatus("Display", "Output")
         except Exception:
             pass
 
@@ -122,6 +127,9 @@ class DesignAdvice:
         text = json.dumps(results, sort_keys=True)
         if obj.Results != text:
             obj.Results = text
+        checked = signature(obj)
+        if not _same_shapes(obj.CheckedShapes, checked):
+            obj.CheckedShapes = checked
         summary = core.summary_text(results) if not problem else ""
         if obj.Summary != summary:
             obj.Summary = summary
@@ -147,6 +155,47 @@ def hidden(obj):
         return False
     try:
         return obj.ViewObject is not None and not obj.ViewObject.Visibility
+    except Exception:
+        return False
+
+
+def signature(obj):
+    """The checked bodies as they are now, in short (volume, area, faces): tells whether the
+    results kept still describe them (JSON)."""
+    out = []
+    for body in targets(obj):
+        try:
+            shape = body.Shape
+            out.append([body.Name, shape.Volume, shape.Area, len(shape.Faces)])
+        except Exception:
+            out.append([body.Name, 0.0, 0.0, 0])
+    return json.dumps(out)
+
+
+def _same_shapes(a, b, tol=1e-6):
+    try:
+        a, b = json.loads(a), json.loads(b)
+        if len(a) != len(b):
+            return False
+        for x, y in zip(a, b):
+            if x[0] != y[0] or x[3] != y[3]:
+                return False
+            for u, v in ((x[1], y[1]), (x[2], y[2])):
+                if abs(u - v) > tol * max(1.0, abs(u), abs(v)):
+                    return False
+        return True
+    except Exception:
+        return False
+
+
+def out_of_date(obj):
+    """True when a shown analysis keeps results of bodies that changed since (an Undo / Redo
+    of a change made while it was hidden brings the bodies back, not its results). Never
+    for one that has not checked anything yet."""
+    try:
+        if hidden(obj) or not obj.Results or obj.Problem or not obj.CheckedShapes:
+            return False
+        return not _same_shapes(obj.CheckedShapes, signature(obj))
     except Exception:
         return False
 
@@ -196,6 +245,18 @@ def pull_of(obj):
     return vector
 
 
+def pull_for(obj, body, pull):
+    """The pull direction for one body: the picked one, else the Z of the body's component
+    (research 2.11: "Z of the component"; a turned component's part is moulded along its
+    own Z), turned round with Flip."""
+    if obj.PullDirection:
+        return pull
+    from . import surface_analysis
+
+    z = surface_analysis.parent_placement(body).Rotation.multVec(V(0, 0, 1))
+    return z * -1.0 if obj.Flip else z
+
+
 def checks_of(obj):
     return [c for c, prop in CHECK_PROPS.items() if bool(getattr(obj, prop, True))]
 
@@ -210,7 +271,7 @@ def measure(obj):
     start = time.time()
     for body in owners:
         rule = plastic.rule_for_body(body)
-        data = measure_shape(bodies.global_shape(body), rule, pull, checks)
+        data = measure_shape(bodies.global_shape(body), rule, pull_for(obj, body, pull), checks)
         data.update({"name": body.Name, "label": body.Label, "rule": rule["name"]})
         out["bodies"].append(data)
     log(

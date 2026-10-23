@@ -17,8 +17,8 @@ Code (`src/Mod/SciForge/sciforge/`):
 | INSPECT > Design Advice | `plastic_advice_core.py` | `plastic_advice.py` | `plastic_advice_ui.py` |
 
 Status: **built, first pass** (every command, its options, live preview, arrows with value
-boxes, one timeline step, edit, undo / redo, save / reopen, refusals with the reason).
-No core patch.
+boxes, one timeline step, edit, undo / redo, save / reopen, refusals with the reason);
+**QA pass done** (its fixes under "QA pass" below). No core patch.
 
 ## Behaviour spec (what Fusion does), with sources
 
@@ -114,7 +114,7 @@ between the bottom and top offsets. Lip and groove volumes are exact (golden mod
 | Fusion | SciForge |
 |---|---|
 | Bodies of components with a rule | The dialog starts on the shown solid bodies of components with a plastic rule (all shown bodies, with the default rule, when none has one); click a body to take it out or in. The rule of each body is named. |
-| Pull direction | Z by default; click the Pull Direction box, then a plane, flat face, straight edge or axis; Flip. |
+| Pull direction | The Z of each body's component by default (research: "Z of the component"; the design's Z at the root); click the Pull Direction box, then a plane, flat face, straight edge or axis (one direction for every body); Flip. |
 | Checks | **Thickness** (outside the rule's range), **Thickness Variation** (more than the rule's percentage from its Thickness), **Draft** (less than the rule's Minimum Draft Angle against the pull either way; faces square to the pull are fine), **Knife Edges** (convex edges sharper than 2 atan(1/2) = 53.13 degrees: thinner than the knife-edge threshold one threshold in), **Undercuts** (faces a two-part mould cannot reach along the pull). Each can be switched off. |
 | Overlay | Display **Issues**: green fine, blue too thin, orange too thick, yellow draft / variation, purple undercut, knife edges drawn red; **Thickness**: a map from the rule's minimum (blue) to its maximum (red). |
 | Issues list | Check, body and face (edge), and the worst value; a click selects the face and zooms to it. A summary line counts each check. |
@@ -160,6 +160,19 @@ then moved onto the exact face it lies on (the triangles cut corners off round f
     bottom corners found, the walls 2 mm elsewhere, no false alarm at the corners).
   - `ribbon_sweep` with `SWEEP_TABS=plastic` (112): every PLASTIC command opens with no
     pop-up or error.
+  - `plastic2_qa` (167, added by QA): Hide Other Body ticked before the sketch is picked (the
+    base hidden once found, shown again on OK); an edit from the timeline switched to Hook
+    and Loop then Cancel (the groove back exactly); the Hook Body box in an edit refused
+    with the reason; an edit OK'd, Undo / Redo of the edit; Ctrl+Z inside an edit (the
+    dialog cancelled, the design as before it); a sketch with no points; a sketch facing
+    away from the hook body (the note, then Flip finds the groove body); a Manual point
+    followed after an earlier point is deleted from the sketch (the edit shows it too);
+    Beam Length 20 through the floor noted, 12 not; a
+    Lip edit switched to Groove then Cancel; a Lip edit OK'd, Undo / Redo; Design Advice:
+    the Display switched without checking the design again, OK without checking again,
+    Esc on a second one; hidden, the Lip edited, shown, Undo and Redo (it checks the bodies
+    each brings back); a plate in a component turned 90 degrees (its pull is the
+    component's Z: its own 4 sides lack draft), Esc leaves nothing.
 - Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 19):
   snap fit parallel, edit (taper + draft), Hook and Loop, two points Aligned, Distance
   extent, Perpendicular through a panel; Lip And Groove, drafted, Swap, Groove alone, open
@@ -169,6 +182,61 @@ then moved onto the exact face it lies on (the triangles cut corners off round f
   and to the end (the other body's step follows both); a third point off the part left out.
 - Unit tests: `SciForgeTests/unit/test_plastic2_core.py` (35; the ray grid is checked
   against testing every triangle).
+
+## QA pass (2026-10-23, branch `sf/plastic-2-qa`)
+
+Fixed:
+
+- **Hide Other Body ticked before a sketch was picked did nothing** (no snap fit yet, so
+  no other body to hide; a body found later, after a new type or a pick, was not hidden
+  either). It now hides the body the grooves / loops go in whenever the preview finds it.
+- **Hook Body picked in an edit was silently ignored** (the step stays in its body's
+  history). The dialog now says the hooks stay on that body and how to put them on
+  another (delete, make a new one).
+- **No word when no body lies in front of the catches** (e.g. a sketch on the hook body's
+  own face: its normal points away from that body, so the hooks went on the other body
+  and no groove was made). The dialog now notes it and points to the Body box and Flip.
+- **A hook running into the other body was not mentioned** (research 2.4, G: "beam longer
+  than the available distance: warning"): a beam through the floor, a catch inside a
+  panel thicker than its reach, a point on top of a wall. The groove / loop step now
+  notes "the hook of snap fit N runs into this body: shorten Beam Length or move the
+  point" when a beam or catch overlaps that body (checked headless: through a 2 mm floor,
+  a loop's floor, a too-thick panel, a point on the rim; none for the normal cases).
+- **OK only looked at the Snap Fit / Lip step itself**: a failed hidden step in the other
+  body (the groove, slot, loop or the Lip's groove) would have been accepted and left in
+  that body's history. The dialogs now show its error and keep OK waiting, like the
+  step's own (defensive: no design found that fails only there).
+- **Manual points followed the wrong point after a sketch edit**: the picked points were
+  kept by geometry index only, so deleting an earlier point of the sketch moved the snap
+  fit to another point without a word. They are now also kept by the sketch's own
+  geometry ids (kept through deletes, saved with the file); a snap fit whose picked
+  points were all deleted is refused with the reason instead of taking the others.
+- **Design Advice checked the whole design again for a Display change and again on OK**
+  (seconds to tens of seconds on a big part). Display is now an output property (no
+  recompute; the colours are redrawn from the results kept), and OK only checks again
+  when a change is still waiting. Shown again after a change while hidden, it recomputes
+  only itself (and what it needs), not the whole document.
+- **Design Advice showed results of an undone design**: a change made while it was hidden
+  is checked when it is shown again, outside that change's undo step, so an Undo brought
+  the bodies back but not the results (checked headless: the 20 mm results stayed on the
+  2 mm part until the next recompute). It now keeps a short record of the bodies it
+  checked (volume, area, faces) and checks again after an Undo / Redo, or when shown,
+  if they differ. A Redo stays available.
+- **Design Advice's default pull was the design's Z** for every body; the research's spec
+  is the Z of the component. A body in a turned component (a part moulded along its own
+  Z, turned into place) had the wrong faces flagged for draft and undercut. Each body now
+  takes its component's Z unless a direction is picked.
+
+Behaviour that differs from the research, kept on purpose:
+
+- The research says Fusion's Lip wants a tangent chain and refuses edges that are not
+  tangent-continuous with Pull Direction (A-LIP). SciForge accepts a rim with sharp
+  corners (a plain box) with either guide and builds it exactly (offsets with sharp
+  joins); refusing it would leave a beginner's box without a lip.
+- Face Guide follows the wall beside the picked edges; Fusion lets you pick the guide face
+  on either side of the edge (A-LIP). There is no Guide Face box: the face beside an
+  inside rim edge is the only wall there.
+- Default Guide Type is Pull Direction (the research's guess was Face Guide, G).
 
 ## Known gaps
 
@@ -194,7 +262,11 @@ then moved onto the exact face it lies on (the triangles cut corners off round f
   Design Advice waits and checks again when shown. A check takes about 1.5 s for a 60-face
   enclosure with bosses, 3.5 s for a 130-face one and 25 s for a plate with 400 small holes
   (406 faces; measured in the sandbox under load); it runs in the recompute, so FreeCAD
-  waits that long after a change to a checked body.
+  waits that long after a change to a checked body. That includes every preview step of
+  another command's dialog (dragging a Snap Fit arrow on a checked body re-checks it each
+  time): hide the analysis while editing a big part. Deferring the check until the dialog
+  closes was considered in QA and left out: the check would then run after the dialog's
+  undo step, and an Undo would leave the analysis describing the undone design.
 - **Research G rows not built**: Hook and Loop's Loop Length / Width / Opening Length (the
   loop is sized from the hook and the clearance; only Loop Thickness is typed); Groove
   Extent and Groove Wall Thickness (a groove block built where the other body has no wall:

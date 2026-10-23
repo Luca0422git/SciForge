@@ -479,7 +479,7 @@ class LipPanel(Panel):
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
-        text = preview.failure(self.target)
+        text = failure(self.target)
         if not text and self.target is not None:
             from . import modify_bodies
 
@@ -621,7 +621,7 @@ class LipPanel(Panel):
             self.message.setText("⚠ This lip cannot be built.")
             return False
         preview.recompute(self.doc)
-        text = preview.failure(self.target)
+        text = failure(self.target)
         if text:
             self.message.setText("⚠ " + text)
             return False
@@ -662,6 +662,21 @@ class LipPanel(Panel):
         self._remove_arrows()
         self.value_boxes.discard()
         super().cleanup()
+
+
+def failure(feature):
+    """The error of the Lip step or of its hidden step in the other body, or "" (OK must not
+    leave a failed step behind, even a hidden one)."""
+    from . import modify_bodies
+
+    text = preview.failure(feature)
+    if text or feature is None:
+        return text
+    for follower in modify_bodies.followers_of(feature):
+        text = preview.failure(follower)
+        if text:
+            break
+    return text
 
 
 def _picks():
