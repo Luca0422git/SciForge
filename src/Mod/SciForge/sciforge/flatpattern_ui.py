@@ -440,6 +440,7 @@ class ExportPanel(taskui.Panel):
         ExportPanel.last = self
         self.fp = fp
         self.written = None
+        self._replace = None  # the existing file OK was pressed for once (OK again replaces)
         row = QtWidgets.QHBoxLayout()
         self.path = QtWidgets.QLineEdit(default_path(fp))
         self.path.setObjectName("SciForgeDxfPath")
@@ -470,6 +471,8 @@ class ExportPanel(taskui.Panel):
             )
             if path:
                 self.path.setText(path)
+                # the file dialog already asked before replacing a file
+                self._replace = path if path.lower().endswith(".dxf") else path + ".dxf"
         except Exception as exc:
             warn("Export DXF browse: %s" % exc)
 
@@ -485,6 +488,12 @@ class ExportPanel(taskui.Panel):
         path = self.path.text().strip()
         if not path:
             self.message.setText("⚠ Give the file a name.")
+            return False
+        target = path if path.lower().endswith(".dxf") else path + ".dxf"
+        if os.path.exists(target) and self._replace != target:
+            # QA: a name typed in the box replaced an existing file without a word
+            self._replace = target
+            self.message.setText("⚠ %s exists: OK again replaces it." % os.path.basename(target))
             return False
         try:
             self.written = flatpattern.export_dxf(self.fp, path, self.options())

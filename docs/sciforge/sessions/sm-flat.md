@@ -125,3 +125,44 @@ reliefs are on the flat only (Round / Square; no weld shapes); bevelled mitres a
 laid flat by the stationary side's outline; sm-more's Brake Form lofted flange has sharp
 folds (no bend radius) and is refused naming the sharp edge; flanges at an inside corner
 overlap when laid flat and are refused; a bend note's text cannot be edited.
+
+### QA pass (branch `sf/sm-flat-qa`, 2026-10-23)
+
+An independent QA session ran every `flatpattern_*` scenario, the unit tests and the golden
+models on `sf/sm-flat` (all passed), read the whole diff, probed the unfolder in real FreeCAD
+and added scenarios for the paths the builder's did not cover. What it fixed (in plain
+words for Luca):
+
+- **Rip: OK after a refused pick.** Rip showed a good gap, then a click on a curved edge was
+  refused in the dialog, but OK still cut the earlier gap. OK now checks what the dialog
+  shows and says why it cannot finish.
+- **Unfold: OK after unticking Unfold All Bends.** After the preview, unticking the box (or
+  clearing the bends) still unfolded every bend on OK. OK now takes the dialog as it is and
+  asks for the bends; a part with no bend at all is refused ("There is no bend to unfold").
+- **Two sheet metal bodies.** Starting Unfold on one body and then clicking the other left a
+  broken Unfold in the first one. The dialog now moves cleanly to the body you click.
+- **Flat pattern after a new thickness.** Changing the rule's thickness moved the plate's
+  top face and the flat pattern went red ("the stationary face is gone"). It now finds the
+  face again and follows, as Fusion's does (golden `sm_flat_thickness_change`).
+- **Flat pattern after a Move.** Moving the part with MODIFY > Move (even a plain shift)
+  turned the flat pattern red. It now keeps its face and follows (golden
+  `sm_flat_moved_body`).
+- **Flat pattern while unfolded.** With an Unfold not yet refolded, the flat pattern (and so
+  the DXF) lost the bend lines of the bends already laid flat, without a word. It now shows
+  the part as it was before the Unfold, and Create Flat Pattern asks you to Refold first.
+- **Flat pattern in a hidden component.** Opening it showed an empty screen; now its
+  component is shown while it is open and hidden again when you finish.
+- **Export DXF over an existing file.** A file name typed in the box replaced an existing
+  file without asking; OK now says it exists and a second OK replaces it.
+- Smaller: Show/Hide Bend Lines always closes its undo step; the "face is gone" message
+  now says to delete and recreate the flat pattern (Edit Flat Pattern cannot pick a face).
+
+New golden models: `sm_flat_thickness_change`, `sm_flat_moved_body`. New scenarios:
+`flatpattern_qa_paths`, `flatpattern_qa_partial`, `flatpattern_qa_two_bodies`,
+`flatpattern_qa_hidden_component` (details in the parity doc's Tests). FreeCAD facts: a FeaturePython step's preview made in one body must be removed when a
+pick dialog switches to another body (PickPanel.switch_body keeps the subclass's target);
+a PartDesign step's Shape is in its body's frame while `body.Shape` carries the body's
+Placement; a golden model cannot see that a Part::FeaturePython went Invalid (its last
+shape stays), so a QA golden changes the rule after the edit to force a new flat.
+`sketch_draw` fails its "sketch palette shown" check on this machine both on this branch and
+on the develop base before sm-flat (d50a665): not caused by this area.

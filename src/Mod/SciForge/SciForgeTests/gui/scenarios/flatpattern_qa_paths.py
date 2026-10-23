@@ -17,6 +17,7 @@
    Unfold ... Refold folder is still in the timeline; the Rip edited from the timeline keeps
    its type and face, Cancel changes nothing.
 6. Create Flat Pattern from the front wall (130.79 x 20); Export DXF, Cancel: no file written;
+   Export DXF to a file that exists: OK asks first (the file untouched), OK again replaces it;
    Finish Flat Pattern."""
 
 import math
@@ -38,9 +39,12 @@ def setup():
     s["volume"] = fs.volume()
     s["path"] = os.path.join(fs.out_dir(), "flat_qa.FCStd")
     s["dxf"] = os.path.join(fs.out_dir(), "flat_qa_cancelled.dxf")
+    s["old"] = os.path.join(fs.out_dir(), "flat_qa_existing.dxf")
     for path in (s["path"], s["dxf"]):
         if os.path.exists(path):
             os.remove(path)
+    with open(s["old"], "w", encoding="ascii") as handle:
+        handle.write("an older file\n")
 
 
 def not_sheet_metal():
@@ -446,6 +450,41 @@ def export_cancelled():
     h.check("still in the flat pattern", fs.current_tab() == "flat_pattern", fs.current_tab())
 
 
+def export_existing():
+    h.ribbon("Export DXF")
+
+
+def existing_ok():
+    fs.settle()
+    p = fs.export_panel()
+    h.check("Export DXF open again", p is not None)
+    if p is not None:
+        p.path.setText(s["old"])
+    fs.ok()
+
+
+def existing_asks():
+    fs.settle()
+    p = fs.export_panel()
+    text = p.message.text() if p is not None else ""
+    h.check("an existing file: OK asks first (dialog open)", fs.dialog_open())
+    h.check("it says the file exists", "exists" in text, text)
+    with open(s["old"], encoding="ascii", errors="replace") as handle:
+        h.check("the older file is untouched", handle.read() == "an older file\n")
+
+
+def existing_ok_again():
+    fs.ok()
+
+
+def existing_replaced():
+    fs.settle()
+    h.check("OK again closes Export DXF", not fs.dialog_open())
+    with open(s["old"], encoding="ascii", errors="replace") as handle:
+        text = handle.read()
+    h.check("the file is replaced by the DXF", "SECTION" in text and "OUTER_PROFILES" in text)
+
+
 def finish():
     h.ribbon("Finish Flat Pattern")
 
@@ -514,6 +553,11 @@ h.run(
         export,
         export_cancel,
         export_cancelled,
+        export_existing,
+        existing_ok,
+        existing_asks,
+        existing_ok_again,
+        existing_replaced,
         finish,
         finished,
     ],
