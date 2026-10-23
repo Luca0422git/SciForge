@@ -1,0 +1,92 @@
+{
+  "id": "sheetmetal_smm_bend_flip_start_45",
+  "title": "Bend: 45 degrees down (Flip), Bend Line position Start, then edited to 60 degrees End",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            60,
+            -5,
+            60,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        20,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 45,
+        "position": "start",
+        "flip": true
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 4001.884956,
+        "source": "analytic",
+        "note": "45 degrees before the edit"
+      }
+    },
+    {
+      "op": "sf_sm_more_edit",
+      "target": "b1",
+      "set": {
+        "angle": 60,
+        "position": "end"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4002.513274,
+    "bbox": [
+      0.0,
+      0.0,
+      -35.141,
+      80.2241,
+      40.0,
+      1.0
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "volume = flat plate - flat zone (angle x (R + K T) x 40) + bent zone (angle x ((R+T)^2 - R^2)/2 x 40), for 45 then 60 degrees"
+  }
+}

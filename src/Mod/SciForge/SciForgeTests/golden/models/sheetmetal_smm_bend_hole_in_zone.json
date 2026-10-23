@@ -1,0 +1,91 @@
+{
+  "id": "sheetmetal_smm_bend_hole_in_zone",
+  "title": "Bend: a hole in the bend zone comes through, bent",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s3",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        },
+        {
+          "circle": [
+            50,
+            20,
+            0.5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s3",
+      "at": [
+        [
+          5,
+          5
+        ]
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            50,
+            -5,
+            50,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        20,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "center"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4002.8914,
+    "bbox": [
+      0.0,
+      -0.0,
+      -0.0,
+      50.869,
+      40.0,
+      50.869
+    ],
+    "solids": 1,
+    "faces": 11,
+    "source": "baseline-freecad-1.1.4",
+    "note": "the 1 mm hole sits in the middle of the bend zone; measured with FreeCAD 1.1.4 (the hole is mapped onto the bend: its outline is linear in the cylinder's angle and height)",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}

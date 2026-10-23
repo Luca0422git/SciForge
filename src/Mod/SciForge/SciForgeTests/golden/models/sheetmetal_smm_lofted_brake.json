@@ -1,0 +1,69 @@
+{
+  "id": "sheetmetal_smm_lofted_brake",
+  "title": "Lofted Flange, Brake Form: a 40 mm square to a 30 mm circle 30 mm above (chord tolerance 0.5)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -20,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_lofted_flange",
+      "id": "l1",
+      "profile1": "s1",
+      "profile2": "s2",
+      "rule": "Steel (mm)",
+      "options": {
+        "forming": "brake",
+        "control": "chord_tolerance",
+        "value": 0.5
+      }
+    }
+  ],
+  "expect": {
+    "volume": 3867.852,
+    "bbox": [
+      -20.9273,
+      -20.963,
+      -0.0,
+      20.8851,
+      20.9019,
+      30.0
+    ],
+    "solids": 1,
+    "faces": 38,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: flat triangular facets, each moved T along its normal",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}

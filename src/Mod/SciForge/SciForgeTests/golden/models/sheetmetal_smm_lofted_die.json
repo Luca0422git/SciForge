@@ -1,0 +1,84 @@
+{
+  "id": "sheetmetal_smm_lofted_die",
+  "title": "Lofted Flange, Die Form: the same square to circle, smooth (then Face Number Brake Form by an edit)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            -20,
+            20,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 30,
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_lofted_flange",
+      "id": "l1",
+      "profile1": "s1",
+      "profile2": "s2",
+      "options": {
+        "forming": "die"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 3856.8239,
+        "rel_tol": 1e-05,
+        "source": "baseline-freecad-1.1.4",
+        "note": "Die Form, before the edit to Brake Form"
+      }
+    },
+    {
+      "op": "sf_sm_more_edit",
+      "target": "l1",
+      "set": {
+        "forming": "brake",
+        "control": "facet_number",
+        "value": 4
+      }
+    }
+  ],
+  "expect": {
+    "volume": 3961.631,
+    "bbox": [
+      -20.9302,
+      -20.9302,
+      -0.0,
+      20.9302,
+      20.9302,
+      30.0
+    ],
+    "solids": 1,
+    "faces": 24,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: Die Form lofts the profiles thickened in their own planes",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}

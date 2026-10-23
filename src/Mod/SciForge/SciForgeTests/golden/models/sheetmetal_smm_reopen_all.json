@@ -1,0 +1,136 @@
+{
+  "id": "sheetmetal_smm_reopen_all",
+  "title": "Save and reopen: a plate with a hem, a filleted corner and a bend rebuilds, then the hem is edited",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            60
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_sm_hem",
+      "id": "h1",
+      "edges": [
+        [
+          100,
+          30,
+          1
+        ]
+      ],
+      "options": {
+        "type": "open"
+      }
+    },
+    {
+      "op": "sf_sm_fillet",
+      "id": "r1",
+      "sets": [
+        {
+          "edges": [
+            [
+              0,
+              0,
+              0.5
+            ]
+          ],
+          "value": 5
+        }
+      ]
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            50,
+            -5,
+            50,
+            65
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        30,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "center"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 6231.6615,
+        "rel_tol": 1e-05,
+        "source": "baseline-freecad-1.1.4",
+        "note": "the same before and after the reopen"
+      }
+    },
+    {
+      "op": "reopen"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 6231.6615,
+        "rel_tol": 1e-05,
+        "source": "baseline-freecad-1.1.4",
+        "note": "the same before and after the reopen"
+      }
+    },
+    {
+      "op": "sf_sm_more_edit",
+      "target": "h1",
+      "set": {
+        "type": "rolled"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 6527.1482,
+    "bbox": [
+      -0.0,
+      -0.0,
+      0.0,
+      50.869,
+      60.0,
+      50.869
+    ],
+    "solids": 1,
+    "faces": 13,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: the same volume before and after the save / reopen; the hem edited to Rolled after reopening",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}

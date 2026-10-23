@@ -1,0 +1,92 @@
+{
+  "id": "sheetmetal_smm_fillet_chamfer",
+  "title": "Sheet metal Fillet (two radius sets) and Chamfer on a plate's corners",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            60
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_sm_fillet",
+      "id": "r1",
+      "sets": [
+        {
+          "edges": [
+            [
+              0,
+              0,
+              0.5
+            ]
+          ],
+          "value": 5
+        },
+        {
+          "edges": [
+            [
+              100,
+              0,
+              0.5
+            ]
+          ],
+          "value": 10
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_chamfer",
+      "id": "r2",
+      "sets": [
+        {
+          "edges": [
+            [
+              0,
+              60,
+              0.5
+            ],
+            [
+              100,
+              60,
+              0.5
+            ]
+          ],
+          "value": 4
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 5957.17477,
+    "bbox": [
+      0,
+      0,
+      0,
+      100,
+      60,
+      1
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "plate 6000 less the corner pieces: r 5 (25 - 25 pi/4), r 10 (100 - 100 pi/4), two 4 mm chamfers (8 each)"
+  }
+}
