@@ -113,6 +113,8 @@ class FlatPatternFeature:
             obj.ShowBendLines = True
         if add("App::PropertyBool", "ShowBendExtents", "Show the bend extent lines"):
             obj.ShowBendExtents = True
+        if add("App::PropertyBool", "CornerReliefs", "The rule's corner reliefs where bends meet"):
+            obj.CornerReliefs = True
         for name, doc in (
             ("Thickness", "Sheet thickness"),
             ("FlatLength", "Length of the flat (X)"),
@@ -161,6 +163,8 @@ class FlatPatternFeature:
                 if shown:  # the lines drawn: line_kinds() says which is which
                     lines.append(Part.makeLine(App.Vector(a.x, a.y, 0), App.Vector(b.x, b.y, 0)))
             bends.append(d)
+        if obj.CornerReliefs:
+            flat = with_corner_reliefs(flat, bends, body, result.thickness)
         text = json.dumps(bends, sort_keys=True)
         if obj.BendsJson != text:
             obj.BendsJson = text
@@ -182,6 +186,48 @@ class FlatPatternFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def with_corner_reliefs(flat, bends, body, thickness):
+    """The flat with the rule's 2-bend corner relief (Round: a hole of the Size's diameter,
+    Square: a square of that side) where two bends meet at a corner, centred on the crossing
+    of their centre lines (Fusion's Intersection placement). The folded part keeps its corner
+    as the Flange made it (sm-forming's known gap): the relief is the flat's."""
+    from . import flatpattern_core as core
+
+    if len(bends) < 2:
+        return flat
+    try:
+        rule = sheetmetal.rule_for_body(body)
+    except Exception:
+        return flat
+    shape, size = core.relief_size(rule)
+    if size <= 0:
+        return flat
+    reach = max(b["allowance"] for b in bends) + 2 * thickness + size
+    tools = []
+    for x, y, i, _j in core.corner_points(bends, reach):
+        base = App.Vector(x, y, -thickness - 1.0)
+        if shape == "round":
+            tools.append(Part.makeCylinder(size / 2.0, thickness + 2.0, base))
+        else:
+            (x1, y1), (x2, y2) = bends[i]["centre"]
+            angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
+            box = Part.makeBox(size, size, thickness + 2.0, App.Vector(-size / 2, -size / 2, 0))
+            box.rotate(App.Vector(), App.Vector(0, 0, 1), angle)
+            box.translate(base)
+            tools.append(box)
+    if not tools:
+        return flat
+    try:
+        cut = flat.cut(tools).removeSplitter()
+    except Exception as exc:
+        warn("corner reliefs not cut: %s" % exc)
+        return flat
+    if len(cut.Solids) != 1:
+        warn("corner reliefs would cut the flat apart: left out")
+        return flat
+    return cut.Solids[0]
 
 
 def is_flat_pattern(obj):

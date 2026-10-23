@@ -51,6 +51,7 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | One flat pattern per component; a second fails | Refused in the dialog ("this component already has a flat pattern ... delete it first"), OK waits | A[R35] |
 | A Flat Pattern node under the component; double-click / Activate opens it | A "Flat Pattern" row under its component (or the design); double-click or right-click > Edit Flat Pattern opens it | G, A[R48] |
 | The flat pattern is modal; the FLAT PATTERN contextual tab; Finish Flat Pattern (green check, Export DXF left of it) | The design's tabs hide, FLAT PATTERN (INSPECT, SELECT, EXPORT > Export DXF, FINISH FLAT PATTERN) is the only tab; the folded part is hidden and the flat shown from the top; Finish goes back to the tab and the camera you had | A[R48], F[F13], F[F14] |
+| 2-bend corner relief on the flat (Round / Square of the rule's size) where two bends meet, centred on the crossing of their centre lines (Intersection) | Same on the flat pattern (and so in the DXF): Round = a hole of the Size's diameter (sm-forming's reading of Size), Square = a square of that side along the first bend; "Corner Reliefs" property to switch it off; Tangent placement is treated as Intersection; Tear / Trim To Bend / weld shapes add nothing. The folded part keeps its corner as the Flange made it | A[R1], A[R24], research 4.6, G |
 | Bend lines (centre) and bend extents (tangent lines); up / down; up bends red in drawings | Shown on the flat: centre lines red (up) / blue (down), extent lines grey; right-click > Show/Hide Bend Lines / Bend Extents | A[R36], A[R37], F[F9] |
 | The flat pattern follows edits of the folded model | Same: it recomputes when the body changes; the stationary face is found again by where it was when face names change | G |
 | Timeline "FlatPattern1" | Not a timeline step (the browser row only) | F[F10], G |
@@ -145,8 +146,11 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   along the corner's bisector plane): the flat takes the stationary side's outline, so its
   volume differs a little from the folded part's; a real (square) mitre cut has no such
   difference.
-- **Bend relief / corner relief shapes** are whatever the folded part has (sm-forming's
-  flanges cut them); the unfolder adds no relief of its own.
+- **Corner reliefs are on the flat only**: the rule's Round / Square 2-bend relief is cut
+  into the flat pattern where two bends meet, but the folded part keeps the corner the Flange
+  made (sm-forming's gap), so an Unfold / Refold does not show it; Tangent placement and the
+  weld shapes are not built; flange-level relief overrides are not read (the body's rule is).
+  Bend reliefs are whatever the folded part has (sm-forming's flanges cut them).
 - **Along Edge between two walls** cuts symmetrically about the corner's bisector plane;
   Fusion's exact gap placement is not documented (research §5 item 6).
 - **The DXF is R12**: a SPLINE entity in an R12 file is read by FreeCAD, LibreCAD and most
