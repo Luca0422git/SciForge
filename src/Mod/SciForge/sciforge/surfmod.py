@@ -740,56 +740,49 @@ def _retrim(shape, face, origin, n, d):
 
 def replace_open(shape, sources, target):
     """Fusion's Replace Face on a surface body (SURFACE > MODIFY > Replace Face, surface-4):
-    the source face goes, each face round it is carried on along its own surface or cut
-    back to the target's plane, and the piece of that plane they close round takes its
-    place. A flat target is taken as its whole plane; a curved one as Replace Face takes it
-    on solids (a cylinder or a ball whole, another surface a quarter bigger:
-    replace_face.target_surface), see _replace_curved. The source face must be closed round
+    the source faces (one face, or touching faces: a floor with the fillets round it, Tangent
+    Chain) go, each face round them is carried on along its own surface or cut back to the
+    target's plane, and the piece of that plane they close round takes their place. A flat
+    target is taken as its whole plane; a curved one as Replace Face takes it on solids (a
+    cylinder or a ball whole, another surface a quarter bigger:
+    replace_face.target_surface), see _replace_curved. The source faces must be closed round
     by other faces. Raises SurfaceModifyError with the reason."""
     import BOPTools.SplitAPI as split_api
 
-    from . import surface_geom
-
-    if len(sources) != 1:
-        raise SurfaceModifyError(
-            "On a surface body Replace Face moves one face at a time (with Tangent Chain off, "
-            "or a face with no smooth neighbours). Pick one face."
-        )
-    face = sources[0]
+    if not sources:
+        raise NeedsPick("Select the face to replace.")
+    group = list(sources)
+    face = group[0]
+    neighbours = _ring(shape, group)
     if not _is_flat(target):
-        return _replace_curved(shape, face, target)
+        return _replace_curved(shape, group, target, neighbours)
     origin, n = target.CenterOfMass, _plane_of(target)[1]
     size = max(shape.BoundBox.DiagonalLength, target.BoundBox.DiagonalLength, 1.0) * 4.0
     plane = Part.Plane(origin, n)
     u, v = plane.parameter(face.CenterOfMass)
     cutter = plane.toShape(u - size, u + size, v - size, v + size)
-    if _is_flat(face) and all(abs((p.Point - origin).dot(n)) < 1e-7 for p in face.Vertexes):
-        raise SurfaceModifyError("That face already lies on the target.")
-    neighbours = {}
-    for edge in face.Edges:
-        owners = [f for f in faces_of_edge(shape, edge) if not f.isSame(face)]
-        if len(owners) != 1:
-            raise SurfaceModifyError(
-                "That face has an open edge: SciForge cannot tell where it should go on the "
-                "target. Pick a face with faces all round it, or use Extend and Trim."
-            )
-        key = _index(shape.Faces, owners[0])
-        neighbours.setdefault(key, (owners[0], []))[1].append(edge)
+    if len(group) == 1 and _is_flat(face):
+        if all(abs((p.Point - origin).dot(n)) < 1e-7 for p in face.Vertexes):
+            raise SurfaceModifyError("That face already lies on the target.")
     rebuilt, rim = {}, []
     for key, (other, edges) in neighbours.items():
-        reach = 1.0
+        reach, crossing = 1.0, False
         for edge in edges:
-            for frac in (0.0, 0.5, 1.0):
+            for frac in (0.0, 0.25, 0.5, 0.75, 1.0):
                 p = edge.valueAt(
                     edge.FirstParameter + frac * (edge.LastParameter - edge.FirstParameter)
                 )
                 into = _into(other, edge, p)
                 if abs(into.dot(n)) < 1e-3:
-                    raise SurfaceModifyError(
-                        "A face next to it runs along the target, so it can never meet it. "
-                        "Pick a target across the faces round it."
-                    )
+                    continue  # (a round end that turns along the target)
+                crossing = True
                 reach = max(reach, abs((p - origin).dot(n)) / abs(into.dot(n)) * 1.5 + 1.0)
+        if not crossing:
+            raise SurfaceModifyError(
+                "A face next to it runs along the target (or meets the face smoothly), so it "
+                "can never meet the target. Pick a target across the faces round it, or the "
+                "smooth faces too (Tangent Chain)."
+            )
         try:
             grown = _carry_on(other, edges, reach)
             pieces = open_pieces(split_api.slice(grown, [cutter], "Split"))
@@ -825,9 +818,41 @@ def replace_open(shape, sources, target):
     u0, u1, v0, v1 = new.ParameterRange
     if new.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0).dot(before) < 0:
         new.reverse()
+    return _rebuilt(shape, group, rebuilt, new)
+
+
+def _ring(shape, group):
+    """The faces round a group of touching faces: {index: (face, [the edges it shares with
+    the group])}. Raises when the group has an open edge (no face there to follow)."""
+    neighbours = {}
+    for face in group:
+        for edge in face.Edges:
+            inside = [f for f in faces_of_edge(shape, edge) if any(f.isSame(g) for g in group)]
+            owners = [f for f in faces_of_edge(shape, edge) if not any(f.isSame(g) for g in group)]
+            if len(inside) > 1 and not owners:
+                continue  # between two of the picked faces
+            if len(owners) != 1:
+                raise SurfaceModifyError(
+                    "That face has an open edge: SciForge cannot tell where it should go on "
+                    "the target. Pick a face with faces all round it, or use Extend and Trim."
+                )
+            key = _index(shape.Faces, owners[0])
+            entry = neighbours.setdefault(key, (owners[0], []))
+            if not any(edge.isSame(e) for e in entry[1]):
+                entry[1].append(edge)
+    if not neighbours:
+        raise SurfaceModifyError("Those faces have no faces round them to follow the target.")
+    return neighbours
+
+
+def _rebuilt(shape, group, rebuilt, new):
+    """`shape` with the faces of `group` gone, the faces round them `rebuilt` (index ->
+    faces) and the face `new` in their place, sewn; refused when it no longer closes."""
+    from . import surface_geom
+
     faces = []
     for i, f in enumerate(shape.Faces, start=1):
-        if f.isSame(face):
+        if any(f.isSame(g) for g in group):
             continue
         faces += rebuilt.get(i, [f.copy()])
     faces.append(new)
@@ -839,15 +864,16 @@ def replace_open(shape, sources, target):
     return result
 
 
-def _replace_curved(shape, face, target):
+def _replace_curved(shape, group, target, neighbours):
     """Replace Face on a surface body onto a curved target: each face round the source face
     is carried on past their shared edges far enough to cross the target, cut by it and kept
     from its far side up to the target; the piece of the target they close round takes the
     source face's place."""
     import BOPTools.SplitAPI as split_api
 
-    from . import replace_face, surface_geom
+    from . import replace_face
 
+    face = group[0]
     size = max(shape.BoundBox.DiagonalLength, target.BoundBox.DiagonalLength, 1.0) * 3.0
     try:
         cutter = replace_face.target_surface(target, shape, size)
@@ -855,16 +881,6 @@ def _replace_curved(shape, face, target):
         raise SurfaceModifyError("That target cannot be used (%s)." % _text(exc))
     if cutter is None or cutter.isNull():
         raise SurfaceModifyError("That target cannot be carried on far enough. Pick another.")
-    neighbours = {}
-    for edge in face.Edges:
-        owners = [f for f in faces_of_edge(shape, edge) if not f.isSame(face)]
-        if len(owners) != 1:
-            raise SurfaceModifyError(
-                "That face has an open edge: SciForge cannot tell where it should go on the "
-                "target. Pick a face with faces all round it, or use Extend and Trim."
-            )
-        key = _index(shape.Faces, owners[0])
-        neighbours.setdefault(key, (owners[0], []))[1].append(edge)
     rebuilt, kept_all = {}, []
     for key, (other, edges) in neighbours.items():
         gap = max(_gap(Part.Vertex(_edge_mid(e)), cutter) for e in edges)
@@ -881,7 +897,7 @@ def _replace_curved(shape, face, target):
         far = [x for x in other.Vertexes if not any(x.isSame(y) for y in shared)]
         if not far:
             raise SurfaceModifyError("A face next to it has no edge away from the face.")
-        anchor = max(far, key=lambda x: _gap(x, face))
+        anchor = max(far, key=lambda x: min(_gap(x, g) for g in group))
         kept = [p for p in pieces if _gap(anchor, p) < 1e-6]
         if not kept:
             raise SurfaceModifyError(
@@ -896,18 +912,7 @@ def _replace_curved(shape, face, target):
     u0, u1, v0, v1 = new.ParameterRange
     if new.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0).dot(before) < 0:
         new.reverse()
-    faces = []
-    for i, f in enumerate(shape.Faces, start=1):
-        if f.isSame(face):
-            continue
-        faces += rebuilt.get(i, [f.copy()])
-    faces.append(new)
-    result = sew(faces)
-    if len(surface_geom.free_edges(result)) > len(surface_geom.free_edges(shape)):
-        raise SurfaceModifyError(
-            "The new face does not meet the faces round it. Try another target."
-        )
-    return result
+    return _rebuilt(shape, group, rebuilt, new)
 
 
 def _face_on(cutter, walls):
