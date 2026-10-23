@@ -493,6 +493,56 @@ def _merged_spans(slab, along, base):
     return merged
 
 
+def _concave_in_band(result, origin, along, across, normal, s0, s1, thickness):
+    """True when the sheet's outline in the stationary face's plane turns inward (a concave
+    corner) between s0 and s1 (a little beyond each)."""
+    import Part
+
+    tol = 0.25 * thickness
+    for face in _zone_faces(result, origin, normal):
+        edges = list(face.OuterWire.OrderedEdges)
+        pts = []
+        cur = None
+        for k, edge in enumerate(edges):
+            if isinstance(edge.Curve, (Part.Line, Part.LineSegment)):
+                seq = [v.Point for v in edge.Vertexes]
+            else:
+                seq = list(edge.discretize(12))
+            if cur is None and len(edges) > 1:
+                # the first edge runs toward the second
+                ends = [v.Point for v in edges[1].Vertexes]
+                if min((seq[0] - q).Length for q in ends) < min((seq[-1] - q).Length for q in ends):
+                    seq.reverse()
+            elif cur is not None and (seq[-1] - cur).Length < (seq[0] - cur).Length:
+                seq.reverse()
+            pts += seq[:-1]
+            cur = seq[-1]
+        flat = [((p - origin).dot(across), (p - origin).dot(along)) for p in pts]
+        clean = []
+        for q in flat:
+            if not clean or abs(q[0] - clean[-1][0]) + abs(q[1] - clean[-1][1]) > 1e-9:
+                clean.append(q)
+        if (
+            len(clean) > 1
+            and abs(clean[0][0] - clean[-1][0]) + abs(clean[0][1] - clean[-1][1]) < 1e-9
+        ):
+            clean.pop()
+        n = len(clean)
+        if n < 3:
+            continue
+        area = sum(
+            clean[i][0] * clean[(i + 1) % n][1] - clean[(i + 1) % n][0] * clean[i][1]
+            for i in range(n)
+        )
+        sign = 1.0 if area > 0 else -1.0
+        for i in range(n):
+            a, b, c = clean[i - 1], clean[i], clean[(i + 1) % n]
+            turn = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+            if turn * sign < -1e-9 and s0 - tol <= b[0] <= s1 + tol:
+                return True
+    return False
+
+
 def _moving_spans(result, zone, origin, along, across, normal, s0, s1, thickness, big):
     """Where the sheet goes on past the bend zone, along the line: [(m0, m1)] measured from
     `origin`, or None when that covers the whole zone (a bend right across the sheet)."""
@@ -513,9 +563,13 @@ def _moving_spans(result, zone, origin, along, across, normal, s0, s1, thickness
     covered = sum(min(hi, z1) - max(lo, z0) for lo, hi in merged if hi > z0 and lo < z1)
     if covered >= (z1 - z0) - 1e-6:
         return None
-    # a bend line slanted to the sheet's outline (a diagonal line across a rectangle): the
-    # zone reaches past the moving side's front only because its ends are slanted. The sheet
-    # beyond is as wide as the zone where they meet, so the whole zone bends (no tab)
+    # a bend line slanted to the sheet's outline (a diagonal line across a rectangle, or a
+    # plate whose end is slanted): the zone reaches past the moving side's front only because
+    # the outline narrows gradually. A tab narrows in a step: the outline turns inward (a
+    # concave corner, the tab's root) in the bend's band, and the sheet beyond is narrower
+    # than the zone. Otherwise the whole zone bends (no tab, no relief)
+    if not _concave_in_band(result, origin, along, across, normal, s0, s1, thickness):
+        return None
     width = sum(hi - lo for lo, hi in merged)
     widest = 0.0
     for x0, x1 in ((s0, s0 + step), (s1 - step, s1)):

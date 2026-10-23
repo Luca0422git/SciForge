@@ -1,0 +1,79 @@
+{
+  "id": "sheetmetal_smm_bend_slanted_end",
+  "title": "Bend (Start) across the slanted end of a plate: the sheet narrows gradually, so all of it bends and no relief is cut (once taken for a tab)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              100,
+              0
+            ],
+            [
+              100,
+              40
+            ],
+            [
+              10,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            5,
+            0,
+            5,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        80,
+        30,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "start"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 3801.458589,
+    "solids": 1,
+    "source": "analytic",
+    "note": "plate 3800 (its left end runs from (0, 0) to (10, 40): y = 4 x); the zone x in [5 - BA, 5] holds 2 (25 - (5 - BA)^2) = 35.006 mm2 and the bent zone 1.041667 of that: 3800 + 0.041667 x 35.006. No relief is cut"
+  }
+}
