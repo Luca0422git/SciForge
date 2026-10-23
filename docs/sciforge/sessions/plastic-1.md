@@ -136,12 +136,17 @@ did not. What it found and fixed, in plain words for Luca:
   use itself; a new rule switched to inches converts its numbers (2 mm becomes 0.0787 in);
   Assign says when the design's own copy of a library rule is the one used.
 
-New tests: scenarios `plastic_qa_rules` and `plastic_qa_tools` (an empty design, reassigning
-a rule and Ctrl+Z, Esc in Manage after a followed edit, renaming a rule, the zero-draft rule,
-Boss on a face then Esc, a drafted Rest then Esc, a boss edited after save and reopen, a rule
-assigned after reopen, Flip with a picked body, the inch rule, a lid in its own component
-with its own rule), golden `plastic_boss_major_draft` and `plastic_rest_cut` (the Rest's
-cut-only case, also probed on a shelled pipe crossing the plane: exact), four unit tests (25 in all). Gaps
-found but not fixed are in the parity doc's Known gaps (rules of nested components). Shared
-test file touched: `SciForgeTests/gui/harness.py` (one try block in `prepare()` resetting the
-plastic library settings, beside the other settings resets).
+New tests: scenarios `plastic_qa_rules` and `plastic_qa_tools` (an empty design,
+reassigning a rule and Ctrl+Z / Ctrl+Y, Esc in Manage after a followed edit, renaming a rule,
+the zero-draft rule, the browser row's menu, Boss on a face then Esc, the Boss's and the
+Rest's arrows dragged, a drafted Rest then Esc, the library default changed under a rest, a
+boss edited after save and reopen, a rule assigned after reopen, Flip with a picked body, the
+inch rule, a lid in its own component with its own rule, the default ribs by a wall, a Flat
+fastener head refused), golden `plastic_boss_major_draft` and `plastic_rest_cut` (the Rest's
+cut-only case, also probed on a shelled pipe crossing the plane: exact), four unit tests (25
+in all). Probes (not committed) of 12 Boss option sets, the fastener heads and a turned
+enclosure build valid solids, except Constant Thickness with the default alignment step,
+refused with its reason (the recess is wider than the thin boss: set Step Type None). Gaps found but not fixed are in the parity doc's Known gaps
+(rules of nested components). Shared test file touched: `SciForgeTests/gui/harness.py` (one
+try block in `prepare()` resetting the plastic library settings, beside the other settings
+resets).
