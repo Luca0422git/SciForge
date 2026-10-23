@@ -149,6 +149,9 @@ def make_sheet_metal_body(body, rule_name):
     """Flag the body as sheet metal following rule_name (copied into the design from the
     library when the design does not have it yet)."""
     doc = body.Document
+    if rules_object(doc) is None:
+        # the design keeps its own copy of its rules (a later library change leaves it alone)
+        rules_object(doc, create=True)
     if find_rule(doc, rule_name) is None:
         rule = core.library_rule(rule_name)
         if rule is None:

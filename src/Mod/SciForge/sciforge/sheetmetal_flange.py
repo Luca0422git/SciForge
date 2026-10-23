@@ -21,13 +21,14 @@ editing the rule recomputes every flange that follows it.
 
 import FreeCAD as App
 
-from . import bodies, curves, log, sheetmetal, warn
+from . import bodies, curves, log, preview, sheetmetal, warn
 from . import sheetmetal_core as core
 from . import sheetmetal_form as form
 from .sheetmetal_form import FormError
 
 TYPE = "PartDesign::FeaturePython"
 SCIFORGE_TYPE = "Flange"
+META = "SciForgeFlange"
 KINDS = ("base", "contour", "edge")
 OPERATIONS = ("new_body", "new_component", "join")
 
@@ -510,10 +511,12 @@ def make(
     step = bodies.insert_after_tip(body, TYPE, name or "Flange")
     FlangeFeature(step)
     _attach_view_provider(step)
+    made = "new" if made_body is not None else ("marked" if marked is not None else "existing")
+    bodies.save_meta(step, META, {"body": made})
     try:
         _set_refs(step, kind, refs, target)
         apply_options(step, opts)
-        doc.recompute()
+        preview.recompute(doc)
         problem = problem_of(step)
         if problem:
             raise FormError(problem)
@@ -525,6 +528,21 @@ def make(
     hide_sketches(refs if kind != "edge" else [])
     log("flange (%s) %s made in %s" % (kind, step.Name, body.Label))
     return step
+
+
+def discard(step):
+    """Take a flange made in an open dialog away again (its picks changed kind or were
+    cleared): with the body it made, or the sheet metal mark it gave the sketch's body."""
+    if not bodies.alive(step):
+        return
+    made = bodies.load_meta(step, META).get("body", "existing")
+    body = owner_body(step)
+    if made == "new" and body is not None:
+        _undo_make(step, body)
+        return
+    bodies.remove_step(step)
+    if made == "marked" and body is not None:
+        setattr(body, sheetmetal.RULE_PROP, "")
 
 
 def _empty(body):

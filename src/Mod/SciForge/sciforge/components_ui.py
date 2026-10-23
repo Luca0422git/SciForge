@@ -176,6 +176,20 @@ class NewComponentPanel(taskui.Panel):
         self.name.setObjectName("SciForgeComponentName")
         self.name.selectAll()
         self.layout.addRow("Name", self.name)
+        # Fusion's Type: Standard / Sheet Metal (a sheet metal component has an active rule;
+        # wave 6, sm-forming: sheetmetal_component.py). Standard leaves everything as before.
+        self.type_box = QtWidgets.QComboBox()
+        self.type_box.setObjectName("SciForgeComponentType")
+        self.type_box.addItem("Standard", "standard")
+        self.type_box.addItem("Sheet Metal", "sheet_metal")
+        self.layout.addRow("Type", self.type_box)
+        self.rule_box = QtWidgets.QComboBox()
+        self.rule_box.setObjectName("SciForgeComponentRule")
+        self.rule_label = QtWidgets.QLabel("Rule")
+        self.layout.addRow(self.rule_label, self.rule_box)
+        self._fill_rules()
+        self.type_box.currentIndexChanged.connect(self._type_changed)
+        self._type_changed()
         self.parent_box = QtWidgets.QComboBox()
         self.parent_box.setObjectName("SciForgeComponentParent")
         self.parent_box.addItem("%s (root)" % doc.Label, "")
@@ -212,6 +226,20 @@ class NewComponentPanel(taskui.Panel):
 
     def typing_field(self):
         return None
+
+    def _fill_rules(self):
+        try:
+            from . import sheetmetal_component
+
+            for label, name in sheetmetal_component.rule_choices(self.doc):
+                self.rule_box.addItem(label, name)
+        except Exception as exc:
+            warn("New Component: sheet metal rules: %s" % exc)
+
+    def _type_changed(self, *_):
+        sheet = self.type_box.currentData() == "sheet_metal"
+        self.rule_box.setVisible(sheet)
+        self.rule_label.setVisible(sheet)
 
     def _from_bodies_toggled(self, on):
         self.bodies_label.setVisible(bool(on))
@@ -280,6 +308,11 @@ class NewComponentPanel(taskui.Panel):
                 parts = components.from_bodies(self.doc, self.bodies, parent=parent, label=name)
             else:
                 parts = [components.new_component(self.doc, name, parent)]
+            if self.type_box.currentData() == "sheet_metal":
+                from . import sheetmetal_component
+
+                for part in parts:
+                    sheetmetal_component.make_sheet_metal(part, self.rule_box.currentData())
             self.doc.recompute()
         except Exception as exc:
             self.message.setText("⚠ %s" % exc)
