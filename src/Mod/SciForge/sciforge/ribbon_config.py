@@ -506,9 +506,13 @@ SURFACE_CREATE = group(
     "CREATE",
     ["Extrude", "Loft", "Patch", "Thicken"],
     [
-        # Fusion's SURFACE > CREATE (parity/surface.md): the surface versions of Extrude,
-        # Revolve, Sweep, Loft; Patch, Ruled, Offset; Thicken and Boundary Fill at the end.
+        # Fusion's SURFACE > CREATE (parity/surface.md, dev/research/fusion-surface.md): the
+        # surface versions of Extrude, Revolve, Sweep, Loft; Patch, Ruled, Offset; Pattern and
+        # Mirror of surface bodies; Thicken and Boundary Fill at the end.
+        item("New Component", ("SciForge_NewComponent", "Std_Part"), "new_component"),
         item("Create Sketch", "SciForge_NewSketch", "sketch_create"),
+        item("Create Base Feature", "SciForge_CreateBaseFeature", "base_feature"),
+        item("Derive", "SciForge_Derive", "derive"),
         SEP,
         item("Extrude", "SciForge_SurfaceExtrude", "surface_extrude"),
         item("Revolve", "SciForge_SurfaceRevolve", "surface_revolve"),
@@ -517,6 +521,24 @@ SURFACE_CREATE = group(
         item("Patch", "SciForge_Patch", "patch"),
         item("Ruled", "SciForge_Ruled", "ruled"),
         item("Offset", "SciForge_SurfaceOffset", "surface_offset"),
+        SEP,
+        sub(
+            "Pattern",  # owner: surface-4 (makes the pattern tools take surface bodies)
+            [
+                item(
+                    "Rectangular Pattern",
+                    ("SciForge_RectangularPattern", "PartDesign_LinearPattern"),
+                    "pattern_rect",
+                ),
+                item(
+                    "Circular Pattern",
+                    ("SciForge_CircularPattern", "PartDesign_PolarPattern"),
+                    "pattern_circ",
+                ),
+                item("Pattern on Path", "SciForge_PatternOnPath", "pattern_rect"),
+            ],
+        ),
+        item("Mirror", ("SciForge_Mirror", "PartDesign_Mirrored"), "mirror"),  # owner: surface-4
         SEP,
         item("Thicken", "SciForge_Thicken", "thicken"),
         item("Boundary Fill", "SciForge_BoundaryFill", "boundary_fill"),
@@ -527,17 +549,194 @@ SURFACE_MODIFY = group(
     "MODIFY",
     ["Trim", "Extend", "Stitch"],
     [
+        # Fusion's SURFACE > MODIFY: the SOLID tools that also work on surface bodies (owner
+        # surface-4 makes them take surface bodies), then the surface tools (owner surface-3).
+        item("Press Pull", "SciForge_PressPull", "press_pull", "Q"),  # owner: surface-4
+        item("Fillet", ("SciForge_Fillet", "PartDesign_Fillet"), "fillet", "F"),  # owner: surface-4
+        item("Chamfer", ("SciForge_Chamfer", "PartDesign_Chamfer"), "chamfer"),  # owner: surface-4
+        SEP,
         item("Trim", "SciForge_Trim", "trim"),
         item("Untrim", "SciForge_Untrim", "untrim"),
         item("Extend", "SciForge_SurfaceExtend", "surface_extend"),
         item("Stitch", "SciForge_Stitch", "stitch"),
         item("Unstitch", "SciForge_Unstitch", "unstitch"),
         item("Reverse Normal", "SciForge_ReverseNormal", "reverse_normal"),
+        item("Merge", None, None),  # owner: surface-4
         SEP,
         item("Replace Face", "SciForge_ReplaceFace", "replace_face"),
         item("Split Face", "SciForge_SplitFace", "split_face"),
+        item("Split Body", "SciForge_SplitBody", "split_body"),  # owner: surface-4
+        item("Silhouette Split", "SciForge_SilhouetteSplit", "silhouette_split"),
+        item("Scale", "SciForge_Scale", "scale"),  # owner: surface-4
+        item("Combine", ("SciForge_Combine", "PartDesign_Boolean"), "combine"),
         SEP,
-        item("Delete", ("SciForge_Delete", "Std_Delete"), "delete", "Del"),
+        item("Move/Copy", ("SciForge_Move", "Std_TransformManip"), "move", "M"),  # owner: surface-4
+        item("Align", "SciForge_Align", "align"),  # owner: surface-4
+        item("Delete", ("SciForge_Delete", "Std_Delete"), "delete", "Del"),  # owner: surface-4
+        SEP,
+        item("Physical Material", ("SciForge_PhysicalMaterial", "Std_SetMaterial"), "material"),
+        item("Appearance", ("SciForge_Appearance", "Std_SetAppearance"), "appearance", "A"),
+        item("Manage Materials", ("SciForge_ManageMaterials", "Material_Edit"), "material"),
+        SEP,
+        item("Change Parameters", "SciForge_ChangeParameters", "parameters"),
+        item("Compute All", ("SciForge_ComputeAll", "Std_Refresh"), "compute", "Ctrl+B"),
+    ],
+)
+
+# ---------------------------------------------------------------- SHEET METAL tab
+# Wave 6 (docs/sciforge/plan-sheet-metal-plastic-surface.md; Fusion's behaviour with sources in
+# docs/sciforge/dev/research/fusion-sheet-metal.md). A new command stays None (greyed) until
+# its builder wires it; "# owner:" names that builder. Repeated SOLID commands are the very
+# same entries as on the SOLID tab (_same), so they look and run the same.
+
+
+def _same(grp, label):
+    """The entry labelled label in grp (or one of its submenus): the same dict."""
+    for entry in grp["items"]:
+        if entry and entry.get("label") == label:
+            return entry
+        for inner in (entry or {}).get("submenu") or []:
+            if inner and inner.get("label") == label:
+                return inner
+    raise KeyError(label)
+
+
+SHEET_METAL_CREATE = group(
+    "sm_create",
+    "CREATE",
+    ["Create Sketch", "Flange", "Bend", "Hem", "Create Flat Pattern"],
+    [
+        _same(ASSEMBLE, "New Component"),
+        _same(SOLID_CREATE, "Create Sketch"),
+        SEP,
+        item("Flange", None, None),  # owner: sm-forming
+        item("Lofted Flange", None, None),  # owner: sm-more
+        item("Bend", None, None),  # owner: sm-more
+        item("Hem", None, None),  # owner: sm-more
+        item("Join by Bend", None, None),  # owner: sm-more
+        SEP,
+        item("Create Flat Pattern", None, None),  # owner: sm-flat
+        SEP,
+        _same(SOLID_CREATE, "Extrude"),
+        _same(SOLID_CREATE, "Hole"),
+        _same(SOLID_CREATE, "Pattern"),
+        _same(SOLID_CREATE, "Mirror"),
+        _same(SOLID_CREATE, "Derive"),
+    ],
+)
+SHEET_METAL_MODIFY = group(
+    "sm_modify",
+    "MODIFY",
+    ["Press Pull", "Unfold", "Refold", "Rip", "Sheet Metal Rules"],
+    [
+        _same(SOLID_MODIFY, "Press Pull"),
+        _same(SOLID_MODIFY, "Fillet"),  # owner: sm-more (its sheet metal Fillet, if built)
+        _same(SOLID_MODIFY, "Chamfer"),  # owner: sm-more (its sheet metal Chamfer, if built)
+        SEP,
+        item("Unfold", None, None),  # owner: sm-flat
+        item("Refold", None, None),  # owner: sm-flat
+        item("Rip", None, None),  # owner: sm-flat
+        item("Corner Closure", None, None),  # owner: sm-more
+        item("Convert to Sheet Metal", None, None),  # owner: sm-flat
+        SEP,
+        _same(SOLID_MODIFY, "Combine"),
+        _same(SOLID_MODIFY, "Replace Face"),
+        _same(SOLID_MODIFY, "Split Face"),
+        _same(SOLID_MODIFY, "Split Body"),
+        _same(SOLID_MODIFY, "Move/Copy"),
+        _same(SOLID_MODIFY, "Align"),
+        _same(SOLID_MODIFY, "Delete"),
+        SEP,
+        _same(SOLID_MODIFY, "Physical Material"),
+        _same(SOLID_MODIFY, "Appearance"),
+        _same(SOLID_MODIFY, "Manage Materials"),
+        SEP,
+        item("Sheet Metal Rules", None, None),  # owner: sm-forming
+        _same(SOLID_MODIFY, "Change Parameters"),
+        _same(SOLID_MODIFY, "Compute All"),
+    ],
+)
+
+# ---------------------------------------------------------------- PLASTIC tab
+# Wave 6 (Fusion's behaviour with sources in docs/sciforge/dev/research/fusion-plastic.md).
+PLASTIC_SETUP = group(
+    "p_setup",
+    "SETUP",
+    ["Assign Plastic Rule"],
+    [
+        item("Assign Plastic Rule", None, None),  # owner: plastic-1
+        item("Manage Plastic Rules", None, None),  # owner: plastic-1
+    ],
+)
+PLASTIC_CREATE = group(
+    "p_create",
+    "CREATE",
+    ["Create Sketch", "Extrude", "Boss", "Snap Fit", "Lip", "Rest"],
+    [
+        _same(ASSEMBLE, "New Component"),
+        _same(SOLID_CREATE, "Create Sketch"),
+        SEP,
+        _same(SOLID_CREATE, "Extrude"),
+        _same(SOLID_CREATE, "Revolve"),
+        _same(SOLID_CREATE, "Sweep"),
+        _same(SOLID_CREATE, "Loft"),
+        _same(SOLID_CREATE, "Rib"),
+        _same(SOLID_CREATE, "Web"),
+        _same(SOLID_CREATE, "Emboss"),
+        _same(SOLID_CREATE, "Hole"),
+        _same(SOLID_CREATE, "Thread"),
+        SEP,
+        item("Boss", None, None),  # owner: plastic-1
+        item("Snap Fit", None, None),  # owner: plastic-2
+        item("Lip", None, None),  # owner: plastic-2
+        item("Rest", None, None),  # owner: plastic-1
+        SEP,
+        _same(SOLID_CREATE, "Thicken"),
+        _same(SOLID_CREATE, "Mirror"),
+        _same(SOLID_CREATE, "Pattern"),
+    ],
+)
+PLASTIC_MODIFY = group(
+    "p_modify",
+    "MODIFY",
+    ["Press Pull", "Fillet", "Shell", "Draft", "Combine"],
+    [
+        _same(SOLID_MODIFY, "Press Pull"),
+        _same(SOLID_MODIFY, "Fillet"),
+        item("Rule Fillet", None, None),  # owner: plastic-1
+        _same(SOLID_MODIFY, "Chamfer"),
+        SEP,
+        _same(SOLID_MODIFY, "Shell"),
+        _same(SOLID_MODIFY, "Draft"),
+        _same(SOLID_MODIFY, "Scale"),
+        _same(SOLID_MODIFY, "Combine"),
+        _same(SOLID_MODIFY, "Offset Face"),
+        _same(SOLID_MODIFY, "Replace Face"),
+        _same(SOLID_MODIFY, "Split Face"),
+        _same(SOLID_MODIFY, "Split Body"),
+        _same(SOLID_MODIFY, "Silhouette Split"),
+        SEP,
+        _same(SOLID_MODIFY, "Move/Copy"),
+        _same(SOLID_MODIFY, "Align"),
+        _same(SOLID_MODIFY, "Delete"),
+        SEP,
+        _same(SOLID_MODIFY, "Physical Material"),
+        _same(SOLID_MODIFY, "Appearance"),
+        _same(SOLID_MODIFY, "Manage Materials"),
+        SEP,
+        _same(SOLID_MODIFY, "Change Parameters"),
+        _same(SOLID_MODIFY, "Compute All"),
+    ],
+)
+# INSPECT with the plastic manufacturability check (Fusion's Design Advice) at its end.
+PLASTIC_INSPECT = group(
+    "p_inspect",
+    "INSPECT",
+    INSPECT["big"],
+    INSPECT["items"]
+    + [
+        SEP,
+        item("Design Advice", None, None),  # owner: plastic-2
     ],
 )
 
@@ -1083,7 +1282,7 @@ TABS = [
     {
         "id": "surface",
         "title": "SURFACE",
-        "groups": [SURFACE_CREATE, SURFACE_MODIFY, CONSTRUCT, INSPECT, INSERT, SELECT],
+        "groups": [SURFACE_CREATE, SURFACE_MODIFY, ASSEMBLE, CONSTRUCT, INSPECT, INSERT, SELECT],
     },
     {
         "id": "mesh",
@@ -1095,6 +1294,33 @@ TABS = [
             MESH_CONVERT,
             CONSTRUCT,
             INSPECT,
+            SELECT,
+        ],
+    },
+    {
+        "id": "sheet_metal",
+        "title": "SHEET METAL",
+        "groups": [
+            SHEET_METAL_CREATE,
+            SHEET_METAL_MODIFY,
+            ASSEMBLE,
+            CONSTRUCT,
+            INSPECT,
+            INSERT,
+            SELECT,
+        ],
+    },
+    {
+        "id": "plastic",
+        "title": "PLASTIC",
+        "groups": [
+            PLASTIC_SETUP,
+            PLASTIC_CREATE,
+            PLASTIC_MODIFY,
+            ASSEMBLE,
+            CONSTRUCT,
+            PLASTIC_INSPECT,
+            INSERT,
             SELECT,
         ],
     },

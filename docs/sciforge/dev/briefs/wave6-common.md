@@ -9,10 +9,13 @@ MANAGE tabs"). The plan is `docs/sciforge/plan-sheet-metal-plastic-surface.md`.
 Read first, in this order: `docs/sciforge/dev/briefs/common.md` (every rule there applies,
 except where this file says otherwise), this file, your own brief, the plan above, the
 research files `docs/sciforge/dev/research/fusion-*.md` (Fusion's behaviour, with sources:
-the source of truth for what to build) and `docs/sciforge/dev/research/integration-map.md`
+the source of truth for what to build; the sheet metal and plastic files get a "## Critic
+pass" section from a second researcher at the end: if your copy has none, read it from
+`/tmp/claude-0/-home-user-SciForge-Parametric-Design/b3b58fe0-e649-51d5-b6e4-7edc97b46dc5/scratchpad/research/`
+(sheet_metal.md, plastic.md) once it is there) and `docs/sciforge/dev/research/integration-map.md`
 (how a tab, a body kind, a step, an icon and a test plug into SciForge, with file:line).
 
-### Six builders at the same time
+### Seven builders at the same time
 
 | Builder | Branch | Owns (only it edits these) |
 |---|---|---|
@@ -22,11 +25,12 @@ the source of truth for what to build) and `docs/sciforge/dev/research/integrati
 | plastic-1 | `sf/plastic-1` | `plastic_core.py`, `plastic.py`, `plastic_rules_ui.py`, `plastic_boss*`, `plastic_rest*` files, `icons_plastic.py`, `plastic_ops.py`, `plastic_schema.py`, `parity/plastic.md` |
 | plastic-2 | `sf/plastic-2` | `plastic_snap*`, `plastic_lip*` files and any other plastic feature its brief names, `icons_plastic2.py`, `plastic2_ops.py`, `plastic2_schema.py`, `parity/plastic-2.md` |
 | surface-3 | `sf/surface-3` | the `surface*` files, `icons_surface3.py`, `surface3_ops.py`, `surface3_schema.py`, `parity/surface.md` |
+| surface-4 | `sf/surface-4` | `surfmod_*` files it creates; the surface-body changes in `split*.py`, `delete*.py`, `fillet_ui.py`, `move*.py`, `align*.py`, `pattern*.py`, `scale*.py`, `presspull*.py`; `icons_surface4.py`; a `# --- surface-4 ---` block at the END of `surface3_ops.py` / `surface3_schema.py`; `parity/surface-modify.md` |
 
 - **Shared contracts (already on `develop`, written by the orchestrator):** `sheetmetal_core.py`
   (rules: fields, library, expressions, bend maths) and `sheetmetal.py` (where a design keeps its
   rules, which body is sheet metal and its rule: `rule_for_body(body)`), `plastic_core.py` and
-  `plastic.py` (the same for plastic rules). sm-flat and sm-more only *call* the sheet metal
+  `plastic.py` (the same for plastic rules: `default_for(body, field)` for the existing tools, `rule_for_body(body)` for the plastic ones). sm-flat and sm-more only *call* the sheet metal
   contract; if they need a change in it, they say so in their report and add what they need in
   their own files. sm-forming may extend the contract but never rename or remove what is in
   it. The same for plastic-2 and plastic-1.
@@ -35,7 +39,7 @@ the source of truth for what to build) and `docs/sciforge/dev/research/integrati
   it has committed (sm-more needs sm-forming's edge flange code for Hem; sm-flat needs real
   flanges to unfold). Never commit to a sibling's branch, never rebase.
 - **Ribbon:** `ribbon_config.py` already has the SHEET METAL and PLASTIC tabs and the SURFACE
-  tab in Fusion's order, with every new command present but greyed (`None`) and labelled with
+  tab in Fusion's order (only sm-flat edits `ribbon_ui.py` and adds the FLAT PATTERN tab to `TABS`), with every new command present but greyed (`None`) and labelled with
   the builder that owns it in a `# owner:` comment. Change only your own lines: the command
   name, the icon, the note. Keep the order.
 - **Icons:** draw yours in your own `tools/sciforge/icons_<area>.py` (make_icons.py runs every
@@ -46,7 +50,7 @@ the source of truth for what to build) and `docs/sciforge/dev/research/integrati
   `core.py` / `schema.py`; fill them. Golden models `SciForgeTests/golden/models/<area>_*.json`.
 - **Scenarios:** `SciForgeTests/gui/scenarios/<area>_*.py` with real clicks (feature-guide).
   Helpers in your own `SciForgeTests/gui/<area>_steps.py`.
-- **Machine:** 4 CPUs shared by six builders. Run one scenario at a time; re-run a timeout
+- **Machine:** 4 CPUs shared by seven builders. Run one scenario at a time; re-run a timeout
   alone before you conclude anything. FreeCAD 1.1.4 is unpacked at
   `/home/user/SciForge-Parametric-Design/.sciforge-cache/freecad` (pass it with `--freecad`;
   do not download another copy). Use your own `--out` folder.

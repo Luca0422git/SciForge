@@ -81,7 +81,8 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | 2026-10-09 | Removed FreeCAD-org automation workflows (translations, stale bot, backport, labeler, CodeQL, scorecards, Fedora nightly, weekly release, dependabot); `CI_master.yml` made manual-only | They serve FreeCAD's organization, fail or waste minutes here; a weekly release cron would have run on our default branch |
 | 2026-10-09 | SciForge module lives at `src/Mod/SciForge` and is installed by the normal CMake build | Ships inside every SciForge build; no separate add-on install step |
 | 2026-10-09 | Golden models are JSON step lists run by a small interpreter in real FreeCAD | Same file runs in CI (headless) and can later be compared with Fusion reference metrics |
-| 2026-10-09 | No SHEET METAL, PLASTIC or MANAGE tabs (Luca: "not for now") | Not used; out of scope |
+| 2026-10-09 | No SHEET METAL, PLASTIC or MANAGE tabs (Luca: "not for now") | Not used; out of scope. **Reversed 2026-10-23** for SHEET METAL and PLASTIC (next row); MANAGE stays out |
+| 2026-10-23 | Build Fusion's SHEET METAL and PLASTIC tabs and complete the SURFACE tab (Luca: "plan all the features that belong in those tabs, and then build them all. In one shot") | Plan `docs/sciforge/plan-sheet-metal-plastic-surface.md`, research `docs/sciforge/dev/research/`, wave 6 briefs |
 | 2026-10-09 | Until the branding pass lands, CI's Windows build ships the portable 7z only, no installer | The FreeCAD NSIS installer would install over / clash with a real FreeCAD install |
 | 2026-10-10 | Repository made public by Luca | Free GitHub Actions minutes for tests and full builds (was the open question on cost) |
 | 2026-10-20 | First public release is **0.1.0-beta**; no code signing (Luca: no money for it), so the GitHub page and release notes explain Windows SmartScreen; update check with an easy install; a minimal welcome ("dont overdo it") | Brief `docs/sciforge/dev/briefs/beta-release.md` (milestones R0-R5) |

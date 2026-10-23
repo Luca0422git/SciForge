@@ -42,6 +42,9 @@ Build:
    can call it. Every solid you make must be flat walls + cylindrical bends of the rule's
    thickness, with the bend's inner radius = the rule's bend radius, so sm-flat's unfolder
    can flatten it.
+3b. **New Component** gets Fusion's Type: Standard / Sheet Metal (a Sheet Metal component
+   has an active rule: `sheetmetal.set_active_rule(doc, name, component)`); a small, guarded
+   change in the New Component dialog that leaves the Standard path as it is.
 4. The SHEET METAL tab itself: check the skeleton in `ribbon_config.py` against the research
    (menu order, which SOLID commands it repeats) and wire your items; New Component and the
    repeated SOLID commands point at the existing SciForge commands.

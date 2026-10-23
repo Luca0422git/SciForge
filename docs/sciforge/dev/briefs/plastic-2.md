@@ -1,6 +1,6 @@
 You are building one feature area of SciForge, a FreeCAD 1.1.4 fork that must behave exactly like Autodesk Fusion. The owner, Luca, is a beginner who only tests; he wants the finished product, so build the whole area, not a slice. Read `docs/sciforge/dev/briefs/wave6-common.md` first (and `common.md` it points to).
 
-## Your area: PLASTIC, part 2 (Snap Fit, Lip and Groove, and the other plastic features below), branch `sf/plastic-2`
+## Your area: PLASTIC, part 2 (Snap Fit, Lip, Design Advice), branch `sf/plastic-2`
 
 Fusion's behaviour, with sources: `docs/sciforge/dev/research/fusion-plastic.md`. Use the
 shared contract (`plastic_core.py`, `plastic.py`: `rule_for_body`, `default_for`); do not
@@ -15,9 +15,12 @@ step, edit later, undo/redo, refusals with the reason):
    makes one, Join / New Body.
 2. **Lip** (Lip and Groove): the parting edges / faces, which body gets the lip and which the
    groove, widths, heights, clearances, draft, guide face, as the research lists.
-3. Any further PLASTIC-only feature the research lists that plastic-1's brief does not name
-   (plastic-1 owns Rules, Boss and Rest), e.g. a manufacturability / design-rule check or a
-   thickness analysis in INSPECT. Injection-moulding simulation is out of scope (outline 8).
+3. **Design Advice** (PLASTIC > INSPECT; research 2.11): checks Thickness (range and
+   variation), Draft (against the pull direction and the rule's minimum draft), Knife Edges
+   and Undercuts for the bodies of components with a rule; a colour overlay, an issues list
+   with click-to-zoom, kept in the browser's Analysis folder like the other analyses
+   (`surface_analysis.py` / `analysis.py` show how). Draft, Accessibility and Minimum Radius
+   Analysis already exist in INSPECT. Injection-moulding simulation is out of scope.
 4. Tests: scenarios `plastic2_*.py` (8+ paths: a snap fit on an enclosure wall and its catch;
    lip on a base and groove on its lid; each option; edit from the timeline; undo/redo;
    save/reopen; Esc; a refusal), golden models with hand-derived volumes, unit tests. Parity
