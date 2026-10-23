@@ -155,6 +155,26 @@ def side1_auto_again():
     )
 
 
+def mouth_radius():
+    p = ps.boss_panel()
+    s["v_before_mouth"] = ps.volume(bottom())
+    ps.tab_of(p, "Side 2")
+    ps.type_into(p.side_widgets[2]["hole_start_radius"].widget, "0.5")
+
+
+def mouth_rounded():
+    p = ps.boss_panel()
+    ps.settle(p)
+    k = (10 - 3 * math.pi) / (12 - 3 * math.pi)
+    ring = (1 - math.pi / 4) * 0.25 * 2 * math.pi * (1.2 + 0.5 * k)
+    v = ps.volume(bottom())
+    want = s["v_before_mouth"] - 2 * ring
+    h.check("the pilot holes' mouths rounded 0.5 (Pappus)", ps.near(v, want, 1e-3), (v, want))
+    h.check("no error", p and p.message.text() == "", p and p.message.text())
+    ps.type_into(p.side_widgets[2]["hole_start_radius"].widget, "0")
+    ps.tab_of(p, "Boss")
+
+
 def click_wall():
     h.click(V(0, 20, 10))
 
@@ -207,6 +227,8 @@ h.run(
         bottom_refused_for_side1,
         clear_side1,
         side1_auto_again,
+        mouth_radius,
+        mouth_rounded,
         click_wall,
         wall_refused,
         ok,

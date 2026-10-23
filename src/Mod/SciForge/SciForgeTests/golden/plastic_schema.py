@@ -44,6 +44,8 @@ SIDE_NUMBERS = {
     "clearance",
     "root_radius",
     "tip_radius",
+    "hole_start_radius",
+    "hole_end_radius",
     "rib_count",
     "rib_total_angle",
     "rib_rotation",

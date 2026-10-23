@@ -1,0 +1,82 @@
+{
+  "id": "plastic_boss_hole_radii",
+  "title": "Boss hole start and end radius: the pilot hole's mouth and bottom rounded",
+  "tags": [
+    "plastic",
+    "boss"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sf_boss",
+      "id": "b1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          10,
+          10
+        ],
+        [
+          50,
+          30
+        ]
+      ],
+      "side2": {
+        "draft": 0,
+        "step_draft": 0,
+        "root_radius": 0,
+        "hole_start_radius": 0.5,
+        "hole_end_radius": 0.5
+      }
+    }
+  ],
+  "expect": {
+    "volume": 13197.785819,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      40,
+      20.85
+    ],
+    "source": "analytic",
+    "note": "The enclosure's thread sides only (no lid), no drafts or fillets, each pi (3.75^2 17.95 + 3.75^2 0.9 - 1.2^2 19.85) = 742.968206; the mouth rounded 0.5 cuts the ring (1 - pi/4) R^2 2 pi (1.2 + R (10 - 3 pi)/(12 - 3 pi)) = 0.442163, the bottom rounded 0.5 leaves the ring (1 - pi/4) R^2 2 pi (1.2 - R (10 - 3 pi)/(12 - 3 pi)) = 0.366867 (Pappus)."
+  }
+}

@@ -30,6 +30,8 @@ SIDE_NUMBERS = (
     "clearance",
     "root_radius",
     "tip_radius",
+    "hole_start_radius",
+    "hole_end_radius",
     "rib_total_angle",
     "rib_rotation",
     "rib_cut",
@@ -87,6 +89,8 @@ def side_defaults(side, rule, screw=3.0):
         "clearance": _r(c / 2.0, 3),
         "root_radius": _r(min(float(rule["nominal_radius"]), 0.5 * t)),
         "tip_radius": 0.0,
+        "hole_start_radius": 0.0,
+        "hole_end_radius": 0.0,
         "ribs": False,
         "rib_count": 4,
         "rib_total_angle": 360.0,
@@ -190,6 +194,8 @@ def check_options(options):
         for key, allowed in SIDE_CHOICES.items():
             if s.get(key) not in allowed:
                 raise BossError("Side %d: unknown %s %r" % (side, key, s.get(key)))
+        for key in ("hole_start_radius", "hole_end_radius"):
+            s.setdefault(key, 0.0)
         for key in SIDE_NUMBERS:
             try:
                 s[key] = float(s[key])
@@ -228,7 +234,15 @@ def check_options(options):
         for key in ("draft", "hole_draft", "rib_draft", "rib_outer_draft", "step_draft"):
             if not 0.0 <= s[key] < 30.0:
                 raise BossError("%s: draft angles must be 0-30 degrees." % name)
-        for key in ("clearance", "root_radius", "tip_radius", "hole_depth", "major_depth"):
+        for key in (
+            "clearance",
+            "root_radius",
+            "tip_radius",
+            "hole_depth",
+            "major_depth",
+            "hole_start_radius",
+            "hole_end_radius",
+        ):
             if s[key] < 0:
                 raise BossError("%s: %s cannot be negative." % (name, key.replace("_", " ")))
         if s.get("ribs"):

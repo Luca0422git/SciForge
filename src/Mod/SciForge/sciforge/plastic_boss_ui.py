@@ -51,6 +51,8 @@ SIDE_FIELDS = [
     ("clearance", "Offset Clearance", "mm"),
     ("root_radius", "Root Radius", "mm"),
     ("tip_radius", "Tip Radius", "mm"),
+    ("hole_start_radius", "Hole Start Radius", "mm"),
+    ("hole_end_radius", "Hole End Radius", "mm"),
 ]
 RIB_FIELDS = [
     ("rib_total_angle", "Total Angle", "deg"),
@@ -299,7 +301,7 @@ class BossPanel(Panel):
                 for key in ("shape", "hole", "extent", "step"):
                     curve_pick.set_combo(w[key], s[key])
                 for key, _text, _unit in SIDE_FIELDS:
-                    w[key].set_value(float(s[key]))
+                    w[key].set_value(float(s.get(key, 0.0)))
                 self.rib_on[side].setChecked(bool(s.get("ribs")))
             self._show_ribs()
         finally:
@@ -351,6 +353,8 @@ class BossPanel(Panel):
                 "step_diameter": s["step"] != "none",
                 "step_depth": s["step"] != "none",
                 "step_draft": s["step"] != "none",
+                "hole_start_radius": hole and (side == 1 or s["hole"] == "simple"),
+                "hole_end_radius": hole and side == 2 and s["extent"] != "through",
             }
             for key, _text, _unit in SIDE_FIELDS:
                 visible = show.get(key, True)

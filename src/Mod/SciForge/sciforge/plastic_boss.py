@@ -241,7 +241,33 @@ def side_shapes(base, frame, s, label="Side"):
         r_end = r_h - length * _tan(s["hole_draft"])
         if r_end <= 0.05:
             raise BossError("%s: the hole draft closes the hole. Use a smaller angle." % label)
-        cuts.append(_cone(r_h, r_end, length, frame.at(start), frame.d))
+        bore = _cone(r_h, r_end, length, frame.at(start), frame.d)
+        blind = not (s["side"] == 1 or s["extent"] == "through")
+        r_bottom = float(s.get("hole_end_radius", 0.0))
+        if blind and r_bottom > TOL:
+            if r_bottom >= min(r_end, length) - 1e-3:
+                raise BossError(
+                    "%s: the hole end radius must be smaller than the hole's radius." % label
+                )
+            bore = _fillet_circle_at(bore, frame.at(end), r_end, r_bottom, label, "hole end")
+        cuts.append(bore)
+        r_mouth = float(s.get("hole_start_radius", 0.0))
+        if r_mouth > TOL:
+            if s["side"] == 2 and s["hole"] != "simple":
+                raise BossError(
+                    "%s: the hole start radius rounds a simple hole's mouth: this side's hole "
+                    "starts with its %s. Set the radius to 0." % (label, s["hole"])
+                )
+            mouth = tip - spigot
+            if s["step"] == "in":
+                mouth = tip + float(s["step_depth"])
+            room = (od / 2.0 - r_h) if s["step"] != "in" else (s["step_diameter"] / 2.0 - r_h)
+            if r_mouth >= room - 1e-3:
+                raise BossError(
+                    "%s: the hole start radius (%.2f mm) is wider than the wall around the "
+                    "hole." % (label, r_mouth)
+                )
+            cuts.append(_mouth_round(frame, r_h, mouth, r_mouth))
         r_m = s["major_diameter"] / 2.0
         if s["hole"] == "counterbore":
             if s["side"] == 1:
@@ -272,6 +298,36 @@ def side_shapes(base, frame, s, label="Side"):
                 cuts.append(_cone(r_m, r_m, 0.05, frame.at(top - 0.05), frame.d))
     info = {"s_in": s_in, "s_out": s_out, "tip": tip, "root": root, "ribs": rib_info}
     return adds, cuts, info
+
+
+def _mouth_round(frame, r_hole, s_mouth, radius):
+    """A ring that rounds a hole's mouth (radius `radius`), cut with the hole: the square
+    corner beside the mouth less a quarter circle, turned round the axis."""
+    import Part
+
+    e = frame.x
+
+    def p(rho, s):
+        return frame.at(s) + e * rho
+
+    eps = 0.05
+    a = p(r_hole - 0.01, s_mouth - eps)
+    b = p(r_hole + radius, s_mouth - eps)
+    c = p(r_hole + radius, s_mouth)
+    k = (1.0 - (0.5**0.5)) * radius
+    mid = p(r_hole + k, s_mouth + k)
+    d = p(r_hole, s_mouth + radius)
+    f = p(r_hole - 0.01, s_mouth + radius)
+    wire = Part.Wire(
+        [
+            Part.LineSegment(a, b).toShape(),
+            Part.LineSegment(b, c).toShape(),
+            Part.Arc(c, mid, d).toShape(),
+            Part.LineSegment(d, f).toShape(),
+            Part.LineSegment(f, a).toShape(),
+        ]
+    )
+    return Part.Face(wire).revolve(frame.a, frame.d, 360.0)
 
 
 def _fillet_circle_at(solid, centre, radius, fillet, label, where):
