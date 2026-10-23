@@ -259,7 +259,9 @@ def measure_shape(shape, rule, pull, checks):
     if "undercut" in checks and samples:
         origins = [tuple(pt + n * eps) for _i, pt, n in samples]
         up = core.first_hits(origins, [p] * len(samples), triangles, near=eps * 0.5)
-        down = core.first_hits(origins, [(-p[0], -p[1], -p[2])] * len(samples), triangles, near=eps * 0.5)
+        down = core.first_hits(
+            origins, [(-p[0], -p[1], -p[2])] * len(samples), triangles, near=eps * 0.5
+        )
         along = [t is not None for t in up]
         against = [t is not None for t in down]
     faces = {}
@@ -290,7 +292,9 @@ def measure_shape(shape, rule, pull, checks):
     edges = {}
     if "knife" in checks:
         edges = knife_edges(shape, eps)
-    faces = {name: data for name, data in faces.items() if data["issues"] or data["t_min"] is not None}
+    faces = {
+        name: data for name, data in faces.items() if data["issues"] or data["t_min"] is not None
+    }
     return {"faces": faces, "edges": edges, "pull": list(p)}
 
 

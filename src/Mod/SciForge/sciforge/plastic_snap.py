@@ -35,7 +35,12 @@ FAR = 1000.0  # mm: how far "To Next" looks for the body
 
 # property -> (option key, kind); kind: "length", "angle", "bool", or an enum's titles
 PROPS = [
-    ("SnapType", "type", core.TYPE_TITLES, "Parallel / Perpendicular Hook and Groove, Hook and Loop"),
+    (
+        "SnapType",
+        "type",
+        core.TYPE_TITLES,
+        "Parallel / Perpendicular Hook and Groove, Hook and Loop",
+    ),
     ("SelectionMode", "selection", core.SELECTION_TITLES, "All the sketch's points or picked ones"),
     ("RotationType", "rotation", core.ROTATION_TITLES, "One angle, one per snap, or aligned"),
     ("RotationAngle", "angle", "angle", "Turns the catch about the sketch normal"),
@@ -122,11 +127,26 @@ def frames(sketch, options, indices=()):
     return out
 
 
-# -- geometry ---------------------------------------------------------------------------------------
+# -- geometry --------------------------------------------------------------------------------
 def _matrix(origin, axes):
     ex, ey, ez = axes
     return App.Matrix(
-        ex.x, ey.x, ez.x, origin.x, ex.y, ey.y, ez.y, origin.y, ex.z, ey.z, ez.z, origin.z, 0, 0, 0, 1
+        ex.x,
+        ey.x,
+        ez.x,
+        origin.x,
+        ex.y,
+        ey.y,
+        ez.y,
+        origin.y,
+        ex.z,
+        ey.z,
+        ez.z,
+        origin.z,
+        0,
+        0,
+        0,
+        1,
     )
 
 
@@ -207,7 +227,9 @@ def _root_edges(shape, origin, axes, options, base_len):
     tol = 1e-4 + 1e-6 * t
     found = {"front": [], "other": []}
     for edge in shape.Edges:
-        pts = [v.Point for v in edge.Vertexes] + [edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))]
+        pts = [v.Point for v in edge.Vertexes] + [
+            edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
+        ]
         local = [((p - origin).dot(ex), (p - origin).dot(ey), (p - origin).dot(ez)) for p in pts]
         if any(abs(z + base_len) > tol for _x, _y, z in local):
             continue
@@ -392,7 +414,6 @@ class SnapFitFeature:
 
     def execute(self, obj):
         base = obj.BaseFeature
-        body = bodies.body_of(obj)
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             bodies.pass_through(obj)
             raise SnapError("A Snap Fit needs a part to hold the hook: make the part first.")
@@ -605,7 +626,9 @@ def find_hook_body(doc, sketch, options, indices=()):
 # -- making and editing --------------------------------------------------------------------------
 def is_snap_fit(obj):
     try:
-        return obj is not None and getattr(obj, "SciForgeType", "") == KIND and obj.TypeId == FP_TYPE
+        return (
+            obj is not None and getattr(obj, "SciForgeType", "") == KIND and obj.TypeId == FP_TYPE
+        )
     except Exception:
         return False
 

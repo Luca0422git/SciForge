@@ -95,9 +95,7 @@ def check_steps(model):
                     schema._check_number(here + ".points", v)
             if "offset" in step:
                 schema._check_number(here + ".offset", step["offset"])
-            _check_options(
-                here, step.get("options", {}), SNAP_CHOICES, SNAP_BOOLS, SNAP_NUMBERS
-            )
+            _check_options(here, step.get("options", {}), SNAP_CHOICES, SNAP_BOOLS, SNAP_NUMBERS)
             for key in ("hook", "other"):
                 if key in step and step[key] not in seen:
                     schema._fail(here, "'%s' must name an earlier step" % key)

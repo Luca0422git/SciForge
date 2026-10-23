@@ -118,7 +118,9 @@ def validate(options):
     if o["type"] != "groove":
         top = lip_section(o)[1]
         if top[1] - top[0] <= 0.05 * o["lip_width"]:
-            problems.append("The drafts close the lip before its top: lower them or the Lip Height.")
+            problems.append(
+                "The drafts close the lip before its top: lower them or the Lip Height."
+            )
         if o["tip_radius"] > 0 and 2 * o["tip_radius"] >= top[1] - top[0]:
             problems.append("Tip Radius must be less than half the lip's top width.")
     else:
@@ -169,8 +171,8 @@ def section_area(bottom, top, height):
 def wall_check(lip_width, wall):
     """The text refusing a lip as wide as the wall, or ""."""
     if wall is not None and lip_width >= wall - 1e-9:
-        return (
-            "Lip Width (%.2f mm) must be less than the wall (%.2f mm) at the selected edges."
-            % (lip_width, wall)
+        return "Lip Width (%.2f mm) must be less than the wall (%.2f mm) at the selected edges." % (
+            lip_width,
+            wall,
         )
     return ""

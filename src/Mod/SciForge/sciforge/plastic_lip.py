@@ -177,7 +177,9 @@ def section_solid(rim, bottom, top, height, vector):
             small = Part.makeLoft([rim.offset(inner[0]), lifted(rim.offset(inner[1]))], True, True)
             return big.cut(small)
         except Exception as exc:
-            raise LipError("The drafted section could not be built here (%s): set the drafts to 0." % exc)
+            raise LipError(
+                "The drafted section could not be built here (%s): set the drafts to 0." % exc
+            )
     try:
         low = rim.band(*bottom)
         high = rim.band(*top)
@@ -267,6 +269,45 @@ def check_fit(rim, options):
             "Lip Width (%.2f mm) does not fit on the rim at the selected edges." % o["lip_width"]
         )
     return ""
+
+
+def tangent_chain(shape, name):
+    """The edge `name` and the edges joined to it end to end with no corner (tangent), as
+    names: Fusion's tangent chain of a rim's edges."""
+    import math
+
+    edges = shape.Edges
+    try:
+        start = int(name[4:]) - 1
+    except ValueError:
+        return [name]
+    limit = math.cos(math.radians(1.0))
+    chain = [start]
+    frontier = [start]
+
+    def ends(edge):
+        a, b = edge.FirstParameter, edge.LastParameter
+        return [(edge.valueAt(a), edge.tangentAt(a)), (edge.valueAt(b), edge.tangentAt(b))]
+
+    while frontier:
+        i = frontier.pop()
+        for p, t in ends(edges[i]):
+            for j, other in enumerate(edges):
+                if j in chain:
+                    continue
+                for q, u in ends(other):
+                    if (p - q).Length > 1e-6:
+                        continue
+                    tn, un = V(t), V(u)
+                    if tn.Length < 1e-12 or un.Length < 1e-12:
+                        continue
+                    tn.normalize()
+                    un.normalize()
+                    if abs(tn.dot(un)) >= limit:
+                        chain.append(j)
+                        frontier.append(j)
+                    break
+    return ["Edge%d" % (i + 1) for i in sorted(chain)]
 
 
 # -- options on a feature --------------------------------------------------------------------------
@@ -547,10 +588,12 @@ def find_mate(doc, own_body, rim, options):
     return best
 
 
-# -- making and editing ------------------------------------------------------------------------------
+# -- making and editing ----------------------------------------------------------------------
 def is_lip(obj):
     try:
-        return obj is not None and getattr(obj, "SciForgeType", "") == KIND and obj.TypeId == FP_TYPE
+        return (
+            obj is not None and getattr(obj, "SciForgeType", "") == KIND and obj.TypeId == FP_TYPE
+        )
     except Exception:
         return False
 

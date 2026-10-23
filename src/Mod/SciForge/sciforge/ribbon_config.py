@@ -687,8 +687,8 @@ PLASTIC_CREATE = group(
         _same(SOLID_CREATE, "Thread"),
         SEP,
         item("Boss", None, None),  # owner: plastic-1
-        item("Snap Fit", None, None),  # owner: plastic-2
-        item("Lip", None, None),  # owner: plastic-2
+        item("Snap Fit", "SciForge_SnapFit", "pl_snap_fit"),  # owner: plastic-2
+        item("Lip", "SciForge_Lip", "pl_lip"),  # owner: plastic-2
         item("Rest", None, None),  # owner: plastic-1
         SEP,
         _same(SOLID_CREATE, "Thicken"),
@@ -736,7 +736,7 @@ PLASTIC_INSPECT = group(
     INSPECT["items"]
     + [
         SEP,
-        item("Design Advice", None, None),  # owner: plastic-2
+        item("Design Advice", "SciForge_DesignAdvice", "pl_design_advice"),  # owner: plastic-2
     ],
 )
 

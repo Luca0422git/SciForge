@@ -210,7 +210,12 @@ def beam_sections(options):
     o = options
     w0 = o["width"] / 2.0
     w1 = tip_width(o) / 2.0
-    root = [(-o["thickness"], -w0, 0.0), (0.0, -w0, 0.0), (0.0, w0, 0.0), (-o["thickness"], w0, 0.0)]
+    root = [
+        (-o["thickness"], -w0, 0.0),
+        (0.0, -w0, 0.0),
+        (0.0, w0, 0.0),
+        (-o["thickness"], w0, 0.0),
+    ]
     z = o["length"]
     tip = [(-o["tip_thickness"], -w1, z), (0.0, -w1, z), (0.0, w1, z), (-o["tip_thickness"], w1, z)]
     return root, tip

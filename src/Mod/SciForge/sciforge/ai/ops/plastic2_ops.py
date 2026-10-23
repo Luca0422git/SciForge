@@ -62,7 +62,11 @@ def op_sf_snap_fit(self, step):
     other = _body_of_step(self, step["other"], "sf_snap_fit") if "other" in step else None
     try:
         feature = plastic_snap.make(
-            sketch, dict(step.get("options", {})), hook_body=hook, groove_body=other, name=step["id"]
+            sketch,
+            dict(step.get("options", {})),
+            hook_body=hook,
+            groove_body=other,
+            name=step["id"],
         )
     except plastic_snap.SnapError as exc:
         raise BuildError("sf_snap_fit %r: %s" % (step["id"], exc))

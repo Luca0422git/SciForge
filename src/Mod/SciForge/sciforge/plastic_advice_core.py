@@ -82,7 +82,7 @@ def draft_issue(normal, pull, minimum):
 
 
 def thickness_issue(t, rule):
-    """"thin", "thick" or "" for a local thickness t (mm) against the rule's range."""
+    """ "thin", "thick" or "" for a local thickness t (mm) against the rule's range."""
     if t is None:
         return ""
     if t < rule["minimum_thickness"] - 1e-6:
@@ -180,7 +180,9 @@ def rows(results):
     for body in results.get("bodies", []):
         for element, data in sorted(body.get("faces", {}).items(), key=lambda kv: _num(kv[0])):
             for issue, value in data.get("issues", {}).items():
-                out.append((CHECK_OF[issue], body["label"], element, describe(issue, value), body["name"]))
+                out.append(
+                    (CHECK_OF[issue], body["label"], element, describe(issue, value), body["name"])
+                )
         for element, value in sorted(body.get("edges", {}).items(), key=lambda kv: _num(kv[0])):
             out.append(("knife", body["label"], element, describe("knife", value), body["name"]))
     out.sort(key=lambda r: (order[r[0]], r[1], _num(r[2])))
@@ -242,7 +244,9 @@ def first_hits(origins, directions, triangles, near=1e-6, chunk=128):
         q = np.cross(s, E1[None, :, :])
         v = (q * d[:, None, :]).sum(axis=2) * inv
         t = (q * E2[None, :, :]).sum(axis=2) * inv
-        hit = good & (u >= -1e-9) & (u <= 1 + 1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9) & (t > near)
+        hit = (
+            good & (u >= -1e-9) & (u <= 1 + 1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9) & (t > near)
+        )
         t = np.where(hit, t, np.inf)
         best = t.min(axis=1)
         out += [None if not math.isfinite(x) else float(x) for x in best]
