@@ -815,7 +815,10 @@ class BossPanel(Panel):
                 self.participants[1 if step.Toward >= 0 else -1] = pb.bodies.body_of(step)
             self.error = ""
             self._show_bodies()
-            self._follow_side_rules()
+            try:
+                self._follow_side_rules()
+            except Exception as exc:
+                warn("boss rule values: %s" % exc)
         except pb.BossError as exc:
             self.error = str(exc)
         except Exception as exc:
