@@ -685,9 +685,14 @@ def edge_flange(shape, edge_names, rule, options=None):
             diff = frames[j].out - frames[i].out
             if diff.Length < 1e-6 or (frames[i].up - frames[j].up).Length > 1e-6:
                 continue
-            n_m = diff.normalize()
-            solids[i] = _clean(solids[i].cut(_half_space(point - n_m * (gap / 2.0), n_m, size)))
-            solids[j] = _clean(solids[j].cut(_half_space(point + n_m * (gap / 2.0), -n_m, size)))
+            # m: across the corner's bisector plane, towards edge i's side (an outside corner
+            # and an inside one of an L-shaped plate put it on opposite sides)
+            m = diff.normalize()
+            mid_i = frames[i].point(0.0, 0.0, frames[i].length / 2.0)
+            if (mid_i - point).dot(m) < 0:
+                m = m * -1.0
+            solids[i] = _clean(solids[i].cut(_half_space(point + m * (gap / 2.0), m * -1.0, size)))
+            solids[j] = _clean(solids[j].cut(_half_space(point - m * (gap / 2.0), m, size)))
     base = shape
     if cuts:
         base = shape.cut(cuts)

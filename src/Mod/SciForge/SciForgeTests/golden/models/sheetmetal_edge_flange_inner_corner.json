@@ -1,0 +1,86 @@
+{
+  "id": "sheetmetal_edge_flange_inner_corner",
+  "title": "Edge flanges on the two edges of an L-shaped plate's inside corner, mitred",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              50,
+              0
+            ],
+            [
+              50,
+              20
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              30,
+              40
+            ],
+            [
+              0,
+              40
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          40,
+          20,
+          1
+        ],
+        [
+          30,
+          30,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1969.316733,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      40,
+      11
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "baseline-freecad-1.1.4",
+    "note": "an inside corner: the two flanges stand inside the plate's outline (Inside), each cut on the corner's bisector 0.5 mm back; the mitre keeps each on its own edge's side (the first build cut them on the wrong side). Plate 1600 - strips 2 x 20 x 2 + two 20 mm flanges (11.356 per mm) - the mitre cuts (baseline value)"
+  }
+}
