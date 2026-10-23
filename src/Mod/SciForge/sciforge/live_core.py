@@ -150,7 +150,7 @@ def in_plane_move(normals, plane_normal, parallel=1e-4):
 
 
 # -- extrude sides -----------------------------------------------------------------------------
-def extrude_ends(direction, distance, distance2=0.0, measurement="one", start=0.0, two=False):
+def extrude_ends(direction, distance, distance2=0.0, measurement="whole", start=0.0, two=False):
     """[(position along the extrude direction, length from the start)] of the two ends of an
     extrusion (the first one the start side), as Extrude builds them with distances:
     One Side: start .. start + distance; Symmetric: start - L .. start + L (L = distance, or

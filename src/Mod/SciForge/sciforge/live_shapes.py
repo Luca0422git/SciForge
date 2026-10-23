@@ -283,7 +283,10 @@ class OffsetPicture(Mesh):
     where no other moved face continues it; they show only while the value adds material
     (`grows`: values > 0)."""
 
-    MOVE, BASE = 0, 1
+    # the old outline of a side quad: where the value adds material (POS) or takes it away
+    # (NEG) the quad lies on the new solid's face beside it; otherwise it is folded flat onto
+    # the moved face (NEVER: a face that continues the moved one)
+    MOVE, POS, NEG, NEVER = 0, 1, 2, 3
 
     def __init__(self, shape, names, placement=None):
         super().__init__(shape.BoundBox.DiagonalLength, placement)
@@ -324,18 +327,56 @@ class OffsetPicture(Mesh):
                 others = [f for f in self.info.faces_of_edge(edge) if not f.isSame(face)]
                 if any(self._is_moved(f) for f in others):
                     continue  # two moved faces meet here: no side
+                group = self._side(face, edge, line, others)
                 first_old = len(self.points)
                 for p, w in zip(line, moves):
-                    self.add_point(p, w, group=self.BASE)
+                    self.add_point(p, w, group=group)
                 first_new = len(self.points)
                 for p, w in zip(line, moves):
                     self.add_point(p, w, group=self.MOVE)
                 self.triangles += core.strip(len(line), first_old, first_new)
 
+    def _side(self, face, edge, line, others):
+        """Which values the side quad along `edge` shows for (POS, NEG or NEVER): the slab
+        between the old and the new face lies on the inner side of the face beside it (its
+        quad is then a piece of that face) when the face runs on away from the edge against
+        that face's outward normal (a box's top pulled up, beside its sides; a hole's wall
+        pushed out, beside its floor)."""
+        import FreeCAD as App
+
+        if not others or len(line) < 2:
+            return self.NEVER
+        mid = line[len(line) // 2]
+        k = len(line) // 2
+        a, b = line[max(0, k - 1)], line[min(len(line) - 1, k + 1)]
+        tangent = core.unit(core.sub(b, a))
+        own = self.info.normal(face, mid)
+        beside = self.info.normal(others[0], mid)
+        if own is None or beside is None or core.norm(tangent) < 0.5:
+            return self.NEVER
+        into = core.unit(core.cross(own, tangent))
+        step = max(self.deflection * 2.0, self.tol * 100.0)
+        try:
+            probe = App.Vector(*core.add(mid, core.scale(into, step)))
+            if not face.isInside(probe, step * 0.5, True):
+                into = core.scale(into, -1.0)
+        except Exception:
+            return self.NEVER
+        c = core.dot(into, beside)
+        if c < -1e-6:
+            return self.POS
+        if c > 1e-6:
+            return self.NEG
+        return self.NEVER
+
     def coefficients(self, values):
         d = float(values["distance"])
-        # the side quads only where material is added; else folded flat onto the moved face
-        return {self.MOVE: (d, 0.0), self.BASE: (0.0 if d > 0 else d, 0.0)}
+        return {
+            self.MOVE: (d, 0.0),
+            self.POS: (0.0 if d > 0 else d, 0.0),
+            self.NEG: (0.0 if d < 0 else d, 0.0),
+            self.NEVER: (d, 0.0),
+        }
 
 
 # -- Shell ------------------------------------------------------------------------------------------
@@ -643,13 +684,13 @@ class Live:
             vobj = getattr(obj, "ViewObject", None) if pickpanel.alive(obj) else None
             if vobj is None:
                 continue
-            self._visible.append((vobj, bool(vobj.isShow())))
+            self._visible.append((vobj, shown(vobj)))
             vobj.makeTemporaryVisible(False)
         for obj in ghost:
             vobj = getattr(obj, "ViewObject", None) if pickpanel.alive(obj) else None
             if vobj is None:
                 continue
-            self._visible.append((vobj, bool(vobj.isShow())))
+            self._visible.append((vobj, shown(vobj)))
             vobj.makeTemporaryVisible(True)
             if not self.looks.done("ghost:" + obj.Name):
                 for node in pickpanel.nodes(vobj.RootNode, "SoMaterial"):
@@ -683,6 +724,17 @@ class Live:
         self.hide()
         self.overlay = None
         self.key = None
+
+
+def shown(vobj):
+    """True when a view object is drawn now (its temporary visibility counted)."""
+    try:
+        return bool(vobj.isVisible())
+    except Exception:
+        try:
+            return bool(vobj.Visibility)
+        except Exception:
+            return False
 
 
 def colors(obj):
