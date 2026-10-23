@@ -15,6 +15,9 @@ A size dragged or typed past what fits stops at the largest size that works (Luc
 2026-10-21; Fusion refuses it instead), and the dialog says so: "Largest that fits here: 3.47
 mm" (value_limits.py). A size from a formula is not rewritten: it is reported in the dialog,
 with that limit, and OK waits for a fix. Nothing is printed to the Report view.
+While an arrow is dragged the round (or bevel) follows the mouse as a live picture
+(fillet_live.py, a few milliseconds per move) and the exact solid is built once the mouse
+rests or is let go, as Draft's does (2026-10-23).
 
 Fusion's selection box has rows ("+" adds one): each row is a selection set with its own
 size and type, one step in the timeline, one undo step. The Fillet dialog also has
@@ -427,6 +430,11 @@ class BlendPanel(Panel):
         self._hint.setSingleShot(True)
         self._hint.setInterval(450)
         self._hint.timeout.connect(self._compute_hint)
+        # the live picture while a size arrow is dragged (fillet_live.py)
+        self._live = None  # its Overlay
+        self._live_key = None  # the picks and options its picture was made for
+        self._live_failed = None  # a key the picture could not be made for (not retried)
+        self._live_hid = False  # the preview solid is hidden behind the picture
 
         if feature is not None:
             self._read(feature)
@@ -869,6 +877,7 @@ class BlendPanel(Panel):
         """The document is closing: let go of everything without touching it."""
         self.base = self.target = self.body = None
         self._looks = _Looks()
+        self._live = None  # its view goes with the document
         self.cleanup()
         try:
             from . import taskui
@@ -1175,6 +1184,7 @@ class BlendPanel(Panel):
             self._rebuild_points()
         self._limit_cancel()  # a search for the old picks
         self.limits.note = ""  # a limit found for the old picks no longer applies
+        self._hide_live()  # it shows the old picks
         self._update_arrows()
         if recompute:
             self.schedule()
@@ -1285,6 +1295,7 @@ class BlendPanel(Panel):
         self._set_value(row, what, value)
         self._place_arrows(row, what)
         self._refresh_rows()
+        self._show_live()
         self.schedule()
 
     def _place_arrows(self, row, what):
@@ -1323,7 +1334,10 @@ class BlendPanel(Panel):
         if changed:
             self.formula_error = ""
             self._refresh_rows()
-            self.schedule()
+            # the picture follows the arrow at once (a few ms); the exact solid waits for the
+            # mouse to rest or be let go (schedule with settle), as Draft's does
+            live = self._show_live()
+            self.schedule(settle=live)
         elif self.limits.note and not self.error:
             self.show_status()
 
@@ -1800,9 +1814,18 @@ class BlendPanel(Panel):
                 pass
 
     # -- preview --------------------------------------------------------------------------
-    def schedule(self):
+    def schedule(self, settle=False):
         if not self._closed:
-            super().schedule()
+            super().schedule(settle)
+
+    @property
+    def REST_FIRST(self):
+        """Every rebuild waits for the changes to rest while the live picture can show them
+        (taskui.Panel.schedule): the picture follows at once, the exact solid comes on the
+        rest. Without a picture (Full Round, a pick it cannot draw) the dialog paces itself
+        as before."""
+        live = getattr(self, "_live", None)
+        return live is not None and getattr(self, "_live_key", None) is not None
 
     def _recompute(self):
         try:
@@ -1810,6 +1833,8 @@ class BlendPanel(Panel):
         except Exception as exc:
             self.error = str(exc)
             self.show_status()
+        finally:
+            self._hide_live()  # the exact solid (or the reason it fails) replaces it
 
     def _uses_step(self):
         """SciForge's own step builds this (or already holds it)."""
@@ -1918,11 +1943,14 @@ class BlendPanel(Panel):
             except Exception:
                 pass
         self._edit_pending = False
+        self._live_hid = False  # _show_preview shows the solid again
         self._show_preview(True)
         self._refresh_rows()
         self.show_status()
+        self._live_soon()
 
     def _failed(self, reason):
+        self._hide_live()  # no picture of a size that does not fit
         if self._limit_refused(reason):
             return  # held at the largest size that fits, and previewed with it
         self._good_last = False
@@ -2117,6 +2145,153 @@ class BlendPanel(Panel):
         width = max(self.message.width(), self.form.width() - 30, 260)
         self.message.setMinimumHeight(self.message.heightForWidth(width) if text else 0)
 
+    # -- the live picture (fillet_live.py) ---------------------------------------------------
+    def live_shown(self, spec):
+        """Called each time the live picture shows new sizes (tests)."""
+
+    def _live_key_now(self):
+        """The picks and options the picture depends on (not the sizes: those come with each
+        show)."""
+        spec = copy.deepcopy(self.spec)
+        for data in [spec] + list(spec.get("sets", [])):
+            for key in ("radius", "chord", "start", "end", "distance", "distance2", "angle"):
+                data.pop(key, None)
+            data.pop("points", None)
+            data.pop("count", None)
+        return value_limits.make_key(
+            "live",
+            self.info.shape if self.info is not None else None,
+            self.groups,
+            self.refs2,
+            [getattr(f, "Name", "") for f in self.features],
+            [getattr(f, "Name", "") for f in self.features2],
+            spec,
+        )
+
+    def _live_overlay(self):
+        """The Overlay with the picture of the picks now (made once per set of picks), or
+        None when there is nothing to show or it cannot be made."""
+        if self._closed or self.info is None or not self._has_picks():
+            return None
+        key = self._live_key_now()
+        if key == self._live_failed:
+            return None
+        if self._live is not None and key == self._live_key:
+            return self._live
+        from . import draft_ui, fillet_live
+
+        try:
+            placement = self.body.getGlobalPlacement() if self.body else None
+            picture = fillet_live.Picture(
+                self.info,
+                self.spec,
+                [list(g) for g in self.groups],
+                list(self.refs2),
+                list(self.features),
+                list(self.features2),
+                placement,
+            )
+            if self._live is None:
+                color, line = draft_ui._colors(self.base)
+                self._live = fillet_live.Overlay(Gui.ActiveDocument.ActiveView, color, line)
+            self._live.hide()
+            self._live.set_picture(picture)
+            self._live_key = key
+            return self._live
+        except Exception as exc:
+            self._live_failed = key
+            self._live_key = None
+            if self._live is not None:
+                self._live.hide()
+            if not isinstance(exc, ValueError):
+                # a picture the picks cannot have (Full Round, smooth edges) is not news:
+                # nothing goes to the Report view for it (the dialog's rule); a bug is
+                log(
+                    "%s: no live picture for these picks (%s); the preview follows on pauses"
+                    % (self.title, exc)
+                )
+            return None
+
+    def _live_soon(self):
+        """Make the picture of new picks while nothing happens, so the first move of an arrow
+        does not wait for it."""
+        try:
+            if self._live is not None and self._live_key == self._live_key_now():
+                return
+            QtCore.QTimer.singleShot(0, self._prepare_live)
+        except Exception:
+            pass
+
+    def _prepare_live(self):
+        try:
+            if not self._closed and not getattr(self.doc, "Recomputing", False):
+                self._live_overlay()
+        except Exception as exc:
+            warn("%s live picture: %s" % (self.title, exc))
+
+    def _show_live(self):
+        """The rounds at the dialog's sizes now (a few milliseconds): the preview solid is
+        hidden behind the see-through part until the exact one is built. True when shown.
+        A size the picture cannot draw (0, a bevel that never reaches the other face), a
+        formula that does not work, or a size past the largest that fits (held there before
+        this) shows nothing."""
+        if self._closed or self.formula_error:
+            self._hide_live()
+            return False
+        try:
+            overlay = self._live_overlay()
+            if overlay is None:
+                return False
+            try:
+                overlay.show(self.spec)
+            except ValueError:
+                self._hide_live()
+                return False
+            self._hide_results()
+            self.live_shown(self.spec)
+            return True
+        except Exception as exc:
+            self._drop_live()
+            warn("%s live picture: %s" % (self.title, exc))
+            return False
+
+    def _hide_results(self):
+        """The preview solid out of the way of the live picture; the part before the step
+        see-through around it (as with the preview)."""
+        if self._live_hid:
+            return
+        if _alive(self.target) and self.target.ViewObject is not None:
+            self.target.ViewObject.makeTemporaryVisible(False)
+        if _alive(self.base) and self.base.ViewObject is not None:
+            self.base.ViewObject.makeTemporaryVisible(True)
+            if not self._looks.done("ghost"):
+                for node in _nodes(self.base.ViewObject.RootNode, "SoMaterial"):
+                    if node.getName().getString() == "ShapeMaterial":
+                        self._looks.set(node, "transparency", GHOST / 100.0)
+        self._live_hid = True
+
+    def _hide_live(self):
+        """The live picture away; the preview solid back where it was hidden for it."""
+        live = getattr(self, "_live", None)
+        if live is not None:
+            try:
+                live.hide()
+            except Exception:
+                pass
+        if not getattr(self, "_live_hid", False):
+            return
+        self._live_hid = False
+        try:
+            if self._ghost and _alive(self.target) and self.target.ViewObject is not None:
+                self.target.ViewObject.makeTemporaryVisible(True)
+        except Exception as exc:
+            warn("%s preview display: %s" % (self.title, exc))
+
+    def _drop_live(self):
+        self._hide_live()
+        self._live = None
+        self._live_key = None
+
     # -- OK / Cancel ------------------------------------------------------------------------
     def accept(self):
         try:
@@ -2181,6 +2356,7 @@ class BlendPanel(Panel):
                 timer.stop()
             except Exception:
                 pass
+        self._drop_live()
         self._remove_arrows()
         self.value_boxes.discard()
         for callback, kind in (

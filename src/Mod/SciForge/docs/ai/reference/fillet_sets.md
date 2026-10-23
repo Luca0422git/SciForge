@@ -62,5 +62,5 @@ Done: AI: Fillet (2 sets). Its id is 'Fillet1'. Bodies now: Body1: 23744.6 mm3, 
 
 - Recipe: [enclosure with a lid](sciforge://docs/recipes/enclosure-with-lid.md)
 - Recipe: [sheet-like U bracket (thin extrude with bends)](sciforge://docs/recipes/sheet-like-part.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `fillet2_chamfer_sets_angle_flip`, `fillet2_chord_90_120`, `fillet2_face_and_its_edge_in_two_sets`, `fillet2_presspull_set_radius`, `fillet2_sets_tangent_chain_each`, `fillet2_tangent_chain_off`, `fillet2_two_sets`, `fillet2_variable_points`
+- Golden models built with its steps (read one with docs_read golden/<id>): `fillet2_chamfer_sets_angle_flip`, `fillet2_chord_90_120`, `fillet2_face_and_its_edge_in_two_sets`, `fillet2_presspull_set_radius`, `fillet2_sets_tangent_chain_each`, `fillet2_tangent_chain_off`, `fillet2_two_sets`, `fillet2_variable_points`, `live_fillet2_chamfer_sets_angle_flip`, `live_fillet2_chord_90_120`, `live_fillet2_sets_tangent_chain_each`, `live_fillet2_tangent_chain_off` and 2 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

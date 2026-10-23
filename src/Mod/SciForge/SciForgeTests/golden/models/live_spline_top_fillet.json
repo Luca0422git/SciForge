@@ -1,0 +1,93 @@
+{
+  "id": "live_spline_top_fillet",
+  "title": "Live picture on the exact result: spline wall's top edge, fillet 1 mm",
+  "tags": [
+    "blend",
+    "fillet",
+    "live-blend",
+    "free-form"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "segments": [
+            {
+              "line": [
+                0,
+                0,
+                20,
+                0
+              ]
+            },
+            {
+              "spline": [
+                [
+                  20,
+                  0
+                ],
+                [
+                  26,
+                  7
+                ],
+                [
+                  15,
+                  15
+                ]
+              ]
+            },
+            {
+              "line": [
+                15,
+                15,
+                0,
+                15
+              ]
+            },
+            {
+              "line": [
+                0,
+                15,
+                0,
+                0
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10.0
+    },
+    {
+      "op": "blend_fillet",
+      "id": "f1",
+      "radius": 1.0,
+      "edges": {
+        "type": "bspline",
+        "at": [
+          {
+            "axis": "z",
+            "value": "max"
+          }
+        ],
+        "count": 1
+      }
+    },
+    {
+      "op": "live_blend_expect",
+      "target": "f1"
+    }
+  ],
+  "expect": {
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "the check is the live picture's"
+  }
+}
