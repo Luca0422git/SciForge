@@ -35,7 +35,9 @@ CHECK_PROPS = {
     "knife": "CheckKnifeEdges",
     "undercut": "CheckUndercuts",
 }
-SAMPLES = 8  # at most this many points per face
+SAMPLES = 8  # points on a small face
+MAX_SAMPLES = 32  # points on a big face (one every SPACING wall thicknesses or so)
+SPACING = 3.0
 
 
 class AdviceError(ValueError):
@@ -221,19 +223,35 @@ def _normal(face, point):
         return None, point
 
 
-def face_samples(face, tolerance, count=SAMPLES):
-    """[(point, outward normal)] spread over the face: centroids of its display triangles."""
+def face_samples(face, tolerance, count=SAMPLES, spacing=0.0):
+    """[(point, outward normal)] spread over the face: centroids of its display triangles,
+    split finer on a big face so it gets about one point every `spacing` (at least `count`,
+    at most MAX_SAMPLES points)."""
     try:
         pts, tris = face.tessellate(tolerance)
     except Exception:
         return []
     if not tris:
         return []
-    step = max(1, int(math.ceil(len(tris) / float(count))))
+    points = [(q.x, q.y, q.z) for q in pts]
+    tris = [tuple(t) for t in tris]
+    want = count
+    if spacing > 0:
+        try:
+            want = int(min(MAX_SAMPLES, max(count, math.ceil(face.Area / (spacing * spacing)))))
+        except Exception:
+            want = count
+        if len(tris) < want:
+            from . import analysis_core
+
+            points, tris = analysis_core.subdivide(points, tris, spacing)
+    step = max(1, int(math.ceil(len(tris) / float(want))))
     found = []
     for k in range(0, len(tris), step):
-        a, b, c = (pts[i] for i in tris[k])
-        centre = (a + b + c) * (1.0 / 3.0)
+        a, b, c = (points[i] for i in tris[k])
+        centre = V(
+            (a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0, (a[2] + b[2] + c[2]) / 3.0
+        )
         n, on = _normal(face, centre)
         if n is None or n.Length < 1e-12:
             continue
@@ -351,8 +369,9 @@ def measure_shape(shape, rule, pull, checks):
     eps = max(1e-4, size * 1e-6)
     p = (pull.x, pull.y, pull.z)
     samples = []  # (face index, point, normal)
+    spacing = max(SPACING * rule.get("thickness", 0.0), size / 30.0)
     for i, face in enumerate(shape.Faces):
-        for point, normal in face_samples(face, tolerance):
+        for point, normal in face_samples(face, tolerance, SAMPLES, spacing):
             samples.append((i, point, normal))
     need_t = any(c in checks for c in ("thickness", "variation"))
     rays = Rays(shape, tolerance) if samples and (need_t or "undercut" in checks) else None
@@ -421,7 +440,8 @@ def inscribed(shape, rays, samples, thick, rule):
     """The wall thickness at each sample: the ray's length along the inward normal, unless
     the ray ran along inside a wall (a rim's top, a hole through a wall: halfway along it
     the nearest face is much closer than half the ray); then the wall across there: from the
-    nearest face straight through to the face opposite."""
+    nearest face straight through to the face opposite. Where that way across runs along
+    inside a wall again (a point beside the edge where two walls meet), no reading."""
     import Part
 
     out = list(thick)
@@ -447,7 +467,13 @@ def inscribed(shape, rays, samples, thick, rule):
             [tuple(m) for _k, _d, m, _a in across], [tuple(a) for _k, _d, _m, a in across], 1e-9
         )
         for (k, d, _m, _a), t in zip(across, found):
-            out[k] = d + t if t is not None else 2.0 * d
+            total = d + t if t is not None else 2.0 * d
+            if t is not None and t > 4.0 * d and _long(total, rule):
+                # where walls meet (a box's corner): the way across runs along inside the
+                # other wall too; no reading here (the walls' other points show them)
+                out[k] = None
+            else:
+                out[k] = total
     return out
 
 

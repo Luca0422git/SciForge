@@ -161,6 +161,28 @@ def blended_thickness(point, samples, power=2.0):
     return total / weight
 
 
+def blended_many(points, samples, power=2.0):
+    """blended_thickness for many points (numpy when there is one)."""
+    if not samples:
+        return [None] * len(points)
+    try:
+        import numpy as np
+    except ImportError:
+        return [blended_thickness(p, samples, power) for p in points]
+    if not len(points):
+        return []
+    P = np.asarray(points, dtype=float).reshape(-1, 3)
+    S = np.asarray(samples, dtype=float).reshape(-1, 4)
+    d2 = ((P[:, None, :] - S[None, :, :3]) ** 2).sum(axis=2)
+    exact = d2 < 1e-18
+    w = 1.0 / np.maximum(d2, 1e-18) ** (power / 2.0)
+    t = (w * S[None, :, 3]).sum(axis=1) / w.sum(axis=1)
+    hit = exact.any(axis=1)
+    if hit.any():
+        t[hit] = S[np.argmax(exact[hit], axis=1), 3]
+    return [float(x) for x in t]
+
+
 # -- rows of the issues list -------------------------------------------------------------------
 def describe(issue, value):
     """The text of one issue for the list."""

@@ -211,9 +211,8 @@ class ViewProviderDesignAdvice:
                 samples = faces.get(name, {}).get("samples") if smooth else None
                 if samples:
                     lo, hi = rule["minimum_thickness"], rule["maximum_thickness"]
-                    for q in pts:
-                        g = frame.multVec(App.Vector(*q))
-                        t = core.blended_thickness((g.x, g.y, g.z), samples)
+                    moved = [tuple(frame.multVec(App.Vector(*q))) for q in pts]
+                    for t in core.blended_many(moved, samples):
                         per_point.append(core.heat_color(t, lo, hi))
                 else:
                     per_point += [colors.get(name, core.OK)] * len(pts)

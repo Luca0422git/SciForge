@@ -14,7 +14,7 @@ edited (this file is the session log entry).
   and catch profile, the groove / slot / loop boxes, the strain check (tapered factor
   1 / 1.09 per the research's critic pass C5), the lip and groove sections as offsets from
   the picked edges, the Design Advice checks, colours, list rows, a smooth thickness blend
-  and a numpy ray caster (triangles in a grid of cubes: a 130-face part checks in 6 s,
+  and a numpy ray caster (triangles in a grid of cubes: a 130-face part checks in 9 s with 8 to 32 points a face,
   95 s when every ray tested every triangle).
 - `sciforge/plastic_snap.py`, `plastic_lip.py`: the steps. A lead step in one body
   (`SnapFitFeature`, `LipFeature`) and a hidden follower in the other body
@@ -43,7 +43,7 @@ edited (this file is the session log entry).
 - Icons `pl_snap_fit`, `pl_lip`, `pl_design_advice`, `pl_snap_groove`
   (`tools/sciforge/icons_plastic2.py`); the three ribbon entries wired.
 - Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (94), `plastic2_lip` (85),
-  `plastic2_advice` (73); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
+  `plastic2_advice` (77); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
   `test_plastic2_core.py` (34).
 
 ## FreeCAD facts and traps found
@@ -68,6 +68,11 @@ edited (this file is the session log entry).
   along the ray with `Surface.parameter / value / normal`), a hit landing back on the ray's
   own face is passed, and undercut rays start outside the triangles. `shape.Faces` builds a
   new list on every call (3 ms on 130 faces): keep it.
+- More points a face found real problems the 8 points missed (a 4 mm round outside a sharp
+  inside corner leaves 1.17 mm of a 2 mm wall), and false ones: a point beside the edge
+  where two walls meet sends its ray along inside the other wall (a box's outside read 20 or
+  40 mm thick), and the way across from there runs along inside a wall again; such a point
+  gives no reading now.
 - `Wire.makeOffset2D` refuses a single straight edge (no plane of its own): the band beside
   a straight chain is made as a rectangle in the rim's plane.
 - Which side a `makeOffset2D` with a positive distance grows to depends on the wire's
@@ -92,8 +97,8 @@ Fusion's exact Snap Fit / Lip dialogs (no page access, no API objects: labels, d
 the Parallel / Perpendicular geometry are SciForge's reading); Face Guide on a chain whose
 walls have different drafts (refused); lip edges not in one plane (refused); Snap Fit
 visibility controls (read as Hide Other Body); Aligned to a face uses its centre; Root
-Radius defaults to 0; Design Advice is sampled (8 points a face) and checks in the recompute
-(about 6 s for a 130-face part), no browser alert badge; injection-moulding simulation out
+Radius defaults to 0; Design Advice is sampled (8 to 32 points a face) and checks in the
+recompute (about 9 s for a 130-face part), no browser alert badge; injection-moulding simulation out
 of scope.
 
 ## Notes for the integrator

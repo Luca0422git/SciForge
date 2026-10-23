@@ -13,7 +13,9 @@ with its list; Esc. The block made 3 mm tall: the analysis checks again by itsel
 thickness issue). Save, close, reopen: the analysis is back with its results. A second
 Design Advice with its bodies box cleared: OK refused with the reason; Cancel leaves one.
 An empty design: Design Advice says what is needed, no dialog. A round boss reads its
-1.5 mm wall from both of its round faces, and its hole is no undercut.
+1.5 mm wall from both of its round faces, and its hole is no undercut. A box rounded 4 mm
+outside and hollowed to 2 mm walls: the thin top of its walls and its thin bottom corners
+are found, its walls read 2 mm, no false alarm at its corners.
 """
 
 import os
@@ -359,6 +361,56 @@ def round_walls():
     )
 
 
+def thin_rim():
+    """A 50 x 40 x 20 box rounded 4 mm on every edge, hollowed from the top to 2 mm walls
+    with sharp inside corners. Near the top the outer round eats into the wall (down to a
+    knife edge at the rim); at the bottom the 4 mm round outside a sharp inside corner leaves
+    4 - 2 sqrt 2 = 1.17 mm, under the rule's 1.2. The points spread over the faces find
+    both; the walls read 2 mm elsewhere; the box's corners raise no false alarm."""
+    import Part
+
+    from sciforge import plastic_advice
+
+    d = ps.doc()
+    outer = Part.makeBox(50, 40, 20)
+    outer = outer.makeFillet(4, outer.Edges)
+    src = d.addObject("Part::Feature", "RimSource")
+    src.Shape = outer.cut(Part.makeBox(46, 36, 20, V(2, 2, 2)))
+    src.Visibility = False
+    body = d.addObject("PartDesign::Body", "Rim")
+    base = body.newObject("PartDesign::FeatureBase", "RimBase")
+    base.BaseFeature = src
+    body.Tip = base
+    d.recompute()
+    obj = plastic_advice.make(d, [body])
+    d.recompute()
+    faces = (plastic_advice.results(obj).get("bodies") or [{}])[0].get("faces", {})
+    thin = {n: data["issues"]["thin"] for n, data in faces.items() if "thin" in data["issues"]}
+    box = {n: body.Shape.getElement(n).BoundBox for n in faces}
+    top = {n: v for n, v in thin.items() if box[n].ZMax > 19.0}
+    low = {n: v for n, v in thin.items() if box[n].ZMax <= 4.0 + 1e-6}
+    h.check("the thin top of the walls is found", top and min(top.values()) < 0.6, top)
+    h.check(
+        "the bottom rounds: 1.17 mm at the sharp inside corner",
+        low and all(0.85 < v < 1.2 for v in low.values()),
+        low,
+    )
+    walls = [
+        faces[n]["t_max"]
+        for n in faces
+        if body.Shape.getElement(n).Surface.TypeId == "Part::GeomPlane"
+        and abs(box[n].ZMin - 2.0) < 1e-6
+        and box[n].ZLength > 10.0
+    ]
+    h.check(
+        "the inner walls read 2 mm away from the rounds",
+        len(walls) == 4 and all(abs(t - 2.0) < 1e-6 for t in walls),
+        walls,
+    )
+    thick = [n for n, data in faces.items() if "thick" in data["issues"]]
+    h.check("the corners raise no false alarm (nothing too thick)", not thick, thick)
+
+
 h.run(
     "plastic2_advice",
     [
@@ -392,5 +444,6 @@ h.run(
         one_left,
         empty_design,
         round_walls,
+        thin_rim,
     ],
 )

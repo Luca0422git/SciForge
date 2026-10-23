@@ -122,7 +122,10 @@ between the bottom and top offsets. Lip and groove volumes are exact (golden mod
 
 Wall thickness at a point: the distance along the inward normal to the next face; where that
 ray runs along inside a wall (a rim's top, a hole through a wall), the wall across there
-(nearest face straight through to the opposite one). The rays run against the body's display
+(nearest face straight through to the opposite one); beside the edge where two walls meet,
+where that way across runs along inside the other wall, no reading (the walls' other points
+show them). Points: 8 on a small face, up to 32 on a big one (about one every 3 wall
+thicknesses). The rays run against the body's display
 triangles, looked up in a grid of cubes (only the triangles near a ray are tested), and each
 hit is then moved onto the exact face it lies on (the triangles cut corners off round faces:
 a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
@@ -145,11 +148,13 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
     Face Guide; a direction picked along the rim refused; OK; undo / redo; edit; Esc; save /
     reopen; a lip ring on a cone's round rim (Pull Direction exact, Face Guide leaning with
     the cone, exact); walls of different draft refused.
-  - `plastic2_advice` (73): checks, colours, click-to-zoom, Draft unticked, Thickness display,
+  - `plastic2_advice` (77): checks, colours, click-to-zoom, Draft unticked, Thickness display,
     a body left out and back, the pull direction picked and flipped, browser eye, reopen from
     the browser, it follows the design (and waits while hidden), save / reopen, the empty
     bodies refusal, an empty design, a round boss (its 1.5 mm wall read exactly from both
-    round faces, its hole no undercut).
+    round faces, its hole no undercut), a box rounded 4 mm outside with 2 mm walls (the thin
+    top of its walls and its 1.17 mm bottom corners found, the walls 2 mm elsewhere, no false
+    alarm at the corners).
   - `ribbon_sweep` with `SWEEP_TABS=plastic` (112): every PLASTIC command opens with no
     pop-up or error.
 - Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 18):
@@ -179,10 +184,11 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
   is a line (each catch faces straight away from it).
 - **Root Radius** defaults to 0 (the research's guess is the rule's Nominal Radius, which
   would not fit the default 0.1 mm clearance without the mouth round SciForge adds).
-- **Design Advice thickness** is sampled (up to 8 points a face), not a continuous map; a
-  thin spot between samples can be missed (the Thickness display blends the samples into a
-  smooth map). No alert badge on the component in the browser (a shared file). A hidden
+- **Design Advice thickness** is sampled (8 to 32 points a face), not a continuous map; a
+  thin spot smaller than the points' spacing can be missed, and points right beside the
+  edge where two walls meet give no reading (the Thickness display blends the samples into
+  a smooth map). No alert badge on the component in the browser (a shared file). A hidden
   Design Advice waits and checks again when shown. A check takes about 2 s for a 60-face
-  enclosure with bosses and 6 s for a 130-face one (measured in the sandbox under load); it
+  enclosure with bosses and 9 s for a 130-face one (measured in the sandbox under load); it
   runs in the recompute, so FreeCAD waits that long after a change to a checked body.
 - **Injection-moulding simulation** is out of scope (outline 8).

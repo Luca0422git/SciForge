@@ -290,6 +290,11 @@ class AdviceChecks(unittest.TestCase):
         self.assertAlmostEqual(advice.blended_thickness((0, 0, 0), samples), 2.0)
         self.assertAlmostEqual(advice.blended_thickness((5, 0, 0), samples), 3.0)
         self.assertIsNone(advice.blended_thickness((5, 0, 0), []))
+        points = [(0, 0, 0), (5, 0, 0), (2, 3, 1), (10, 0, 0)]
+        many = advice.blended_many(points, samples)
+        for p, t in zip(points, many):
+            self.assertAlmostEqual(t, advice.blended_thickness(p, samples))
+        self.assertEqual(advice.blended_many(points, []), [None] * 4)
 
     def test_colors(self):
         self.assertEqual(advice.face_color({"draft": 0, "undercut": None}), advice.UNDERCUT)
