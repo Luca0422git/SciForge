@@ -169,7 +169,8 @@ then moved onto the exact face it lies on (the triangles cut corners off round f
     followed after an earlier point is deleted from the sketch (the edit shows it too); a
     Lip edit switched to Groove then Cancel; a Lip edit OK'd, Undo / Redo; Design Advice:
     the Display switched without checking the design again, OK without checking again,
-    Esc on a second one; a plate in a component turned 90 degrees (its pull is the
+    Esc on a second one; hidden, the Lip edited, shown, Undo and Redo (it checks the bodies
+    each brings back); a plate in a component turned 90 degrees (its pull is the
     component's Z: its own 4 sides lack draft), Esc leaves nothing.
 - Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 19):
   snap fit parallel, edit (taper + draft), Hook and Loop, two points Aligned, Distance
@@ -204,6 +205,12 @@ Fixed:
   recompute; the colours are redrawn from the results kept), and OK only checks again
   when a change is still waiting. Shown again after a change while hidden, it recomputes
   only itself (and what it needs), not the whole document.
+- **Design Advice showed results of an undone design**: a change made while it was hidden
+  is checked when it is shown again, outside that change's undo step, so an Undo brought
+  the bodies back but not the results (checked headless: the 20 mm results stayed on the
+  2 mm part until the next recompute). It now keeps a short record of the bodies it
+  checked (volume, area, faces) and checks again after an Undo / Redo, or when shown,
+  if they differ. A Redo stays available.
 - **Design Advice's default pull was the design's Z** for every body; the research's spec
   is the Z of the component. A body in a turned component (a part moulded along its own
   Z, turned into place) had the wrong faces flagged for draft and undercut. Each body now
@@ -244,7 +251,11 @@ Behaviour that differs from the research, kept on purpose:
   Design Advice waits and checks again when shown. A check takes about 1.5 s for a 60-face
   enclosure with bosses, 3.5 s for a 130-face one and 25 s for a plate with 400 small holes
   (406 faces; measured in the sandbox under load); it runs in the recompute, so FreeCAD
-  waits that long after a change to a checked body.
+  waits that long after a change to a checked body. That includes every preview step of
+  another command's dialog (dragging a Snap Fit arrow on a checked body re-checks it each
+  time): hide the analysis while editing a big part. Deferring the check until the dialog
+  closes was considered in QA and left out: the check would then run after the dialog's
+  undo step, and an Undo would leave the analysis describing the undone design.
 - **Research G rows not built**: Hook and Loop's Loop Length / Width / Opening Length (the
   loop is sized from the hook and the clearance; only Loop Thickness is typed); Groove
   Extent and Groove Wall Thickness (a groove block built where the other body has no wall:

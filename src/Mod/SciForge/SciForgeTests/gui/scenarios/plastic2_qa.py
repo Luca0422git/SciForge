@@ -19,7 +19,9 @@ Double-click: Lip Height 1.5, OK; Undo: as before; Redo: the taller lip.
 
 Design Advice on that design: the Display switched to Thickness redraws the colours from the
 results kept without checking the design again; OK does not check it again either (seconds
-on a big part). Esc on a second Design Advice leaves only the first. A plate in a component
+on a big part). Esc on a second Design Advice leaves only the first. Hidden with its eye,
+the Lip edited to 2 mm, shown again (checked), Undo: the analysis checks the bodies Undo
+brought back (its results as before the edit); Redo: again. A plate in a component
 turned 90 degrees about X: its pull is the component's Z (the design's -Y), so its own four
 sides lack draft; Esc leaves nothing.
 
@@ -29,6 +31,8 @@ indices shift): the snap fit stays on its point, and its edit shows it.
 
 import FreeCAD as App
 import Part
+
+from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import plastic2_steps as ps
@@ -544,6 +548,69 @@ def esc_leaves_one():
     h.check("Esc left only the first", len(plastic_advice.advices(ps.doc())) == 1)
 
 
+def hide_advice():
+    """A change made while the analysis is hidden, then undone after it was shown again:
+    Undo brings the bodies back, and the analysis checks them again."""
+    s["advice"] = ps.by_label("Design Advice1")
+    s["adv_before"] = s["advice"].Results
+    ps.click_eye("Design Advice1")
+
+
+def edit_while_hidden():
+    QtTest.QTest.qWait(300)
+    h.check("the analysis is hidden", not s["advice"].ViewObject.Visibility)
+    h.check("double-click opens the Lip edit", ps.double_click_timeline("Lip 1"))
+
+
+def lip_two():
+    p = ps.lip_panel()
+    if not h.check("the Lip edit dialog", p is not None and p.editing):
+        return
+    ps.type_field(p, "lip_height", "2")
+    ps.settle(ps.lip_panel)
+    ps.ok()
+
+
+def show_advice():
+    h.check("the Lip dialog closed", ps.lip_panel() is None)
+    h.check("the hidden analysis waited", s["advice"].Stale)
+    ps.click_eye("Design Advice1")
+
+
+def shown_checked():
+    from sciforge import plastic_advice
+
+    QtTest.QTest.qWait(600)
+    h.idle_step()
+    adv = s["advice"]
+    h.check("shown: checked again", not adv.Stale and not plastic_advice.out_of_date(adv))
+    h.check("the 2 mm lip changed the results", adv.Results != s["adv_before"])
+    ps.undo()
+
+
+def undone_checked():
+    from sciforge import plastic_advice
+
+    QtTest.QTest.qWait(600)
+    h.idle_step()
+    adv = s["advice"]
+    h.check("Undo: the lip back to 1.5 mm", ps.near(ps.lip_steps()[0].LipHeight.Value, 1.5))
+    h.check("Undo: the analysis checked the bodies again", not plastic_advice.out_of_date(adv))
+    h.check("Undo: the results as before the edit", adv.Results == s["adv_before"])
+    ps.redo()
+
+
+def redone_checked():
+    from sciforge import plastic_advice
+
+    QtTest.QTest.qWait(600)
+    h.idle_step()
+    adv = s["advice"]
+    h.check("Redo: the 2 mm lip", ps.near(ps.lip_steps()[0].LipHeight.Value, 2.0))
+    h.check("Redo: the analysis checked the bodies again", not plastic_advice.out_of_date(adv))
+    h.check("Redo: the results of the 2 mm lip", adv.Results != s["adv_before"])
+
+
 def restore_measure():
     from sciforge import plastic_advice
 
@@ -664,6 +731,13 @@ h.run(
         advice_kept,
         second_advice_esc,
         esc_leaves_one,
+        hide_advice,
+        edit_while_hidden,
+        lip_two,
+        show_advice,
+        shown_checked,
+        undone_checked,
+        redone_checked,
         restore_measure,
         turned_design,
         turned_open,

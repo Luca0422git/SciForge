@@ -149,7 +149,10 @@ an edit refused with the reason; a note when no body is in front of the catches 
 facing away from the hook body); Manual points kept by the sketch's geometry ids too (an
 earlier point deleted no longer moves the snap fit); Design Advice's Display change and OK
 no longer check the design again, and showing it again recomputes only it; its default
-pull is each body's component's Z (research 2.11), not the design's. New scenario
+pull is each body's component's Z (research 2.11), not the design's; it checks again after
+an Undo / Redo that brings back bodies other than those it last checked (a change made
+while it was hidden, checked when shown, then undone left the results of the undone
+design). New scenario
 `plastic2_qa`; before the fixes it failed exactly on those checks (5 of them on the
 builder's code).
 
@@ -161,6 +164,10 @@ FreeCAD facts found:
   is still in the undo step and still reaches the view provider's updateData).
 - A sketch's `getGeometryId(index)` is stable when other geometry is deleted (indices
   shift down, ids stay) and is saved with the file: the way to keep picked sketch points.
+- Undo restores only what changed inside the undo step: a FeaturePython recomputed outside
+  it (here: an analysis checked when shown again) keeps its new values after Undo, and is
+  not touched, so nothing recomputes it. A touch + `doc.recompute([obj])` after the Undo
+  keeps the Redo.
 - A recompute error in a scenario prints "Failed to recompute" / a traceback, which the
   harness and run_tests.sh count as failures: test a feature's error state headlessly.
 

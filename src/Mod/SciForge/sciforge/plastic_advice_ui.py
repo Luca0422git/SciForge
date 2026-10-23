@@ -96,6 +96,36 @@ def _check_again(obj):
         warn("Design Advice: %s" % exc)
 
 
+def _after_undo(doc_name):
+    """After Undo / Redo: an analysis whose bodies came back other than it last checked them
+    (changed while it was hidden, checked when shown, then undone) checks them again."""
+    try:
+        doc = App.getDocument(doc_name)
+    except Exception:
+        return  # closed meanwhile
+    try:
+        for obj in plastic_advice.advices(doc):
+            if plastic_advice.out_of_date(obj):
+                _check_again(obj)
+    except Exception as exc:
+        warn("Design Advice after Undo: %s" % exc)
+
+
+class _UndoWatch:
+    def slotUndoDocument(self, doc):
+        try:
+            name = doc.Name
+            QtCore.QTimer.singleShot(0, lambda: _after_undo(name))
+        except Exception:
+            pass
+
+    def slotRedoDocument(self, doc):
+        self.slotUndoDocument(doc)
+
+
+_WATCH = {}
+
+
 class ViewProviderDesignAdvice:
     """Draws a Design Advice over its bodies. Saved documents store
     "sciforge.plastic_advice_ui.ViewProviderDesignAdvice": keep the name stable."""
@@ -133,7 +163,9 @@ class ViewProviderDesignAdvice:
     def onChanged(self, vobj, prop):
         if prop == "Visibility":
             obj = vobj.Object
-            if vobj.Visibility and getattr(obj, "Stale", False):
+            if vobj.Visibility and (
+                getattr(obj, "Stale", False) or plastic_advice.out_of_date(obj)
+            ):
                 QtCore.QTimer.singleShot(0, lambda: _check_again(obj))
             schedule(obj)
 
@@ -610,6 +642,12 @@ def _register():
         browser_core.ANALYSIS_ICONS.setdefault(plastic_advice.KIND, "pl_design_advice")
     except Exception as exc:
         warn("Design Advice: browser registration: %s" % exc)
+    try:
+        if "undo" not in _WATCH:
+            _WATCH["undo"] = _UndoWatch()
+            App.addDocumentObserver(_WATCH["undo"])
+    except Exception as exc:
+        warn("Design Advice: undo watch: %s" % exc)
 
 
 _register()
