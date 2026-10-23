@@ -37,6 +37,13 @@ class FlangeMathsTests(unittest.TestCase):
             core.bend_start_x("tangent", 45, R, T), -2.0 * math.tan(math.radians(22.5))
         )
 
+    def test_no_inside_position_at_180(self):
+        with self.assertRaises(ValueError) as ctx:
+            core.bend_start_x("inside", 180, R, T)
+        self.assertIn("Adjacent or Tangent", str(ctx.exception))
+        self.assertAlmostEqual(core.bend_start_x("tangent", 180, R, T), -2.0)
+        self.assertAlmostEqual(core.bend_start_x("adjacent", 180, R, T), 0.0)
+
     def test_wall_length_per_datum(self):
         # research 4.3: tops at T + H (inner), H (outer), T + R + H (tangent) for 90 degrees
         self.assertAlmostEqual(core.wall_length(10, "inner", 90, R, T), 9.0)

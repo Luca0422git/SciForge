@@ -1,0 +1,75 @@
+{
+  "id": "sheetmetal_flange_on_flange",
+  "title": "An edge flange on the top edge of an edge flange's wall (a Z)",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    },
+    {
+      "op": "sf_flange",
+      "id": "f3",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          11
+        ]
+      ],
+      "options": {
+        "height": 8
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2001.371669,
+    "bbox": [
+      0,
+      0,
+      0,
+      58,
+      30,
+      11
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "the L bracket; the wall's top cut back 2 (60), a quarter ring and a 7 mm wall (H 8 - R) turning outwards (+x) from the wall's outer face: outer face at z 11, out to x 50 + 8"
+  }
+}

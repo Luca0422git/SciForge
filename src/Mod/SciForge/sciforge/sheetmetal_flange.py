@@ -245,9 +245,52 @@ def options_of(obj):
     return out
 
 
+# what each kind of flange uses (the rest is hidden in the property view and in Change
+# Parameters, which skips hidden properties)
+USES = {
+    "base": {"Orientation"},
+    "contour": {"Orientation", "Distance", "Distance2", "Direction", "Flip", "BendRadius"},
+    "edge": {
+        "Height",
+        "HeightExtent",
+        "HeightDatum",
+        "BendPosition",
+        "Angle",
+        "Flip",
+        "WidthType",
+        "Width",
+        "Width1",
+        "Width2",
+        "TargetOffset",
+        "BendRadius",
+        "ReliefShape",
+        "ReliefWidth",
+        "ReliefDepth",
+        "ReliefRemnant",
+        "CornerReliefShape",
+        "CornerReliefPlacement",
+        "CornerReliefSize",
+        "Corner3ReliefShape",
+        "Corner3ReliefRadius",
+    },
+}
+
+
+def _editor_modes(obj, kind):
+    props = [p for p, _g in ENUMS.values() if p != "FlangeType"]
+    props += [p for p, _g, _d in LENGTHS.values()] + ["Angle", "Flip"]
+    for prop in props:
+        try:
+            obj.setEditorMode(prop, 0 if prop in USES.get(kind, ()) else 2)
+        except Exception:
+            pass
+
+
 def apply_options(obj, options):
     """Write options into the step's properties (only what changed)."""
     check_options(options)
+    if "kind" in options:
+        _editor_modes(obj, options["kind"])
     for key, (prop, _group) in ENUMS.items():
         if key in options:
             text = LABELS[key][options[key]]

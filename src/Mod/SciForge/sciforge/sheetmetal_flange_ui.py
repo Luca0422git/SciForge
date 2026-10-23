@@ -109,10 +109,7 @@ class FlangePanel(Panel):
             return None
 
     def _join_body(self):
-        body = self.body
-        if body is not None and sheetmetal.is_sheet_metal_body(body):
-            return body
-        return None
+        return sheetmetal.find_sheet_body(self.doc, active=self.body)
 
     # -- form ---------------------------------------------------------------------------------
     def _row(self, key, label, widget):
@@ -648,6 +645,8 @@ class FlangePanel(Panel):
         self._remove_arrows()
         if not self.refs or self.target is None or self.error:
             return
+        if "Invalid" in list(getattr(self.target, "State", [])):
+            return  # the message says why; no arrow on a flange that is not built
         try:
             if self.kind == "edge" and self.options["extent"] == "distance":
                 origin, direction = self._edge_arrow()
