@@ -9,6 +9,8 @@ The contract of the SHEET METAL builders (wave 6; extend it, never rename or rem
   rule new sheet metal in the root component gets). A design that never used sheet metal has
   no such object; it is made on first use with the library's default rule in it (Fusion: a
   design starts with the default rule "In This Design").
+- Copying objects that link the store (Insert a design, Paste New) brings a copy of it under
+  another name (``SheetMetalRules001``...): its rules count as the design's too (QA, wave 6).
 - A component (``App::Part``) may carry ``SciForgeSheetMetalRule``: its active rule (Fusion
   keeps the active rule per component). The root component's is ``ActiveRule`` above.
 - A **sheet metal body** is a ``PartDesign::Body`` with a non-empty
@@ -65,16 +67,48 @@ def rules_object(doc, create=False):
     return obj
 
 
+def _stray_stores(doc):
+    """Rule stores that came in with copied objects: FreeCAD copies the store a flange links
+    (Insert a design, Paste New of a component) under another name (SheetMetalRules001...).
+    Their rules belong to the design too (the inserted parts follow them)."""
+    found = []
+    for obj in doc.Objects:
+        if (
+            obj.Name != STORE_NAME
+            and obj.Name.startswith(STORE_NAME)
+            and obj.TypeId == "App::FeaturePython"
+            and "RulesJson" in obj.PropertiesList
+        ):
+            found.append(obj)
+    return found
+
+
+def _stored(obj):
+    rules = json.loads(obj.RulesJson or "[]")
+    return [r for r in rules if isinstance(r, dict) and r.get("name")]
+
+
 def design_rules(doc):
+    """The rules In This Design: the store's, then those only a copied store has (an
+    inserted design's own rules; the next save_rule keeps them in the store)."""
     obj = rules_object(doc)
-    if obj is None:
-        return [core.library_rule(core.DEFAULT_RULE)]
-    try:
-        rules = json.loads(obj.RulesJson or "[]")
-        return [r for r in rules if isinstance(r, dict) and r.get("name")]
-    except Exception as exc:
-        warn("sheet metal rules of %s unreadable: %s" % (doc.Name, exc))
-        return [core.library_rule(core.DEFAULT_RULE)]
+    rules = [core.library_rule(core.DEFAULT_RULE)]
+    if obj is not None:
+        try:
+            rules = _stored(obj)
+        except Exception as exc:
+            warn("sheet metal rules of %s unreadable: %s" % (doc.Name, exc))
+    names = {r["name"] for r in rules}
+    for stray in _stray_stores(doc):
+        try:
+            extra = _stored(stray)
+        except Exception:
+            continue
+        for rule in extra:
+            if rule["name"] not in names:
+                rules.append(rule)
+                names.add(rule["name"])
+    return rules
 
 
 def find_rule(doc, name):
@@ -118,6 +152,13 @@ def delete_rule(doc, name):
     if obj is None:
         return
     obj.RulesJson = json.dumps([r for r in design_rules(doc) if r["name"] != name])
+    for stray in _stray_stores(doc):
+        try:
+            kept = [r for r in _stored(stray) if r["name"] != name]
+            if len(kept) != len(_stored(stray)):
+                stray.RulesJson = json.dumps(kept)
+        except Exception:
+            pass
 
 
 def active_rule_name(doc, component=None):
@@ -179,14 +220,15 @@ def sheet_metal_bodies(doc):
     return [b for b in bodies.list_bodies(doc) if is_sheet_metal_body(b)]
 
 
-def find_sheet_body(doc, active=None, component=None):
+def find_sheet_body(doc, active=None, component=None, exclude=()):
     """The sheet metal body a SHEET METAL tool works on (sm-forming, wave 6): the active body
     when it is sheet metal, else the first sheet metal body of the component (None: the
     active one, or the root) that exists at the history marker, else None. SOLID tools keep
-    using commands.find_body, which takes sheet metal bodies too."""
+    using commands.find_body, which takes sheet metal bodies too. `exclude`: bodies passed
+    over (a dialog's own preview body, QA)."""
     if doc is None:
         return None
-    if active is not None and is_sheet_metal_body(active):
+    if active is not None and is_sheet_metal_body(active) and active not in exclude:
         return active
     try:
         from . import components
@@ -197,7 +239,7 @@ def find_sheet_body(doc, active=None, component=None):
     except Exception:
         candidates = bodies.list_bodies(doc)
     for body in candidates:
-        if not is_sheet_metal_body(body):
+        if not is_sheet_metal_body(body) or body in exclude:
             continue
         if body.Tip is None and any(o.isDerivedFrom("PartDesign::Feature") for o in body.Group):
             continue  # rolled back before its first step: not made yet at the marker

@@ -247,6 +247,12 @@ def edit_open():
     h.check("the dialog opens on the contour flange", p is not None and p.kind == "contour")
     h.check("its two curves", p is not None and len(p.refs) == 2)
     h.check("distance 20 read back", p is not None and abs(p.options["distance"] - 20) < 1e-9)
+    # a stand-alone contour is no contour on a sheet edge (QA: it found its own edge)
+    h.check("not taken for a contour on a sheet edge", p is not None and p.attached is None)
+    h.check(
+        "Distance, Orientation and Direction shown",
+        sm.shown("distance") and sm.shown("orientation") and sm.shown("direction"),
+    )
     h.shot("2-reopened-edit")
 
 

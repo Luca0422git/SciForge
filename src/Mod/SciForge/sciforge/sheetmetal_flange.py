@@ -475,6 +475,23 @@ def compute(obj):
                     "The new sheet lies on the body's sheet (that would double its thickness): "
                     "draw the profile beside it, against one of its edges."
                 )
+            # standing on the sheet or across its edge: a sharp corner between two sheets,
+            # which no flat pattern can unfold (a corner needs a bend) (QA)
+            if kind == "base" and not _in_sheet_plane(base, result, normal):
+                raise FormError(
+                    "The new sheet does not lie in the plane of the body's sheet: a corner "
+                    "between two sheets needs a bend. Draw the profile in the sheet's plane, "
+                    "against one of its edges, or use an edge or contour flange."
+                )
+            if kind == "contour" and not any(
+                _in_sheet_plane(base, result, d) for d in _wall_normals(result, plane.n)
+            ):
+                raise FormError(
+                    "The contour flange does not carry on a sheet of the body in its own "
+                    "plane: a corner between two sheets needs a bend. Draw the line from the "
+                    "end of a sheet edge (or in the sheet's plane against its edge), or make it "
+                    "a New Body."
+                )
             joined = form._clean(base.fuse(result))
             if len(joined.Solids) > len(base.Solids):
                 raise FormError(
@@ -484,7 +501,69 @@ def compute(obj):
             result = joined
     if result.isNull() or not result.Solids:
         raise FormError("The flange made no solid.")
+    if base is None and len(result.Solids) > 1:
+        # a body holds one solid (SciForge's Extrude says the same; the flat pattern
+        # unfolds one sheet): separate plates are refused, not kept as one body (QA)
+        raise FormError(
+            "These profiles make separate plates, and a body holds one solid: pick profiles "
+            "that touch each other, or make the plates one at a time."
+        )
     return bodies.to_local(result, body)
+
+
+def _in_sheet_plane(base, plate, normal):
+    """True when the plate (a base flange for Join) carries a sheet of the body on in its
+    own plane: both of the plate's faces square to `normal` (its top and bottom) lie in the
+    plane of a face of the body that faces the same way, and touch it (a plate standing on
+    the sheet flush with its edge has only one)."""
+    n = App.Vector(normal)
+    if n.Length < 1e-12:
+        return True
+    n.normalize()
+
+    def flat(shape):
+        out = []
+        for face in shape.Faces:
+            if face.Surface.__class__.__name__ != "Plane":
+                continue
+            u0, u1, v0, v1 = face.ParameterRange
+            normal_here = face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+            if abs(abs(normal_here.dot(n)) - 1.0) < 1e-6:
+                out.append((face, normal_here))
+        return out
+
+    body_faces = flat(base)
+    sides = set()
+    for face, nf in flat(plate):
+        point = face.Vertexes[0].Point
+        for other, no in body_faces:
+            if nf.dot(no) < 1.0 - 1e-6:
+                continue
+            if abs((other.Vertexes[0].Point - point).dot(no)) > 1e-6:
+                continue
+            if face.distToShape(other)[0] < 1e-6:
+                sides.add(nf.dot(n) > 0)
+                break
+    return len(sides) == 2
+
+
+def _wall_normals(shape, along):
+    """The directions of the planar faces of `shape` square to `along` (a contour's walls
+    and end caps; one per opposite pair)."""
+    a = App.Vector(along)
+    if a.Length > 1e-12:
+        a.normalize()
+    found = []
+    for face in shape.Faces:
+        if face.Surface.__class__.__name__ != "Plane":
+            continue
+        u0, u1, v0, v1 = face.ParameterRange
+        n = face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+        if abs(n.dot(a)) > 1e-6:
+            continue
+        if not any(abs(abs(n.dot(m)) - 1.0) < 1e-6 for m in found):
+            found.append(n)
+    return found
 
 
 # -- making and editing -------------------------------------------------------------------------

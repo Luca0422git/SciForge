@@ -80,3 +80,64 @@ Thickness only (the Flange's own fields take user parameters).
   `sheetmetal_flange.corner_reliefs(step)` (and `sheetmetal_form.mitred_corners`) give each
   mitred corner and the 2-bend relief to cut in the flat pattern (the folded part leaves the
   corner open).
+
+## QA pass (2026-10-23, branch `sf/sm-forming-qa`)
+
+Independent QA of `sf/sm-forming` (every sheet metal scenario, the shared-file scenarios
+components_basic, timeline_browser_2, timeline_browser_qa3, ribbon_sweep with
+SWEEP_TABS=sheet_metal, unit and golden runs, the whole diff read, headless probes of the
+geometry against research 4.3 / 4.4 / 4.7).
+
+Fixed (details in `docs/sciforge/parity/sheet-metal.md`, "QA pass"):
+
+- A later Flange on the plate edge next to an earlier edge flange was refused ("not on the
+  sheet's thickness"): the two side faces fuse into one coplanar face. `edge_frame` probes
+  the solid's thickness when the face extents cannot tell.
+- Mitred corners of flanges standing out past the plate (Outside / Adjacent, or leaning out
+  below 90 degrees) were left open; the flanges now run on to the mitre (research 4.7).
+- A Sheet Metal component's active rule could be deleted from the design.
+- New Component + a Rule chosen after the pick left the component's active rule behind.
+- A library rule tried in the Flange's Rule box and then left stayed In This Design.
+- A base or contour flange Join standing on the sheet (a T or a sharp L, no bend) was
+  accepted: refused now unless the new sheet carries on one of the body's sheets in its plane.
+- Editing a stand-alone contour flange (Distance, Orientation, Direction hidden: the dialog
+  took the flange's own edge for the sheet edge it starts from); the dialog's own preview
+  body also counted as the Join target (Join enabled, then "pick or make one first").
+- A To Object / Two Offsets face clicked on the preview was taken by name on the step before
+  it (another face there): now by plane.
+- Editing an earlier flange took an edge of a later step (linked to it, "Edge54 is gone"):
+  mapped to the part before the flange or refused with the reason now.
+- Other units chosen for a new rule kept "1.0 mm" in the boxes (Save refused): converted now.
+- Two profiles that do not touch made one body with two plates: refused (a body holds one solid).
+- To Object / Two Offsets chosen then left: the next edge click was taken as a face pick.
+- Close in the rule editor dropped the typed values silently (hidden while editing now); an
+  edge flange's override fields started at the active rule instead of the body's.
+- Inserting a design with its own rule into one that already had sheet metal silently
+  rebuilt the inserted parts in the default rule (copied rule stores were never read).
+
+FreeCAD facts found:
+
+- `Document.copyObject(obj, True)` (Paste New, Insert) copies the objects a flange links
+  through `App::PropertyLinkGlobal` too: the rule store comes along as `SheetMetalRules001`.
+- After a fuse + `removeSplitter`, a plate's side face and a coplanar flange end face become
+  one face: never measure the sheet's thickness from a face's extent alone.
+- `harness.press` sends keys to the 3D view: a non-modal window (Sheet Metal Rules) gets Esc
+  only when it is sent to its own focused widget.
+- While a flange previews, a click on geometry that the preview and the step before it both
+  show can land on either object; the two number their faces and edges differently, so a
+  pick on the preview (or on a later step while an earlier flange is edited) is mapped by
+  geometry (same line, same plane), never by name.
+- `Document.UndoCount` is a cheap way for a scenario to prove a Cancel / Esc added no step.
+
+Left for later (also in the parity doc): an inserted design's rule with the same name as one
+In This Design takes the design's values; Paste New leaves a hidden copy of the rule store; a
+later Flange next to an earlier one meets it with an open corner (Fusion unknown); sm-more's
+own `sheetmetal_bend.edge_frame` measures the side face the same extent-based way and will
+refuse a Hem / Bend on the edge next to an earlier flange the same way (its QA should port
+`_sheet_thick_at`).
+
+New tests: scenario `sheetmetal_qa` (170 checks: empty design, preselected edge, Cancel,
+save / reopen, edit from the timeline, rule Undo / Redo, later flanges, editing an earlier
+flange, component rule refusal, New Component rule, Outside mitre, To Object on the part's
+own wall, Join refusal, extent switch, rule units), golden models `sheetmetal_edge_flange_adjacent_later` and
+`sheetmetal_edge_flange_miter_outside`.

@@ -345,7 +345,16 @@ def base_rule_shown():
 
 
 def swap_rule():
-    sm.choose("rule", "Aluminum (mm)")
+    from sciforge import sheetmetal
+
+    # Aluminum (mm), tried in the first Flange dialog and then left for Steel, was not kept
+    # In This Design (QA): it is offered from the library again
+    h.check(
+        "the rule tried and left is not in the design",
+        sheetmetal.find_rule(sm.doc(), "Aluminum (mm)") is None,
+        [r["name"] for r in sheetmetal.design_rules(sm.doc())],
+    )
+    sm.choose("rule", "Aluminum (mm) (Library)")
 
 
 def swapped():

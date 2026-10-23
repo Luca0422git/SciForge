@@ -75,6 +75,9 @@ class FlangePanel(Panel):
         self.formula_inputs = {}
         self.formulas = {}  # field key -> formula typed ("" once a number replaced it)
         self.owns_body = False
+        # the design's rules when the dialog opened: a library rule tried in the Rule box and
+        # then left for another is taken out of the design again on OK (QA)
+        self.rules_at_start = {r["name"] for r in sheetmetal.design_rules(doc)}
         self.attached = None  # (edge, point): a contour drawn from the end of a sheet edge
         if feature is not None:
             try:
@@ -124,8 +127,21 @@ class FlangePanel(Panel):
         except ValueError:
             return None
 
+    def _own_body(self):
+        """The body this dialog's preview made or marked sheet metal (New Body / New
+        Component), or None: it is no body to join to or to attach a contour to (QA)."""
+        try:
+            if self.target is not None and not self.editing and flange.made_body(self.target):
+                return flange.owner_body(self.target)
+        except Exception:
+            pass
+        return None
+
     def _join_body(self):
-        return sheetmetal.find_sheet_body(self.doc, active=self.body)
+        own = self._own_body()
+        return sheetmetal.find_sheet_body(
+            self.doc, active=self.body, exclude=(own,) if own is not None else ()
+        )
 
     # -- form ---------------------------------------------------------------------------------
     def _row(self, key, label, widget):
@@ -531,12 +547,17 @@ class FlangePanel(Panel):
         self.attached = None
         if self.kind != "contour" or not self.refs:
             return
-        body = sheetmetal.find_sheet_body(self.doc, active=self.body)
+        body = self._join_body()
         if body is None:
             return
         base_obj = None
         if self.target is not None and flange.owner_body(self.target) is body:
             base_obj = self.target.BaseFeature
+            if base_obj is None:
+                # the flange is its body's first step: there is no sheet before it to be
+                # drawn from (its own solid is not one: editing an L contour found its own
+                # edge and hid Distance, Orientation and Direction, QA)
+                return
         self.attached = flange.attachment(self.refs, body, base_obj)
         if self.attached is not None and not self.editing:
             self._quiet = True
@@ -553,13 +574,16 @@ class FlangePanel(Panel):
                 "profile to start one."
             )
             return
-        if self.target is not None and obj is self.target:
+        if self._not_before(obj):
             base = self.target.BaseFeature
             mapped = _same_edge(obj, short, base)
             if mapped is None:
                 self.message.setText(
                     "⚠ That edge belongs to the flange being made: OK this one first, then "
                     "flange its edges with a new Flange."
+                    if obj is self.target
+                    else "⚠ That edge is made by a later step: pick an edge of the part as it "
+                    "is before this flange."
                 )
                 return
             obj, short = base, mapped
@@ -568,6 +592,8 @@ class FlangePanel(Panel):
             return
         if not self._switch("edge"):
             return
+        if not self.editing and not self.refs:
+            self._overrides_from(body)
         self.body = body
         key = (obj.Name, short)
         keys = [(o.Name, s) for o, s in self.refs]
@@ -577,12 +603,41 @@ class FlangePanel(Panel):
             self.refs = self.refs + [(obj, short)]
         self._picks_changed()
 
+    OVERRIDDEN_BY = {
+        "bend_radius": "override_bend_radius",
+        "relief_shape": "override_bend_relief",
+        "relief_width": "override_bend_relief",
+        "relief_depth": "override_bend_relief",
+        "relief_remnant": "override_bend_relief",
+        "corner_shape": "override_corner_relief",
+        "corner_placement": "override_corner_relief",
+        "corner_size": "override_corner_relief",
+        "corner3_shape": "override_corner3_relief",
+        "corner3_radius": "override_corner3_relief",
+    }
+
+    def _overrides_from(self, body):
+        """An edge flange follows its body's rule: the override fields start at that rule's
+        values (the dialog opened with the active component's rule, QA)."""
+        try:
+            fresh = flange.defaults("edge", sheetmetal.rule_for_body(body))
+        except Exception as exc:
+            warn("Flange: %s" % exc)
+            return
+        for key, flag in self.OVERRIDDEN_BY.items():
+            if not self.options.get(flag):
+                self.options[key] = fresh[key]
+        self._show_options()
+
     def _object_clicked(self, obj, short):
         if short and not short.startswith("Face"):
             self.message.setText("⚠ To Object: pick a flat face or a plane.")
             return
-        if self.target is not None and obj is self.target:
-            obj = self.target.BaseFeature
+        if self._not_before(obj):
+            mapped = self._face_before(obj, short)
+            if mapped is None:
+                return
+            obj, short = mapped
         self.to_object = (obj, short)
         self.activate("selection")
         self._refresh_picks()
@@ -593,12 +648,48 @@ class FlangePanel(Panel):
         if short and not short.startswith("Face"):
             self.message.setText("⚠ Two Offsets: pick a flat face or a plane.")
             return
-        if self.target is not None and obj is self.target:
-            obj = self.target.BaseFeature
+        if self._not_before(obj):
+            mapped = self._face_before(obj, short)
+            if mapped is None:
+                return
+            obj, short = mapped
         self.offset_refs[index] = (obj, short)
         self.activate("ref2" if index == 0 and self.offset_refs[1] is None else "selection")
         self._refresh_picks()
         self._changed()
+
+    def _not_before(self, obj):
+        """True for the flange itself and the steps after it in its body (shown while an
+        earlier flange is edited): their edges and faces are taken on the step before the
+        flange instead (a link to them would loop, and their names are theirs, QA)."""
+        target = self.target
+        if target is None or obj is None:
+            return False
+        if obj is target:
+            return True
+        if flange.owner_body(obj) is not flange.owner_body(target):
+            return False
+        step = target.BaseFeature
+        while step is not None:
+            if step is obj:
+                return False
+            step = getattr(step, "BaseFeature", None)
+        return obj.isDerivedFrom("PartDesign::Feature")
+
+    def _face_before(self, obj, short):
+        """(the step before the preview, its face) for a face clicked on the flange being
+        previewed: the face of the part before this flange that lies in the same plane (the
+        preview numbers its faces its own way: the same name there is another face, QA).
+        None, with the reason shown, for a face only the new flange has."""
+        base = self.target.BaseFeature
+        found = _same_plane_face(obj, short, base)
+        if found is None:
+            self.message.setText(
+                "⚠ That face belongs to the flange being made: pick a face of the part, of "
+                "another body or a plane."
+            )
+            return None
+        return base, found
 
     def _refresh_picks(self):
         if self.kind == "edge":
@@ -661,6 +752,13 @@ class FlangePanel(Panel):
         if self._quiet:
             return
         self._changed(new_geometry=True)
+        # a box that waited for a To Object / Two Offsets pick lets go when that option is
+        # left: the next clicks are edges again (they were taken as a face pick, QA)
+        if (self.active == "object" and self.options["extent"] != "to_object") or (
+            self.active in ("ref1", "ref2") and self.options["width_type"] != "two_offsets"
+        ):
+            self.activate("selection")
+            self.message.setText("")
         if (
             self.kind == "edge"
             and self.options["width_type"] == "two_offsets"
@@ -713,6 +811,13 @@ class FlangePanel(Panel):
                 if self.made_with and self.made_with[:2] == made_with[:2]:
                     body = flange.owner_body(self.target)
                     sheetmetal.make_sheet_metal_body(body, self.rule_name)
+                    if self.operation == "new_component":
+                        # the new Sheet Metal component's active rule follows the Rule box
+                        from . import components
+
+                        part = components.container_of(body)
+                        if part is not None:
+                            sheetmetal.set_active_rule(self.doc, self.rule_name, part)
                     self.target.touch()  # it reads the body's rule when it computes
                     self.made_with = made_with
                 else:
@@ -955,6 +1060,7 @@ class FlangePanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
+        self._drop_tried_rules()
         flange.hide_sketches([r for r in self.refs if extrude.is_sketch(r[0])])
         self.cleanup()
         preview.end_transaction(self.doc)
@@ -962,6 +1068,27 @@ class FlangePanel(Panel):
         extrude.show_tip(flange.owner_body(feature))
         log("Flange done (%s)" % self.kind)
         return True
+
+    def _drop_tried_rules(self):
+        """Library rules this dialog copied into the design for the Rule box that nothing
+        follows in the end (another rule was chosen after them) leave the design again."""
+        try:
+            from . import sheetmetal_rules
+
+            parts = [o for o in self.doc.Objects if o.TypeId == "App::Part"]
+            for rule in sheetmetal.design_rules(self.doc):
+                name = rule["name"]
+                if name in self.rules_at_start or name == self.rule_name:
+                    continue
+                if sheetmetal_rules.in_use(self.doc, name):
+                    continue
+                if name == sheetmetal.active_rule_name(self.doc):
+                    continue
+                if any(getattr(p, sheetmetal.RULE_PROP, "") == name for p in parts):
+                    continue
+                sheetmetal.delete_rule(self.doc, name)
+        except Exception as exc:
+            warn("Flange: %s" % exc)
 
     def reject(self):
         if self._closed:
@@ -1030,6 +1157,36 @@ def _chain(sketch, sub):
         points += ends(edges[i])
     free = [p for p in points if sum(1 for q in points if (p - q).Length < 1e-6) == 1]
     return ["Edge%d" % (i + 1) for i in sorted(picked)], not free
+
+
+def _same_plane_face(obj, short, base):
+    """The name in `base`'s shape of a flat face in the plane of the face `short` of `obj`
+    (To Object and Two Offsets only use the plane), or None."""
+    import Part
+
+    try:
+        face = obj.Shape.getElement(short)
+    except Exception:
+        return None
+    if base is None or base.Shape.isNull() or face.ShapeType != "Face":
+        return None
+    if not isinstance(face.Surface, Part.Plane):
+        return None
+
+    def normal(f):
+        u0, u1, v0, v1 = f.ParameterRange
+        return f.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+
+    n = normal(face)
+    point = face.Vertexes[0].Point
+    for i, other in enumerate(base.Shape.Faces, 1):
+        if not isinstance(other.Surface, Part.Plane):
+            continue
+        if abs(normal(other).dot(n)) < 1.0 - 1e-9:  # the plane is what counts
+            continue
+        if abs((other.Vertexes[0].Point - point).dot(n)) < 1e-6:
+            return "Face%d" % i
+    return None
 
 
 def _same_edge(obj, short, base):
