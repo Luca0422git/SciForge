@@ -85,6 +85,14 @@ header). No FreeCAD core change.
   modify2_scale 58, modify_align 232, modify_silhouette 199, misc_materials 51,
   surface_stitch 63, surface_misc 70, modify_split_face 238, modify_replace_face 245,
   modify2_move_face 56.
+- Wider regression (other scenarios of those tools, all PASS): components2_move 345,
+  components2_pattern 278, components_move 219, delete_designs 36, direct_commands 189,
+  direct_step_box 186, extrude_multibody_move 48, extrude_presspull_options 43,
+  extrude_presspull_qa 133 / qa2 78 / qa3 75 / qa4 69 / qa5 86 / qa6 35 / qa7 36,
+  fillet2_component 24, fillet2_variable 40, fillet_qa 114, fillet_qa_chamfer 62,
+  fixdecal_body_move 132, fixpattern_circ 160, fixpattern_path 163, fixpattern_rect 185,
+  modify2_pattern_adjust 51, modify2_pattern_path 36, modify_align_points 224, modify_remove
+  309, patterns_path 58, patterns_qa 54, patterns_qa_more 52, shell_draft_qa_scale 368.
 - `--only base` (final): unit 1866 OK (9 skipped; 18 in test_surfmod_core.py), golden 462
   pass + 2 xfail (old upstream bugs; the 22 `surface4_*` models pass), smoke 79 PASS, journey
   25 PASS, restart both phases PASS. (One earlier base run had the smoke's "Press Pull +5"
