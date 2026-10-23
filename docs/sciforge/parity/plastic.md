@@ -222,3 +222,14 @@ pass after the fixes.
   returns a half pipe unshelled but "Valid" (no error, same volume); Join = Arc (Rounded)
   shells it. This is a Shell problem outside the plastic area (`shell_ui` / `shelling.py`):
   a silent wrong result to fix (refuse, or fall back to Rounded with a note).
+
+## Journey pass (sf/journey-pl, 2026-10-23)
+
+A whole enclosure built with real input across every PLASTIC tool (scenarios
+`journey_plastic`, `journey_plastic_rule`; session log `sessions/journey-plastic.md`). Fixed:
+
+- A Rest on a flat wall of a shelled box (an offset plane in front of the wall) filled the
+  box: the profile's shadow also crossed the far wall, whose inside face looked like the outer
+  skin, so the rest's walls ran through the whole part (+1717 mm3 instead of about 312). Only
+  the first layer of material along the rest's direction is used now
+  (`plastic_rest._first_layer`).

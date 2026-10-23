@@ -29,7 +29,6 @@ import tempfile
 import FreeCAD as App
 import FreeCADGui as Gui
 import Part
-from PySide import QtCore, QtWidgets
 
 from SciForgeTests.gui import arrow_input as ai
 from SciForgeTests.gui import component_steps as cs
@@ -114,7 +113,7 @@ def ok_errors(where):
     return h.check("%s: every step computed" % where, not bad, bad)
 
 
-# -- 1. a new design, two components ------------------------------------------------------------
+# -- 1. a new design, two components --
 def new_design():
     p1.clear_library_prefs()
     Gui.activateWorkbench("SciForgeWorkbench")
@@ -301,7 +300,7 @@ def lid_steps():
     )
 
 
-# -- 2. the plastic rule ------------------------------------------------------------------------
+# -- 2. the plastic rule --
 def assign_steps(label, rule="ABS 2 mm"):
     def open_assign():
         tab("plastic")
@@ -371,7 +370,7 @@ def assign_steps(label, rule="ABS 2 mm"):
     ]
 
 
-# -- 3. shells -----------------------------------------------------------------------------------
+# -- 3. shells --
 def shell_steps():
     def hide_lid():
         tl.click_eye("Lid")
@@ -450,6 +449,19 @@ def shell_steps():
 
     def both_shown():
         h.check("Base shown again", cs.component("Base").Visibility)
+        # the components' eyes show back what they hid: not their origin planes, nor the
+        # sketches the extrudes hid
+        extras = [
+            o.Label
+            for o in doc().Objects
+            if o.ViewObject is not None
+            and o.ViewObject.Visibility
+            and (
+                o.TypeId == "Sketcher::SketchObject"
+                or o.TypeId in ("App::Plane", "App::Line", "App::Point")
+            )
+        ]
+        h.check("no sketch or origin plane turned on by the eyes", not extras, extras)
         h.fit()
         ok_errors("shells")
         h.shot("journey_pl_2_shells")
@@ -472,7 +484,7 @@ def shell_steps():
     ]
 
 
-# -- 4. sketches on the parting plane --------------------------------------------------------------
+# -- 4. sketches on the parting plane --
 def shells():
     return [o for o in doc().Objects if o.TypeId == "PartDesign::Thickness"]
 
@@ -573,7 +585,7 @@ def rim_sketch_steps(key, points):
     ]
 
 
-# -- 5. Boss --------------------------------------------------------------------------------------
+# -- 5. Boss --
 def boss_steps():
     def start():
         tab("plastic")
@@ -652,7 +664,7 @@ def boss_steps():
     ]
 
 
-# -- 6. Snap Fit ----------------------------------------------------------------------------------
+# -- 6. Snap Fit --
 def snap_steps():
     def start():
         tab("plastic")
@@ -726,7 +738,7 @@ def snap_steps():
     ]
 
 
-# -- 7. Lip ----------------------------------------------------------------------------------------
+# -- 7. Lip --
 LIP_BAND = 78 * 48 - 76 * 46  # 248: a 1 x 1 lip round the 80 x 50 rim
 LIP_DRAFTED = LIP_BAND - 0.5 * 0.017455064928217585 * (2 * (78 + 48) + 2 * (76 + 46))
 
@@ -813,7 +825,7 @@ def lip_steps():
     ]
 
 
-# -- 8. Rest ---------------------------------------------------------------------------------------
+# -- 8. Rest --
 def construct_panel():
     from sciforge import construct_ui, taskui
 
@@ -928,7 +940,7 @@ def rest_steps():
     ]
 
 
-# -- 9. Design Advice -------------------------------------------------------------------------------
+# -- 9. Design Advice --
 def advice_steps():
     def start():
         tab("plastic")
@@ -983,3 +995,282 @@ def build_steps():
         + lip_steps()
         + rest_steps()
     )
+
+
+# -- 10. the rule changes: every rule-linked feature follows --
+BASE_SHELL_25 = BASE_BOX - 75 * 45 * 22.5  # 24062.5: the Base's Shell step with 2.5 mm
+LID_SHELL_25 = LID_BOX - 75 * 45 * 7.5  # 14687.5
+
+
+def shell_volumes():
+    found = {}
+    for sh in shells():
+        found[cs.container_label(sh)] = sh.Shape.Volume
+    return found
+
+
+def linked_values():
+    """What the rule drives in each feature now: (base shell, lid shell, boss rib thickness,
+    snap root thickness, lip width, rest thickness)."""
+    from sciforge import plastic_boss, plastic_lip, plastic_rest, plastic_snap
+
+    sv = shell_volumes()
+    boss = plastic_boss.resolved_options(bosses()[0])
+    side = boss.get("side2") or {}
+    rib = side.get("rib_thickness", boss.get("rib_thickness"))
+    snap = plastic_snap.current_options(snaps()[0])["thickness"]
+    lip = plastic_lip.current_options(lips()[0])["lip_width"]
+    rest = plastic_rest.resolved(rests()[0])["thickness"]
+    return sv.get("Base"), sv.get("Lid"), rib, snap, lip, rest
+
+
+def check_linked(where, t):
+    vb, vl, rib, snap, lip, rest = linked_values()
+    wb = BASE_SHELL if near(t, 2.0) else BASE_SHELL_25
+    wl = LID_SHELL if near(t, 2.0) else LID_SHELL_25
+    h.check("%s: Base's Shell step with a %g wall" % (where, t), near(vb or 0, wb), (vb, wb))
+    h.check("%s: Lid's Shell step with a %g wall" % (where, t), near(vl or 0, wl), (vl, wl))
+    h.check("%s: Boss ribs 0.6 x %g" % (where, t), near(float(rib), 0.6 * t), rib)
+    h.check("%s: Snap Fit beam %g" % (where, t), near(float(snap), t), snap)
+    h.check("%s: Lip width %g / 2" % (where, t), near(float(lip), t / 2.0), lip)
+    h.check("%s: Rest thickness %g" % (where, t), near(float(rest), t), rest)
+    for b in (base(), lid()):
+        h.check(
+            "%s: %s one valid solid" % (where, cs.container_label(b)),
+            b.Shape.isValid() and len(b.Shape.Solids) == 1,
+            len(b.Shape.Solids),
+        )
+    ok_errors(where)
+
+
+def rule_steps():
+    def before():
+        check_linked("rule 2 mm", 2.0)
+        s["v_base_2"], s["v_lid_2"] = vol(base()), vol(lid())
+        tab("plastic")
+        Gui.Selection.clearSelection()
+        p2.menu("SETUP", "Manage Plastic Rules")
+
+    def pick():
+        p = p1.manage_panel()
+        if not h.check("Manage dialog open", p is not None):
+            return
+        h.check(
+            "the design's rule in use",
+            p.rules.design.childCount() == 1 and p.rules.design.child(0).text(1) == "in use",
+        )
+        p1.click_tree_row(p.rules.tree, "ABS 2 mm", "In This Design")
+
+    def edit():
+        p1.click(p1.manage_panel().buttons["edit"])
+
+    def thicker():
+        p = p1.manage_panel()
+        h.check("the rule's fields open", p.editor.isVisible())
+        h.check("Thickness shows 2.0", p.fields["thickness"].text() == "2.0")
+        p1.type_into(p.fields["thickness"], "2.5")
+
+    def save():
+        p1.click(p1.manage_panel().save_button)
+
+    def saved():
+        p = p1.manage_panel()
+        h.check("saved: no message", p.message.text() == "", p.message.text())
+        p1.ok()
+
+    def followed():
+        p1.settle(None, 20000)
+        h.check("Manage closed", p1.manage_panel() is None)
+        check_linked("rule 2.5 mm", 2.5)
+        s["v_base_25"], s["v_lid_25"] = vol(base()), vol(lid())
+        h.check("the Base changed", not near(s["v_base_25"], s["v_base_2"]), s["v_base_25"])
+        h.check("the Lid changed", not near(s["v_lid_25"], s["v_lid_2"]), s["v_lid_25"])
+        h.shot("journey_pl_8_rule_25")
+        tl.undo()
+
+    def undone():
+        check_linked("Ctrl+Z", 2.0)
+        h.check("Ctrl+Z: Base as with 2 mm", near(vol(base()), s["v_base_2"]), vol(base()))
+        h.check("Ctrl+Z: Lid as with 2 mm", near(vol(lid()), s["v_lid_2"]), vol(lid()))
+        tl.redo()
+
+    def redone():
+        check_linked("Ctrl+Y", 2.5)
+        h.check("Ctrl+Y: Base as with 2.5", near(vol(base()), s["v_base_25"]), vol(base()))
+        h.check("Ctrl+Y: Lid as with 2.5", near(vol(lid()), s["v_lid_25"]), vol(lid()))
+
+    return [
+        step(before, "rule_manage"),
+        h.idle_step("rule_manage_idle"),
+        step(pick, "rule_pick"),
+        step(edit, "rule_edit"),
+        step(thicker, "rule_thicker"),
+        step(save, "rule_save"),
+        step(saved, "rule_saved_ok"),
+        h.idle_step("rule_ok_idle"),
+        step(followed, "rule_followed"),
+        h.idle_step("rule_undo_idle"),
+        step(undone, "rule_undone"),
+        h.idle_step("rule_redo_idle"),
+        step(redone, "rule_redone"),
+    ]
+
+
+# -- 11. save, close, reopen, edit Boss / Snap Fit / Lip by double-click --
+def reopen_steps():
+    def save():
+        s["v_base_saved"], s["v_lid_saved"] = vol(base()), vol(lid())
+        path = os.path.join(tempfile.mkdtemp(prefix="sf-journey-pl-"), "Enclosure.FCStd")
+        s["path"] = path
+        doc().saveAs(path)
+        h.check("saved", os.path.isfile(path), path)
+
+    def close_reopen():
+        App.closeDocument(doc().Name)
+        App.openDocument(s["path"])
+        h.fit()
+
+    def reopened():
+        if not h.check("reopened: both components", base() is not None and lid() is not None):
+            return
+        doc().recompute()
+        h.check("reopened: Base same", near(vol(base()), s["v_base_saved"]), vol(base()))
+        h.check("reopened: Lid same", near(vol(lid()), s["v_lid_saved"]), vol(lid()))
+        h.check(
+            "reopened: every plastic step back",
+            (len(bosses()), len(snaps()), len(lips()), len(rests()), len(shells()))
+            == (2, 1, 1, 1, 2),
+            (len(bosses()), len(snaps()), len(lips()), len(rests()), len(shells())),
+        )
+        ok_errors("reopened")
+        cs.click_radio(doc().Label)
+
+    def root():
+        h.check("the root active: the whole timeline", cs.active_label() is None)
+        for name in ("Boss", "Snap Fit", "Lip", "Rest", "Shell"):
+            h.check("timeline: %s" % name, any(t.startswith(name) for t in titles()), titles())
+        boss = [t for t in titles() if t.startswith("Boss")]
+        s["boss_title"] = boss[0] if boss else "Boss 1"
+        s["snap_title"] = next((t for t in titles() if t.startswith("Snap Fit")), "Snap Fit 1")
+        s["lip_title"] = next((t for t in titles() if t.startswith("Lip")), "Lip 1")
+
+    def edit_boss():
+        h.check("double-click the Boss", p2.double_click_timeline(s["boss_title"]))
+
+    def boss_edit():
+        p = p1.boss_panel()
+        p1.settle(p)
+        if not h.check("Boss edit open", p is not None):
+            return
+        h.check("Boss edit: 4 points", len(p.refs) == 4, p.refs)
+        h.check("Boss edit: ribs still on", p.options["side2"]["ribs"])
+        p1.tab_of(p, "Boss")
+
+    def boss_offset():
+        p = p1.boss_panel()
+        h.check("Boss edit: the offset field", hasattr(p, "offset"), sorted(vars(p))[:5])
+        if hasattr(p, "offset"):
+            ui.type_into(p.offset.widget, "1")
+
+    def boss_moved():
+        p = p1.boss_panel()
+        p1.settle(p)
+        h.check("Boss edit: no error", p.message.text() == "", p.message.text())
+        h.check(
+            "Boss edit: Offset 1 changes both halves",
+            not near(vol(base()), s["v_base_saved"]) and not near(vol(lid()), s["v_lid_saved"]),
+            (vol(base()), vol(lid())),
+        )
+        p1.ok()
+
+    def boss_ok():
+        h.check("Boss edit closed", p1.boss_panel() is None)
+        h.check("still two Boss steps", len(bosses()) == 2)
+        s["v_base_e1"], s["v_lid_e1"] = vol(base()), vol(lid())
+        ok_errors("boss edit")
+        tl.undo()
+
+    def boss_undone():
+        h.check("Ctrl+Z: Base back", near(vol(base()), s["v_base_saved"]), vol(base()))
+        h.check("Ctrl+Z: Lid back", near(vol(lid()), s["v_lid_saved"]), vol(lid()))
+
+    def edit_snap():
+        h.check("double-click the Snap Fit", p2.double_click_timeline(s["snap_title"]))
+
+    def snap_edit():
+        p2.settle(p2.snap_panel)
+        p = p2.snap_panel()
+        if not h.check("Snap Fit edit open", p is not None and p.editing):
+            return
+        h.check("Snap Fit edit: thickness from the rule 2.5", near(p.options["thickness"], 2.5))
+        h.check("Snap Fit edit: the turn kept", near(p.options["angle"], s.get("snap_angle", 90)))
+        p2.type_field(p, "length", "14")
+
+    def snap_longer():
+        p2.settle(p2.snap_panel)
+        p = p2.snap_panel()
+        h.check("Snap Fit edit: no error", "⚠" not in p2.message(p), p2.message(p))
+        h.check("Snap Fit edit: longer beam", vol(lid()) > s["v_lid_saved"] + 10, vol(lid()))
+        p2.ok()
+
+    def snap_ok():
+        h.check("Snap Fit edit closed", p2.snap_panel() is None)
+        h.check("still one Snap Fit", len(snaps()) == 1)
+        ok_errors("snap edit")
+        s["v_lid_snap14"] = vol(lid())
+        # the edit made the Lid active: its timeline shows only its own steps (SciForge's
+        # component timeline, parity components.md); the Lip is the Base's: the root again
+        cs.click_radio(doc().Label)
+
+    def root_again():
+        h.check("the root active again", cs.active_label() is None, cs.active_label())
+        h.check("the Lip on the timeline", s["lip_title"] in titles(), titles())
+
+    def edit_lip():
+        h.check("double-click the Lip", p2.double_click_timeline(s["lip_title"]))
+
+    def lip_edit():
+        p2.settle(p2.lip_panel)
+        p = p2.lip_panel()
+        if not h.check("Lip edit open", p is not None):
+            return
+        h.check("Lip edit: 4 edges", p.field.button.text() == "4 edges", p.field.button.text())
+        h.check("Lip edit: width from the rule 1.25", near(p.options["lip_width"], 1.25))
+        s["v_base_lip_e"] = vol(base())
+        p2.type_field(p, "lip_height", "1.5")
+
+    def lip_higher():
+        p2.settle(p2.lip_panel)
+        p = p2.lip_panel()
+        h.check("Lip edit: no error", "⚠" not in p2.message(p), p2.message(p))
+        h.check("Lip edit: a higher lip", vol(base()) > s["v_base_lip_e"] + 50, vol(base()))
+        p2.esc()
+
+    def lip_esc():
+        h.check("Lip edit: Esc closed", p2.lip_panel() is None)
+        h.check("Lip edit: Esc left it", near(vol(base()), s["v_base_lip_e"]), vol(base()))
+        ok_errors("lip edit")
+        h.shot("journey_pl_9_reopened")
+
+    return [
+        step(save, "save"),
+        step(close_reopen, "close_reopen"),
+        step(reopened, "reopened"),
+        step(root, "reopened_root"),
+        step(edit_boss, "edit_boss"),
+        step(boss_edit, "boss_edit"),
+        step(boss_offset, "boss_offset"),
+        step(boss_moved, "boss_moved"),
+        step(boss_ok, "boss_edit_ok"),
+        h.idle_step("boss_undo_idle"),
+        step(boss_undone, "boss_undone"),
+        step(edit_snap, "edit_snap"),
+        step(snap_edit, "snap_edit"),
+        step(snap_longer, "snap_longer"),
+        step(snap_ok, "snap_edit_ok"),
+        step(root_again, "root_again"),
+        step(edit_lip, "edit_lip"),
+        step(lip_edit, "lip_edit"),
+        step(lip_higher, "lip_higher"),
+        step(lip_esc, "lip_esc"),
+    ]

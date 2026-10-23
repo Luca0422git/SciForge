@@ -1,0 +1,85 @@
+{
+  "id": "plastic_rest_closed_box",
+  "title": "Rest: a pad under the floor of a closed hollow box (the profile's shadow also crosses the top)",
+  "tags": [
+    "plastic",
+    "rest"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "a"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 2,
+      "geometry": [
+        {
+          "rect": [
+            2,
+            2,
+            58,
+            38
+          ],
+          "name": "b"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 16,
+      "operation": "cut"
+    },
+    {
+      "op": "sf_rest",
+      "id": "r1",
+      "plane": "XY",
+      "offset": -3,
+      "rect": [
+        20,
+        10,
+        40,
+        30
+      ],
+      "thickness": 2,
+      "draft": 0,
+      "comment": "the profile's shadow crosses the floor and, across the inside, the top: only the floor counts (journey pass)"
+    }
+  ],
+  "expect": {
+    "volume": 16176.0,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      -3,
+      60,
+      40,
+      20
+    ],
+    "source": "analytic",
+    "note": "Closed box 60 x 40 x 20 with 2 mm walls all round: 48000 - 56 x 36 x 16 = 15744. The rest under the floor (plane z -3, profile 20 x 20): a plate 20 x 20 x 2 (z -3..-1) = 800, walls 2 thick round it down to the floor (20 x 20 - 16 x 16) x 1 = 144, the old floor inside the walls taken away 16 x 16 x 2 = 512 (the inside open): +432 = 16176. Before the journey pass the top's inside face (z 18, looking down) was taken for the outer skin and the walls ran up to the top."
+  }
+}
