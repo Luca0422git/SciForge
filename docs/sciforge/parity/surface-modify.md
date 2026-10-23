@@ -88,7 +88,8 @@ saved with the design.
   SOLID Delete still heals, edit from the timeline, Merge, a Merge refusal, a solid's edge
   handed to the SOLID Fillet),
   `surface4_presspull` (Q hand-over, -5, edit to +3, undo / redo, Q on an edge, Q on the
-  fillet's face edits the fillet, a curved-face refusal), `surface4_move_mirror` (Mirror Join
+  fillet's face edits the fillet, a curved-face refusal, save with Ctrl+S, reopen, edit after
+  the reopen), `surface4_move_mirror` (Mirror Join
   with stitch, edit with Stitch Tolerance, Move, Move with Create Copy, Scale),
   `surface4_pattern` (rectangular and circular patterns of a surface body, undo / redo, Esc),
   `surface4_misc` (Align, Combine refusal, Physical Material, Appearance),

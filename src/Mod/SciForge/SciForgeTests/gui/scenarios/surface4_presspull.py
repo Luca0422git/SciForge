@@ -188,6 +188,78 @@ def unchanged():
 
     h.check("the curved surface unchanged", surfmod.is_surface_body(s["curved"]))
     h.check("no step on it", surfmod.kind_of(s["curved"].Tip) is None)
+    import os
+    import tempfile
+
+    path = os.path.join(tempfile.mkdtemp(prefix="sciforge-surface4-"), "surface4_pp.FCStd")
+    s["path"] = path
+    s["label"] = s["box"].Label
+    s["titles"] = st.timeline_titles()
+    App.ActiveDocument.saveAs(path)
+    h.check("saved", os.path.isfile(path), path)
+
+
+def ctrl_s():
+    from PySide import QtCore
+
+    h.press(QtCore.Qt.Key_S, QtCore.Qt.ControlModifier)
+
+
+def describe():
+    from SciForgeTests.gui import versions_input as vi
+
+    h.check("the Save dialog asks for a version description", vi.version_dialog() is not None)
+    vi.accept_save()
+
+
+def close():
+    h.check("nothing unsaved", not App.ActiveDocument.isTouched())
+    App.closeDocument(App.ActiveDocument.Name)
+
+
+def reopen():
+    App.openDocument(s["path"])
+    h.fit()
+
+
+def reopened():
+    from sciforge import surfmod
+
+    found = App.ActiveDocument.getObjectsByLabel(s["label"])
+    box = found[0] if found else None
+    h.check("the box is back", box is not None, s["label"])
+    if box is None:
+        return
+    s["box"] = box
+    h.check("the same area", st.near(st.area(box), s["area"]), (st.area(box), s["area"]))
+    steps = [o for o in box.Group if surfmod.is_step(o)]
+    h.check("its Press Pull and Fillet steps", len(steps) == 2, [o.Label for o in steps])
+    h.check(
+        "they computed",
+        all("Invalid" not in list(o.State) for o in steps),
+        [o.State for o in steps],
+    )
+    titles = st.timeline_titles()
+    h.check("the same timeline", titles == s["titles"], (titles, s["titles"]))
+    title = next((t for t in titles if t.startswith("Press Pull")), "Press Pull 1")
+    h.check("double-clicked the Press Pull", st.double_click_timeline(title))
+
+
+def edit_after_reopen():
+    s4.settle()
+    p = s4.panel()
+    h.check(
+        "its dialog opens after the reopen",
+        p is not None and p.kind == "surface_press_pull" and p.editing,
+    )
+    h.check("3 reads back", p is not None and s4.near(p.fields["distance"][0].value(), 3.0))
+    st.esc()
+
+
+def closed_again():
+    s4.settle()
+    h.check("Esc closed it", s4.panel() is None)
+    h.check("unchanged", st.near(st.area(s["box"]), s["area"]))
 
 
 h.run(
@@ -214,5 +286,12 @@ h.run(
         click_curved,
         refused,
         unchanged,
+        ctrl_s,
+        describe,
+        close,
+        reopen,
+        reopened,
+        edit_after_reopen,
+        closed_again,
     ],
 )

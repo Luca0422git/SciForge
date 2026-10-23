@@ -59,7 +59,7 @@ change.
 ## Tests (all with FreeCAD 1.1.4 in the sandbox)
 
 - Scenarios: surface4_fillet PASS (45), surface4_split PASS (25), surface4_delete_merge PASS
-  (48), surface4_presspull PASS (30), surface4_move_mirror PASS (41), surface4_pattern PASS
+  (48), surface4_presspull PASS (46), surface4_move_mirror PASS (41), surface4_pattern PASS
   (27), surface4_misc PASS (28), surface4_component PASS (24).
 - Regression (scenarios of the tools touched, all PASS): bodies_combine, bodies_delete,
   bodies_move, bodies_split, split_preview, extrude_presspull_presspull, modify2_presspull_type,
