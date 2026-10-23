@@ -36,7 +36,7 @@ def setup():
 
     s4.new_design("Surface4Fillet")
     s["box"] = s4.surface_box()
-    parameters.set_user(App.ActiveDocument, "r", "2 mm")  # a user parameter (Change Parameters)
+    parameters.add_user(App.ActiveDocument, "r", "mm", "2")  # a user parameter
     App.ActiveDocument.recompute()
     h.fit()
     h.check("an open box of surfaces", s4.faces(s["box"]) == 5, s4.faces(s["box"]))

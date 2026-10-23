@@ -528,7 +528,7 @@ def blend_step_of_face(obj, short):
         base = getattr(step, "BaseFeature", None)
         if base is None or step.Shape.isNull() or base.Shape.isNull():
             continue
-        made = [f for f in step.Shape.Faces if not any(_same_face(f, g) for g in base.Shape.Faces)]
+        made = [f for f in step.Shape.Faces if not any(_on_surface(f, g) for g in base.Shape.Faces)]
         if any(_same_face(f, face) for f in made):
             return step
     return None
@@ -540,6 +540,23 @@ def _same_face(a, b, tol=1e-6):
             abs(a.Area - b.Area) <= tol * max(1.0, a.Area)
             and (a.CenterOfMass - b.CenterOfMass).Length <= 1e-5
         )
+    except Exception:
+        return False
+
+
+def _on_surface(face, other):
+    """True when `face` lies on `other`'s surface (a face the fillet only trimmed, not one
+    it made): its middle is on that surface, facing the same way."""
+    try:
+        if face.Surface.TypeId != other.Surface.TypeId:
+            return False
+        u0, u1, v0, v1 = face.ParameterRange
+        u, v = (u0 + u1) / 2.0, (v0 + v1) / 2.0
+        point = face.valueAt(u, v)
+        ou, ov = other.Surface.parameter(point)
+        if (other.Surface.value(ou, ov) - point).Length > 1e-6:
+            return False
+        return abs(App.Vector(face.normalAt(u, v)).dot(other.Surface.normal(ou, ov))) > 1 - 1e-6
     except Exception:
         return False
 
