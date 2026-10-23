@@ -285,11 +285,58 @@ class SmPanel(pickpanel.PickPanel):
             if any(o is obj and s == short for o, s, _p in self.picks[box]):
                 return True
         try:
+            if self.accept_pick(self.active, obj, short):
+                return True
+        except Exception:
+            return False
+        body = self._other_sheet(obj)
+        return body is not None and self._accepts_on(body, obj, short)
+
+    # -- the first pick on another sheet metal body --------------------------------------------
+    def _other_sheet(self, obj):
+        """The sheet metal body whose last step `obj` is, when the dialog may move there: a
+        new step with nothing picked yet (Fusion takes the edges / faces of any sheet metal
+        body; the dialog opened on the active one)."""
+        if self.editing or not self.NEEDS_BASE or any(self.picks[b] for b in self.picks):
+            return None
+        body = bodies.body_of(obj)
+        if body is None or body is self.body or body.Tip is not obj:
+            return None
+        if not sheetmetal.is_sheet_metal_body(body):
+            return None
+        return body
+
+    def _accepts_on(self, body, obj, short):
+        """Would the active box take this click if the dialog were on `body`?"""
+        saved = self.body, self.base
+        try:
+            self.body, self.base = body, obj
             return bool(self.accept_pick(self.active, obj, short))
         except Exception:
             return False
+        finally:
+            self.body, self.base = saved
+
+    def _move_to(self, body, base):
+        if self.target is not None:
+            target, self.target = self.target, None
+            self._looks.restore()
+            self._ghost = False
+            self.drop_preview(target)
+            self.quiet_recompute()
+        self._click_through(False)
+        self.switch_body(body, base)
+        log("%s moved to %s" % (self.title, body.Label))
 
     def picks_changed(self, added, dropped):
+        try:
+            if added and not dropped:
+                obj, short = added[0][0], added[0][1]
+                body = self._other_sheet(obj)
+                if body is not None and self._accepts_on(body, obj, short):
+                    self._move_to(body, obj)
+        except Exception as exc:
+            warn("%s: %s" % (self.title, exc))
         changed = False
         if added and dropped:
             # one click either adds a pick or drops one; both at once is FreeCAD replacing

@@ -3,7 +3,9 @@
 menu's Join by Bend opens on it, but the First Edge is clicked on the upright plate (Fusion
 takes a First Edge on any sheet metal body): the dialog moves to the upright plate, then the
 flat plate's end edge as the Second Edge joins them (volume worked out by hand); OK puts the
-step in the upright plate's body and uses the flat one up; Ctrl+Z undoes it."""
+step in the upright plate's body and uses the flat one up; Ctrl+Z undoes it. The same for
+Hem: with the flat plate active, a click on the upright plate's top edge moves the dialog there
+and previews the hem on it; Esc leaves both plates as they were."""
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -111,6 +113,51 @@ def undone():
     h.check("the flat plate is shown again", bodies.is_shown(s["flat"]))
 
 
+def open_hem():
+    from sciforge import pickpanel
+
+    pickpanel.activate(s["flat"])
+    Gui.Selection.clearSelection()
+    h.fit()
+    st.tab()
+    h.ribbon("Hem")
+
+
+def hem_on_flat():
+    from sciforge import sheetmetal_hem_ui
+
+    p = st.panel(sheetmetal_hem_ui.HemPanel)
+    h.check("Hem opened on the active (flat) plate", p is not None and p.body is s["flat"])
+
+
+def click_upright_top():
+    h.click_edge(V(60, 20, 45))
+
+
+def hem_moved():
+    from sciforge import sheetmetal_hem_ui
+
+    p = st.panel(sheetmetal_hem_ui.HemPanel)
+    st.settle(p)
+    h.check(
+        "Hem moved to the upright plate, its top edge picked",
+        p is not None and p.body is s["upright"] and len(p.picks["edges"]) == 1,
+        p and (p.body.Label, p.picks),
+    )
+    h.check("the hem is previewed on the upright plate", st.volume(s["upright"]) > 1600.5)
+    st.esc()
+
+
+def hem_esc():
+    st.settle()
+    h.check(
+        "Esc: both plates as they were",
+        st.close(st.volume(s["upright"]), 1600.0)
+        and st.close(st.volume(s["flat"]), 2000.0)
+        and not st.steps("SheetMetalHem"),
+    )
+
+
 h.run(
     "smmore_qa_join_order",
     [
@@ -125,5 +172,10 @@ h.run(
         after_ok,
         undo,
         undone,
+        open_hem,
+        hem_on_flat,
+        click_upright_top,
+        hem_moved,
+        hem_esc,
     ],
 )

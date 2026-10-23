@@ -12,7 +12,7 @@ the dialog. Geometry: sheetmetal_bend_join.py.
 import FreeCAD as App
 
 from . import bodies, sheetmetal, sheetmetal_bend as sb, sheetmetal_bend_join as sj
-from . import ui_icon_path, warn
+from . import ui_icon_path
 from . import sheetmetal_bend_panel as smp
 
 
@@ -58,57 +58,12 @@ class JoinBendPanel(smp.SmPanel):
             return None
         return body if body.Tip is obj else None
 
-    def _sheet_body(self, obj):
-        """The sheet metal body whose last step `obj` is (None: not one)."""
-        body = bodies.body_of(obj)
-        if body is None or not sheetmetal.is_sheet_metal_body(body) or body.Tip is not obj:
-            return None
-        return body
-
-    def picks_changed(self, added, dropped):
-        """Fusion's First Edge may be on any sheet metal body: a first click on another body
-        than the one the dialog opened on moves the step to that body."""
-        try:
-            if not self.editing and not dropped and self.active == "first":
-                for obj, short, _p in added[:1]:
-                    body = self._sheet_body(obj)
-                    if obj is not self.base and body is not None and body is not self.body:
-                        if self.accept_pick("first", obj, short):
-                            self._switch(body, obj)
-        except Exception as exc:
-            warn("Join by Bend: %s" % exc)
-        return super().picks_changed(added, dropped)
-
-    def _switch(self, body, base):
-        if self.target is not None:
-            target, self.target = self.target, None
-            self._looks.restore()
-            self._ghost = False
-            self.drop_preview(target)
-            self.quiet_recompute()
-        # a Second Edge already picked on the body that now holds the step is dropped
-        self.picks["second"] = [p for p in self.picks["second"] if p[0] is not base]
-        self.picks["first"] = []
-        self.switch_body(body, base)
-
     def accept_pick(self, box, obj, short):
         if not short.startswith("Edge"):
             return False
         if box == "first":
             if obj is not self.base:
-                # another sheet metal body (the dialog moves there on the click), not while
-                # editing a step, and not the body of the Second Edge
-                body = self._sheet_body(obj)
-                if self.editing or body is None:
-                    return False
-                if any(p[0] is obj for p in self.picks["second"]):
-                    return False
-                thickness = sb.rule_values(body)[0]
-                try:
-                    sb.edge_frame(obj.Shape, short, thickness)
-                except sb.SheetMetalError:
-                    return False
-                return True
+                return False
             thickness = sb.rule_values(self.body)[0]
             shape = self.base.Shape
         else:
