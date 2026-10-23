@@ -15,14 +15,15 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 - **Join by Bend** (CREATE > Join by Bend): First / Second Edge on two sheet metal bodies, rule
   radius or Bend Radius; the other body is used up (`bodies.CONSUMERS`).
 - **Corner Closure** (MODIFY > Corner Closure): Dominant / Submissive Edge, Symmetric Gap /
-  Overlap, rule gap or own gap, Overlap, Flip Overlap; Trim To Bend relief.
+  Overlap, rule gap or own gap, Overlap, Flip Overlap; Trim To Bend, Round and Square reliefs
+  (cut in the flat state through sm-flat's unfolder and folded back: `sf/sm-flat` merged in).
 - **Lofted Flange** (CREATE > Lofted Flange, own entry under Flange): two profiles (auto-chain),
   Brake Form with the four facet controls, Die Form, Orientation, New Body / Join.
 - **Sheet metal Fillet / Chamfer** (MODIFY > Fillet / Chamfer of the SHEET METAL tab): only the
   edges through the thickness; Fillet radius sets ("+ New Set"); on a solid body they open the
   SOLID commands.
-- Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 20 golden models,
-  21 unit tests, 7 scenarios (199 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
+- Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 21 golden models,
+  21 unit tests, 7 scenarios (204 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
 
 ## FreeCAD / OpenCASCADE facts found
 
@@ -57,9 +58,9 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 
 ## Tests run (FreeCAD 1.1.4, this sandbox)
 
-- `--only unit`: all pass. Golden models: the 20 `sheetmetal_smm_*` pass (with sm-forming's).
+- `--only unit`: all pass. Golden models: the 21 `sheetmetal_smm_*` pass (with sm-forming's).
 - Scenarios: smmore_bend 44, smmore_bend_two 17, smmore_hem 40, smmore_join 25,
-  smmore_corner 24, smmore_round 26, smmore_lofted 23 checks: all PASS.
+  smmore_corner 29, smmore_round 26, smmore_lofted 23 checks: all PASS.
 
 - sm-flat's unfolder (`sheetmetal_unfold.unfold`, a read-only copy of `sf/sm-flat`'s file in
   the scratchpad) lays this branch's bends flat to exactly the plate they were bent from
@@ -68,5 +69,5 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 
 ## Open (see the parity doc's Known gaps)
 
-Partial bends with reliefs, Corner Closure reliefs other than Trim To
-Bend, Lofted Flange inside the Flange dialog and with real bends between facets.
+Partial bends with reliefs, Corner Closure's other relief shapes and placements, Lofted
+Flange inside the Flange dialog and with real bends between facets.

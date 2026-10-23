@@ -57,10 +57,7 @@ def waiting():
     box = p.fields["relief"] if p else None
     item = box.model().item(1) if box else None
     h.check(
-        "Round relief greyed with its reason",
-        item is not None
-        and not item.isEnabled()
-        and "Not available" in (item.toolTip() or box.itemData(1, 3) or ""),
+        "Round relief offered", item is not None and item.isEnabled() and item.text() == "Round"
     )
 
 
@@ -92,9 +89,53 @@ def closed():
     s["sym"] = st.volume(s["body"])
 
 
+def choose_round():
+    st.choose(panel(), "relief", "Round")
+
+
+def round_cut():
+    p = panel()
+    st.settle(p, 15000)
+    v = st.volume(s["body"])
+    h.check(
+        "Round relief cut where the bends meet", s["sym"] - 40 < v < s["sym"] - 0.5, (v, s["sym"])
+    )
+    h.check(
+        "relief size rows shown (rule size)",
+        p.rows["use_rule_relief"][0].isVisible() and not p.rows["relief_value"][0].isVisible(),
+    )
+    h.check("no message", st.message(p) == "", st.message(p))
+    h.shot("smmore-corner-1b-round")
+    s["round"] = v
+
+
+def choose_square():
+    st.choose(panel(), "relief", "Square")
+
+
+def square_cut():
+    p = panel()
+    st.settle(p, 15000)
+    v = st.volume(s["body"])
+    h.check(
+        "Square relief cut (more than the round of the same size)",
+        v < s["round"] - 0.1,
+        (v, s["round"]),
+    )
+
+
 def overlap():
     p = panel()
     st.choose(p, "alignment", "Overlap")
+
+
+def overlap_refused():
+    p = panel()
+    st.settle(p)
+    h.check(
+        "a relief with Overlap is explained", "lies over itself" in st.message(p), st.message(p)
+    )
+    st.choose(p, "relief", "Trim To Bend")
 
 
 def zero_gap():
@@ -204,7 +245,12 @@ h.run(
         click_dominant,
         click_submissive,
         closed,
+        choose_round,
+        round_cut,
+        choose_square,
+        square_cut,
         overlap,
+        overlap_refused,
         zero_gap,
         type_zero,
         overlapped,

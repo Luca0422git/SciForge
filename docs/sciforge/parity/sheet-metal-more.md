@@ -77,7 +77,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Gap (rule's Miter/Rip/Seam gap by default) | Rule Gap on by default, or your own Gap | A[R39] |
 | Overlap 0..1, Flip Overlap | Same | A[R39] |
 | Extend Aligned (default on) | Shown on (off greyed: Known gaps) | A[R39] |
-| Relief shapes, Bend Transition | Trim To Bend (the bends end where they are, the corner stays open under the closed walls); Round / Square greyed with the reason | A[R39], A[R22] |
+| Relief shapes, Bend Transition | Trim To Bend (the bends end where they are, the corner stays open under the closed walls); Round (Size = diameter) and Square (Size = side), the rule's 2-bend size or your own, Placement Intersection: the closed part is laid flat with sm-flat's unfolder, the shape cut where the two bends' centre lines cross, and the cut folded back onto bends and walls (sm-flat's refold). With Overlap a relief is refused (the overlapped corner lies over itself when laid flat) | A[R39], A[R22], A[R1] |
 
 ### Lofted Flange (Fusion: the Lofted type of the Flange dialog)
 
@@ -106,13 +106,13 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Kind | What | Result (2026-10-23) |
 |---|---|---|
 | Unit | `SciForgeTests/unit/test_sheetmetal_bend_core.py`: bend zones (research 4.2 worked example), strips, every hem type and its refusals, the open / teardrop / rope geometry, the join fillet, closure reaches, facet counts, the thickness-edge test | 21 tests pass |
-| Golden | 20 models `sheetmetal_smm_*.json`: save + reopen of a hemmed, filleted, bent plate then an edit; a hem on an edge flange; bend centre / two lines / flip-start-45 edited to 60 / hole in the zone; the six hem types, two mitred hems, a hem edited to Rolled; join by bend; corner closure symmetric and overlap; lofted brake and die (edited to Face Number 4); fillet + chamfer. Analytic volumes where the shape allows (bends, hems, join, fillet); FreeCAD 1.1.4 baselines for the rest | all pass |
+| Golden | 21 models `sheetmetal_smm_*.json`: save + reopen of a hemmed, filleted, bent plate then an edit; a hem on an edge flange; bend centre / two lines / flip-start-45 edited to 60 / hole in the zone; the six hem types, two mitred hems, a hem edited to Rolled; join by bend; corner closure symmetric, overlap and with a Round relief; lofted brake and die (edited to Face Number 4); fillet + chamfer. Analytic volumes where the shape allows (bends, hems, join, fillet); FreeCAD 1.1.4 baselines for the rest | all pass |
 | Cross-check with sm-flat's unfolder | `sheetmetal_unfold.unfold` (branch `sf/sm-flat`, read-only copy) run on this branch's shapes: a 90° bend, a 45° flipped Start bend, the U (two lines) and a bend with a hole in its zone all lay flat to exactly the 100 x 40 plate they were bent from (volume 4000.0000, holed 3999.2148 = less the hole); the six hems, the join and a filleted plate unfold too (flat lengths = cut-back sheet + neutral-layer length of the strip) | all unfold |
 | Scenario `smmore_bend` | ribbon Bend, waits; stationary face; line; 90° preview (hand-worked volume); type 45; Start; Flip; OK; Bend 1; Ctrl+Z / Ctrl+Y; edit from the timeline back to 90 Center; a line past the sheet refused (OK waits); Esc; save, close, reopen | PASS, 44 checks |
 | Scenario `smmore_bend_two` | Bend in an empty design (no dialog, no error); a plate in a moved component; the face, then two lines: a U; Values For Line 2 at 45 (Line 1 keeps 90; All lines shows the common value); Bend Radius override 2; OK | PASS, 17 checks |
 | Scenario `smmore_hem` | every type from the Type list (volumes from the cross-section), the rows each type shows, the Length arrow dragged (value box), a Length too short refused, a second edge mitred, OK, Hem 1, Ctrl+Z / Ctrl+Y, edit (Flip), Cancel | PASS, 40 checks |
 | Scenario `smmore_join` | CREATE menu Join by Bend; parallel plate refused, Esc; joined (hand-worked volume); the other body hidden; Ctrl+Z / Ctrl+Y; edit to a 3 mm Bend Radius | PASS, 25 checks |
-| Scenario `smmore_corner` | two edge flanges (Flange code) on a notched plate; MODIFY menu Corner Closure; Round relief greyed with its reason; Symmetric Gap (points inside / in the gap); Overlap with a 0 gap; OK; Ctrl+Z / Ctrl+Y; edit back; Cancel | PASS, 24 checks |
+| Scenario `smmore_corner` | two edge flanges (Flange code) on a notched plate; MODIFY menu Corner Closure; Symmetric Gap (points inside / in the gap); Round relief (rule size), Square; Overlap with a relief refused, Trim To Bend, a 0 gap; OK; Ctrl+Z / Ctrl+Y; edit back; Cancel | PASS, 29 checks |
 | Scenario `smmore_round` | MODIFY Fillet; a top edge not taken; 5 mm; the radius arrow dragged (value box); + New Set, 10 mm (hand-worked volumes); OK; Fillet 1; Ctrl+Z / Ctrl+Y; Chamfer 4 mm; edit (sets back) | PASS, 26 checks |
 | Scenario `smmore_lofted` | CREATE menu Lofted Flange; square + circle: Brake Form in a new sheet metal body; chord 0.5; Die Form (not developable); Face Number 4; OK; Ctrl+Z / Ctrl+Y; an open line with a closed square refused; Esc | PASS, 23 checks |
 
@@ -136,9 +136,10 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 6. **Hem shapes are SciForge's reading of Fusion's descriptions** (Teardrop's leg comes back to
    the Gap, Rope = roll + reverse bend + flat run, Double = Z-fold with Setback): Fusion's exact
    sections were not published (research §5 item 5).
-7. **Corner Closure: Round / Square reliefs, Extend Aligned off, Bend Transition, 3-bend
-   corners.** Only Trim To Bend with Extend Aligned is built (the others are greyed with the
-   reason). The relief shapes need the flat-state relief mapped onto the folded corner.
+7. **Corner Closure: Tear / weld relief shapes, Tangent / Vertex placement, Extend Aligned
+   off, Bend Transition, 3-bend corners, a relief with Overlap.** Built: Trim To Bend, Round and
+   Square at the Intersection placement with Symmetric Gap. Extend Aligned off is greyed; a
+   relief with Overlap is refused with the reason.
 8. **Lofted Flange is its own command**, not yet a Type of the Flange dialog (sm-forming owns
    that dialog; one dialog later).
 9. **Lofted Flange, Brake Form: the facets meet in sharp folds**, not in bends of the rule's

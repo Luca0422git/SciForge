@@ -21,20 +21,8 @@ ALIGN_ITEMS = [
 ]
 RELIEF_ITEMS = [
     ("Trim To Bend", "trim_to_bend", True, "The bends end where they are; the corner stays open"),
-    (
-        "Round",
-        "round",
-        False,
-        "Not available yet in SciForge: needs the flat-state relief "
-        "mapped onto the folded corner",
-    ),
-    (
-        "Square",
-        "square",
-        False,
-        "Not available yet in SciForge: needs the flat-state relief "
-        "mapped onto the folded corner",
-    ),
+    ("Round", "round", True, "A round hole where the two bends meet (Size: its diameter)"),
+    ("Square", "square", True, "A square hole where the two bends meet (Size: its side)"),
 ]
 
 
@@ -50,10 +38,14 @@ class CornerPanel(smp.SmPanel):
     def default_options(self):
         opts = sc.default_options()
         try:
-            opts["gap_value"] = float(sb.rule_values(self.body)[3]["miter_gap"])
+            rule = sb.rule_values(self.body)[3]
+            opts["gap_value"] = float(rule["miter_gap"])
+            opts["relief_value"] = float(rule["corner_relief_2bend_size"])
         except Exception:
             opts["gap_value"] = 1.0
+            opts["relief_value"] = 4.0
         opts["use_rule_gap"] = True
+        opts["use_rule_relief"] = True
         return opts
 
     def build_fields(self):
@@ -69,6 +61,8 @@ class CornerPanel(smp.SmPanel):
         )
         self.fields["extend_aligned"].setEnabled(False)
         self.add_combo("relief", "Relief Shape", RELIEF_ITEMS, "Corner relief")
+        self.add_check("use_rule_relief", "Rule Relief Size", "Use the rule's 2-bend relief size")
+        self.add_length("relief_value", "Relief Size", "Round: diameter, Square: side")
         self.fields_changed("alignment")
 
     def fields_changed(self, key):
@@ -76,6 +70,9 @@ class CornerPanel(smp.SmPanel):
         self.show_row("overlap", overlap)
         self.show_row("flip_overlap", overlap)
         self.show_row("gap_value", not self.value("use_rule_gap"))
+        cut = self.value("relief") in ("round", "square")
+        self.show_row("use_rule_relief", cut)
+        self.show_row("relief_value", cut and not self.value("use_rule_relief"))
 
     def hint(self):
         if not self.picks["dominant"]:
@@ -98,11 +95,17 @@ class CornerPanel(smp.SmPanel):
     def collect(self):
         opts = super().collect()
         opts["gap"] = None if opts.get("use_rule_gap") else float(opts.get("gap_value") or 0.0)
+        opts["relief_size"] = (
+            None if opts.get("use_rule_relief") else float(opts.get("relief_value") or 0.0)
+        )
         return opts
 
     def check(self, options):
-        if options.get("relief") != "trim_to_bend":
-            raise sb.SheetMetalError("Only Trim To Bend relief is available yet.")
+        if options.get("relief") != "trim_to_bend" and options.get("alignment") == "overlap":
+            raise sb.SheetMetalError(
+                "An overlapped corner lies over itself when laid flat, so a Round or Square "
+                "relief cannot be cut there: use Trim To Bend, or Symmetric Gap."
+            )
         core.closure_reach(
             options["alignment"], options["gap"] or 0.0, 1.0, float(options.get("overlap", 1.0))
         )
@@ -126,6 +129,12 @@ class CornerPanel(smp.SmPanel):
         if submissive:
             self.picks["submissive"] = [(base, submissive, None)]
         options["use_rule_gap"] = options.get("gap") is None
+        options["use_rule_relief"] = options.get("relief_size") is None
+        options["relief_value"] = (
+            float(options["relief_size"])
+            if options.get("relief_size") is not None
+            else float(sb.rule_values(self.body)[3]["corner_relief_2bend_size"])
+        )
         options["gap_value"] = (
             float(feature.Gap)
             if options.get("gap") is not None

@@ -179,6 +179,7 @@ SMM_OPTIONS = {
         "flip_overlap": "bool",
         "extend_aligned": "bool",
         "relief": ("round", "square", "trim_to_bend"),
+        "relief_size": "number",
     },
     "sf_sm_lofted_flange": {
         "forming": ("brake", "die"),
