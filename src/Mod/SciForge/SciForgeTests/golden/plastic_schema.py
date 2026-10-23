@@ -1,6 +1,145 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Golden-model checks for the PLASTIC steps (plastic rules, Boss, Rest) (pure Python). Imported at
 the end of schema.py; it adds its step keys and wraps schema.validate, as gear_schema does.
-(Empty until that area's builder fills it.)"""
+sf_plastic_rule, sf_boss and sf_rest are built by sciforge/ai/ops/plastic_ops.py."""
 
-from . import schema  # noqa: F401
+from . import schema
+
+PLASTIC_RULE_FIELDS = {
+    "units",
+    "material",
+    "thickness",
+    "draft_angle",
+    "nominal_radius",
+    "reveal_height",
+    "clearance",
+    "minimum_thickness",
+    "maximum_thickness",
+    "thickness_variation",
+    "minimum_draft_angle",
+    "knife_edge_threshold",
+}
+SIDE_CHOICES = {
+    "shape": ("blank", "constant_diameter", "constant_thickness"),
+    "hole": ("simple", "counterbore", "countersink"),
+    "extent": ("through", "from_top", "from_bottom"),
+    "step": ("none", "in", "out"),
+    "rib_profile": ("none", "chamfer", "fillet"),
+    "rib_extent": ("length", "to_next"),
+}
+SIDE_FLAGS = {"enabled", "ribs"}
+SIDE_NUMBERS = {
+    "diameter",
+    "wall",
+    "draft",
+    "hole_diameter",
+    "hole_draft",
+    "hole_depth",
+    "major_diameter",
+    "major_depth",
+    "countersink_angle",
+    "step_diameter",
+    "step_depth",
+    "step_draft",
+    "clearance",
+    "root_radius",
+    "tip_radius",
+    "rib_count",
+    "rib_total_angle",
+    "rib_rotation",
+    "rib_cut",
+    "rib_chamfer_angle",
+    "rib_thickness",
+    "rib_draft",
+    "rib_outer_draft",
+    "rib_length",
+    "rib_offset",
+}
+
+schema.STEP_KEYS["sf_plastic_rule"] = ({"rule"}, {"set", "comment"})
+schema.STEP_KEYS["sf_boss"] = (
+    {"id", "points"},
+    {"plane", "offset", "screw", "flip", "position", "side1", "side2", "comment"},
+)
+schema.STEP_KEYS["sf_rest"] = (
+    {"id", "rect"},
+    {"plane", "offset", "thickness", "draft", "flip", "comment"},
+)
+
+
+def _plane(here, step):
+    if step.get("plane", "XY") not in ("XY", "XZ", "YZ"):
+        schema._fail(here, "'plane' must be XY, XZ or YZ")
+    if "offset" in step:
+        schema._check_number(here + ".offset", step["offset"])
+
+
+def _side(here, values):
+    if not isinstance(values, dict):
+        schema._fail(here, "a side is an object of settings")
+    for key, value in values.items():
+        if key in SIDE_CHOICES:
+            if value not in SIDE_CHOICES[key]:
+                schema._fail(here, "'%s' must be one of %s" % (key, SIDE_CHOICES[key]))
+        elif key in SIDE_FLAGS:
+            if not isinstance(value, bool):
+                schema._fail(here, "'%s' is true or false" % key)
+        elif key in SIDE_NUMBERS:
+            schema._check_number(here + "." + key, value)
+        else:
+            schema._fail(here, "unknown boss side setting %r" % key)
+
+
+def check_steps(model):
+    where = model.get("id", "<no id>")
+    for i, step in enumerate(model["steps"]):
+        here = "%s.steps[%d]" % (where, i)
+        op = step["op"]
+        if op == "sf_plastic_rule":
+            if not isinstance(step["rule"], str) or not step["rule"]:
+                schema._fail(here, "'rule' is a rule's name")
+            for key in step.get("set", {}) or {}:
+                if key not in PLASTIC_RULE_FIELDS:
+                    schema._fail(here, "cannot set rule field %r" % key)
+        elif op == "sf_boss":
+            _plane(here, step)
+            points = step["points"]
+            if not isinstance(points, list) or not points:
+                schema._fail(here, "'points' is a list of [x, y]")
+            for p in points:
+                if not isinstance(p, list) or len(p) != 2:
+                    schema._fail(here, "each point is [x, y]")
+                for v in p:
+                    schema._check_number(here + ".points", v)
+            for key in ("screw", "position"):
+                if key in step:
+                    schema._check_number(here + "." + key, step[key])
+            if "flip" in step and not isinstance(step["flip"], bool):
+                schema._fail(here, "'flip' is true or false")
+            for side in ("side1", "side2"):
+                if side in step:
+                    _side(here + "." + side, step[side])
+        elif op == "sf_rest":
+            _plane(here, step)
+            rect = step["rect"]
+            if not isinstance(rect, list) or len(rect) != 4:
+                schema._fail(here, "'rect' is [x0, y0, x1, y1]")
+            for v in rect:
+                schema._check_number(here + ".rect", v)
+            for key in ("thickness", "draft"):
+                if key in step:
+                    schema._check_number(here + "." + key, step[key])
+            if "flip" in step and not isinstance(step["flip"], bool):
+                schema._fail(here, "'flip' is true or false")
+
+
+_validate_before_plastic = schema.validate
+
+
+def validate(model):
+    _validate_before_plastic(model)
+    check_steps(model)
+    return model
+
+
+schema.validate = validate
