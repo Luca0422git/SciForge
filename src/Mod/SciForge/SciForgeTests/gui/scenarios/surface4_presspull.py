@@ -8,9 +8,14 @@ over to the surface Press Pull (the face moves, the walls follow). Type -5: the 
 Pull" step. Double-click it in the timeline: -5 reads back; type 3: the floor goes up 3,
 the walls are cut back: area 1300; OK. Undo: 2100 again; Redo. A vertical edge selected,
 Q: Press Pull on an edge of a surface body is its Fillet (the surface Fillet dialog opens
-with the edge); Esc. A refusal: Q, click the curved surface: it says Press Pull pushes flat
-faces of a surface body; Esc leaves everything as it was.
+with the edge); radius 2, OK. Q, click that fillet's round face: the Fillet opens to change its
+radius (Fusion); Esc. Q, click the curved surface (an arc of radius 52, 60 degrees, 20 long),
+Distance 2, OK: it is offset (radius 50 or 54 by its normal). A refusal: Q, click the box's
+floor, Distance 9: further than its walls reach, said in the dialog; Esc leaves the box as it
+was. Save (Ctrl+S), close, reopen: the steps compute, the Press Pull edits again.
 """
+
+import math
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -170,13 +175,53 @@ def q_again():
 
 
 def click_curved():
+    s["curved_area"] = st.area(s["curved"])
     h.click(V(80, -10, 12))
+
+
+def curved_distance():
+    s4.settle()
+    p = s4.panel()
+    h.check(
+        "Press Pull takes the curved face",
+        p is not None and p.kind == "surface_press_pull" and len(p.picked) == 1,
+        p and p.picked,
+    )
+    h.check("not refused as curved", "flat" not in s4.message(), s4.message())
+    s4.type_main("2")
+
+
+def curved_ok():
+    s4.settle()
+    st.ok()
+
+
+def curved_offset():
+    from sciforge import surfmod
+
+    h.check("dialog closed", s4.panel() is None)
+    area = st.area(s["curved"])
+    options = [r * math.pi / 3 * 20 for r in (50.0, 54.0)]
+    h.check("offset by 2: radius 50 or 54", any(s4.near(area, a, 1e-5) for a in options), area)
+    h.check("a Press Pull step on it", surfmod.kind_of(s["curved"].Tip) == "surface_press_pull")
+    s["curved_area"] = area
+    Gui.Selection.clearSelection()
+    h.press("q")
+
+
+def click_floor_again():
+    h.click(V(8, 16, 3))
+
+
+def too_far():
+    s4.settle()
+    s4.type_main("9")
 
 
 def refused():
     s4.settle()
     text = s4.message()
-    h.check("says flat faces only", "flat faces" in text, text)
+    h.check("says it is further than the walls reach", "further" in text, text)
     st.esc()
 
 
@@ -184,10 +229,7 @@ def unchanged():
     s4.settle()
     h.check("closed", s4.panel() is None)
     h.check("the box unchanged", st.near(st.area(s["box"]), s["area"]))
-    from sciforge import surfmod
-
-    h.check("the curved surface unchanged", surfmod.is_surface_body(s["curved"]))
-    h.check("no step on it", surfmod.kind_of(s["curved"].Tip) is None)
+    h.check("the curved surface as offset", st.near(st.area(s["curved"]), s["curved_area"]))
     import os
     import tempfile
 
@@ -284,6 +326,11 @@ h.run(
         fillet_edit_opens,
         q_again,
         click_curved,
+        curved_distance,
+        curved_ok,
+        curved_offset,
+        click_floor_again,
+        too_far,
         refused,
         unchanged,
         ctrl_s,

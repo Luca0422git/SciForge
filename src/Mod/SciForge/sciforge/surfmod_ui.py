@@ -8,7 +8,7 @@ do on a surface body open these dialogs instead (the solid tools hand over to th
   Fillet / Chamfer  (F, the SOLID dialogs)  edges of a surface body: fillet_ui.start hands over
                     when the edges picked are on a surface body, or nothing is picked on the
                     SURFACE tab while a surface body is shown
-  Press Pull (Q)    a flat face of a surface body: the face moves, the faces around it follow;
+  Press Pull (Q)    a face of a surface body: the face moves, the faces around it follow;
                     an edge of a surface body: Fillet (as Press Pull on a solid's edge)
   Merge             adjacent faces of one surface body that lie on one surface become one face
   Delete            (delete_ui) on the SURFACE tab removes faces without healing; double-clicking
@@ -35,7 +35,7 @@ HINTS = {
     "surface_chamfer": "Click edges of a surface body (between two of its faces) to bevel.",
     "surface_delete_face": "Click the faces to delete: they go, the hole stays open.",
     "surface_merge": "Click two or more faces next to each other on one surface body.",
-    "surface_press_pull": "Click a flat face of a surface body; drag the arrow or type a "
+    "surface_press_pull": "Click a face of a surface body; drag the arrow or type a "
     "distance (+ along the face's normal, - against it).",
 }
 

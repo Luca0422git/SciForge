@@ -254,7 +254,7 @@ class PressPullPanel(Panel):
             # (the first click hands over to the surface Press Pull; surface-4)
             self.message.setText("")
             self.what.setText(
-                "Click a flat face of a surface body to push or pull it, or an edge to round it."
+                "Click a face of a surface body to push or pull it, or an edge to round it."
             )
         else:
             self.message.setText("Make a solid first (Create Sketch, then Extrude).")

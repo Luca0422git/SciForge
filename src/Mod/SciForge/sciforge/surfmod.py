@@ -8,7 +8,7 @@ The steps (PartDesign::FeaturePython in the surface body, each with its SciForge
   SurfaceBlendFeature   Fillet / Chamfer of edges between two faces of a surface body
   SurfaceDeleteFeature  faces removed without healing (Delete on the SURFACE tab)
   SurfaceMergeFeature   adjacent faces on one surface merged into one face
-  SurfacePressPullFeature  a flat face moved along its normal, the faces around it follow
+  SurfacePressPullFeature  a face moved along its normal (offset), the faces around follow
 
 Shapes: a step's BaseFeature.Shape and its own Shape are in the body's coordinates (as every
 PartDesign step); picks are element names of the step before ("Edge7", "Face3") kept in a
@@ -396,7 +396,7 @@ def _trim(face, origin, normal, sign, around):
 
 
 def press_pull(shape, names, distance):
-    """The surface `shape` with its flat faces `names` moved by `distance` along their
+    """The surface `shape` with its faces `names` moved by `distance` along their
     normals (Fusion's Press Pull / Offset Face on a surface body). The faces around a picked
     face follow it. Two ways, the first that applies:
       - flat polygons around it (a box, a tray with slanted walls): every corner of the face
@@ -404,13 +404,19 @@ def press_pull(shape, names, distance):
         around are the same polygons with those corners moved (exact);
       - faces that run along the move (an extruded wall, round or flat, under a lid): each
         grows by a band or is cut back to the moved face.
+    One curved face (a round wall) is offset by the distance, the faces around it that run
+    along the move (the floor of a cup) grow or are cut back the same way.
     Refused with the reason otherwise (OpenCASCADE's Python API has no face offset for open
     bodies)."""
     core.check_values("surface_press_pull", {"distance": distance})
     d = float(distance)
     if not names:
-        raise NeedsPick("Select a flat face of a surface body.")
+        raise NeedsPick("Select a face of a surface body.")
     picked = [element(shape, n) for n in names]
+    if any(not _is_flat(f) for f in picked):
+        if len(picked) > 1:
+            raise SurfaceModifyError("Push or pull one curved face at a time.")
+        return _result(_offset_curved(shape, picked[0], d), "Press Pull")
     planes = [_plane_of(f) for f in picked]
     normal0 = planes[0][1]
     for _o, n in planes[1:]:
@@ -574,6 +580,130 @@ def _slide_corners(shape, picked, planes, d):
             new.reverse()  # each face keeps its side (its normal)
         faces.append(new)
     return sew(faces)
+
+
+def _offset_face(face, d):
+    """`face` moved `d` along its normal (an offset surface): OpenCASCADE offsets a lone face
+    along its surface's own normal, which may be the other way: checked at its middle."""
+    u0, u1, v0, v1 = face.ParameterRange
+    mid = face.valueAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+    normal = App.Vector(face.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)).normalize()
+    for sign in (1.0, -1.0):
+        try:
+            made = face.makeOffsetShape(sign * d, 1e-7)
+        except Exception:
+            continue
+        if not made.Faces:
+            continue
+        moved = made.Faces[0]
+        try:
+            gap = moved.distToShape(Part.Vertex(mid + normal * d))[0]
+        except Exception:
+            continue
+        if gap < 1e-5 * max(1.0, abs(d)):
+            return moved
+    raise SurfaceModifyError(
+        "That curved face cannot be offset by this much (it would turn inside out). Try a "
+        "smaller distance."
+    )
+
+
+def _matching_edge(edges, point):
+    best = None
+    for edge in edges:
+        try:
+            gap = edge.distToShape(Part.Vertex(point))[0]
+        except Exception:
+            continue
+        if best is None or gap < best[0]:
+            best = (gap, edge)
+    return best[1] if best is not None and best[0] < 1e-5 else None
+
+
+def _edge_mid(edge):
+    return edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+
+
+def _offset_curved(shape, face, d):
+    """Press Pull of one curved face: offset by `d`; each face next to it must contain the
+    move at their shared edge (a cup's floor round its wall): it grows by the band between
+    the edge and the moved edge, or is cut back to the moved face."""
+    from . import surface_geom
+
+    moved = _offset_face(face, d)
+    changed = {}
+    for edge in face.Edges:
+        owners = [f for f in faces_of_edge(shape, edge) if not f.isSame(face)]
+        if not owners:
+            continue  # an open edge (or the face's own seam) just moves
+        mid = _edge_mid(edge)
+        u, v = face.Surface.parameter(mid)
+        target = mid + App.Vector(face.normalAt(u, v)).normalize() * d
+        new_edge = _matching_edge(moved.Edges, target)
+        if new_edge is None:
+            raise SurfaceModifyError("The moved face lost an edge here. Try a smaller distance.")
+        for other in owners:
+            key = _index(shape.Faces, other)
+            current = changed.get(key) or [other.copy()]
+            between = (mid + target) * 0.5
+            try:
+                ou, ov = other.Surface.parameter(between)
+                off = (other.Surface.value(ou, ov) - between).Length
+            except Exception:
+                off = 1.0
+            if off > 1e-5 * max(1.0, abs(d)):
+                raise SurfaceModifyError(
+                    "A face next to it does not run along the move (it meets the face at an "
+                    "angle or touches it smoothly), so it cannot follow. Use Offset (SURFACE > "
+                    "CREATE) instead."
+                )
+            inside = any(piece.isInside(_edge_mid(new_edge), 1e-6, True) for piece in current)
+            if not inside:
+                band = Part.makeRuledSurface(edge, new_edge)
+                current = _join_band(current, band)
+            else:
+                shell = Part.Shell([moved])
+                ends = [e for e in shell.Edges if e.isSame(new_edge)] or [new_edge]
+                try:
+                    grown = surface_geom.extend(
+                        shell, ends, max(shape.BoundBox.DiagonalLength, 1.0), "natural"
+                    )
+                except Exception as exc:
+                    raise SurfaceModifyError(
+                        "The face next to it cannot be cut back to the moved face (%s)."
+                        % _text(exc)
+                    )
+                current = _cut_back(current, grown, mid)
+            changed[key] = current
+    faces = []
+    for i, f in enumerate(shape.Faces, start=1):
+        if f.isSame(face):
+            continue
+        faces += changed.get(i, [f.copy()])
+    faces.append(moved)
+    return sew(faces)
+
+
+def _cut_back(pieces, cutter, gone_point):
+    """The faces `pieces` split by `cutter`; the part holding `gone_point` (the old edge)
+    goes."""
+    import BOPTools.SplitAPI as split_api
+
+    kept = []
+    for piece in pieces:
+        try:
+            parts = split_api.slice(piece, [cutter], "Split").Faces
+        except Exception as exc:
+            raise SurfaceModifyError("A face next to it cannot be cut back (%s)." % _text(exc))
+        for part in parts:
+            if part.distToShape(Part.Vertex(gone_point))[0] > 1e-6:
+                kept.append(part)
+    if not kept:
+        raise SurfaceModifyError(
+            "That is further than the faces next to it reach: they would disappear. Use a "
+            "smaller distance."
+        )
+    return kept
 
 
 def _join_band(faces, band):
@@ -794,8 +924,9 @@ def check_picks(kind, base_shape, names):
     if kind in ("surface_fillet", "surface_chamfer"):
         blend_edges(base_shape, names, False)
     elif kind == "surface_press_pull":
-        for name in names:
-            _plane_of(element(base_shape, name))
+        faces = [element(base_shape, name) for name in names]
+        if len(faces) > 1 and any(not _is_flat(f) for f in faces):
+            raise SurfaceModifyError("Push or pull one curved face at a time.")
 
 
 def preview(kind, base_shape, names, options):

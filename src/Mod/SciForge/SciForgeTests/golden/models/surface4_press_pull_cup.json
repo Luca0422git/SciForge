@@ -1,0 +1,98 @@
+{
+  "id": "surface4_press_pull_cup",
+  "title": "Press Pull of the round wall of a cup of surfaces (a tube on a disc): the wall is offset 3 outward, the floor grows with it",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 20
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "a cup of radius 10, 20 high: 400 pi + 100 pi"
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "pp",
+      "kind": "surface_press_pull",
+      "faces": {
+        "type": "cylinder",
+        "count": 1
+      },
+      "options": {
+        "distance": -3.0
+      },
+      "comment": "the wall's normal points into the cup (the stitch matched it to the floor's): -3.0 is outward"
+    }
+  ],
+  "expect": {
+    "area": 2164.5573383233677,
+    "faces": 2,
+    "solids": 0,
+    "bbox": [
+      -13.0,
+      -13.0,
+      0,
+      13.0,
+      13.0,
+      20
+    ],
+    "source": "analytic",
+    "note": "the wall offset to radius 13, the floor grown to it: 2 pi 13 x 20 + pi 13^2"
+  }
+}
