@@ -13,6 +13,10 @@ one Trim step changes both bodies (20 x 10 and 10 x 10 left). Undo / Redo. Edit 
 the two pieces read back; click the second wall's red piece to keep it; OK: 20 x 10 again.
 Refusal: Trim with the YZ plane, which touches nothing: the dialog says the tool cuts no
 surface and OK waits; Cancel.
+Timeline right-click > Suppress Features on "Trim 2": wall 1 shows Trim 1's 30 x 10 (before,
+a suppressed surface step came out empty and the body went blank), nothing red; Unsuppress
+Features: 20 x 10 again. Suppress "Extrude 1" (wall 1's first step): the Trims on it go off
+with it, wall 1 is empty, wall 2 unchanged, nothing red, no pop-up; Unsuppress: all back.
 """
 
 import FreeCAD as App
@@ -309,8 +313,95 @@ def ok_waits():
 
 
 def cancelled():
+    from SciForgeTests.gui import timeline_input as tl
+
     h.check("Cancel closed it", st.panel() is None)
     h.check("nothing changed", st.near(st.area(s["wall"]), 200.0), st.area(s["wall"]))
+    h.fit()
+    tl.menu("Trim 2", "Suppress Features")
+
+
+def _surface_steps():
+    from sciforge import surface
+
+    doc = App.ActiveDocument
+    return [o for o in doc.Objects if surface.is_surface_step(o)] if doc else []
+
+
+def _no_red(where):
+    steps = _surface_steps()
+    h.check(
+        "%s: no step is red" % where,
+        all("Invalid" not in list(o.State) and "Error" not in list(o.State) for o in steps),
+        [(o.Label, list(o.State)) for o in steps],
+    )
+    h.check("%s: no error pop-up" % where, not h.popups(), h.popups())
+
+
+def trim2_off():
+    from sciforge import bodies, surface
+
+    h.idle_step()()
+    off = [o for o in s["wall"].Group if surface.is_surface_step(o) and bodies.is_suppressed(o)]
+    h.check("Trim 2 is off", [surface.kind_of(o) for o in off] == ["trim"], [o.Label for o in off])
+    h.check(
+        "wall 1 shows Trim 1's 30 x 10 (before: a suppressed surface step left it blank)",
+        st.near(st.area(s["wall"]), 300.0),
+        st.area(s["wall"]),
+    )
+    h.check("still a surface body", surface.is_surface_body(s["wall"]))
+    h.check("wall 2: 20 x 10", st.near(st.area(s["wall2"]), 200.0), st.area(s["wall2"]))
+    _no_red("Trim 2 suppressed")
+    h.shot("4-trim-suppressed")
+
+
+def unsuppress_trim2():
+    from SciForgeTests.gui import timeline_input as tl
+
+    tl.menu("Trim 2", "Unsuppress Features")
+
+
+def trim2_on():
+    from sciforge import bodies
+    from SciForgeTests.gui import timeline_input as tl
+
+    h.idle_step()()
+    h.check("all on again", not any(bodies.is_suppressed(o) for o in _surface_steps()))
+    h.check("wall 1: 20 x 10 again", st.near(st.area(s["wall"]), 200.0), st.area(s["wall"]))
+    h.check("wall 2: 20 x 10", st.near(st.area(s["wall2"]), 200.0), st.area(s["wall2"]))
+    _no_red("Trim 2 unsuppressed")
+    tl.menu("Extrude 1", "Suppress Features")
+
+
+def extrude1_off():
+    from sciforge import bodies, surface
+
+    h.idle_step()()
+    steps = [o for o in s["wall"].Group if surface.is_surface_step(o)]
+    h.check(
+        "Extrude 1 is off, and the Trims on it with it",
+        steps and all(bodies.is_suppressed(o) for o in steps),
+        [(o.Label, bodies.is_suppressed(o)) for o in steps],
+    )
+    h.check("wall 1 is empty (nothing before its first step)", st.area(s["wall"]) == 0.0)
+    h.check("wall 2: 20 x 10", st.near(st.area(s["wall2"]), 200.0), st.area(s["wall2"]))
+    _no_red("Extrude 1 suppressed")
+
+
+def unsuppress_extrude1():
+    from SciForgeTests.gui import timeline_input as tl
+
+    tl.menu("Extrude 1", "Unsuppress Features")
+
+
+def extrude1_on():
+    from sciforge import bodies
+
+    h.idle_step()()
+    h.check("everything on again", not any(bodies.is_suppressed(o) for o in _surface_steps()))
+    h.check("wall 1: 20 x 10 again", st.near(st.area(s["wall"]), 200.0), st.area(s["wall"]))
+    h.check("wall 2: 20 x 10", st.near(st.area(s["wall2"]), 200.0), st.area(s["wall2"]))
+    _no_red("Extrude 1 unsuppressed")
 
 
 h.run(
@@ -358,5 +449,11 @@ h.run(
         refused,
         ok_waits,
         cancelled,
+        trim2_off,
+        unsuppress_trim2,
+        trim2_on,
+        extrude1_off,
+        unsuppress_extrude1,
+        extrude1_on,
     ],
 )

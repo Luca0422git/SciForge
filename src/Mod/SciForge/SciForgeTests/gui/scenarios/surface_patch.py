@@ -10,7 +10,9 @@ Patch the bottom the same way. Create Sketch: a circle r 5, surface-extruded 10 
 its top circle with Continuity Tangent: a dome (more than pi r² and above the rim). Undo /
 Redo. Edit the first Patch from the timeline: Connected read back; Cancel changes
 nothing. Refusal: a Patch with Enable Chaining off on one top edge only: "The boundary is
-not closed" and OK waits; Cancel.
+not closed" and OK waits; Cancel. Timeline right-click > Suppress Features on "Patch 1"
+(the lid's body's first step): the lid's body is empty, the tube unchanged, nothing red, no
+pop-up; Unsuppress Features: the lid is back.
 """
 
 import math
@@ -342,8 +344,47 @@ def still_waits():
 
 
 def cancelled():
+    from SciForgeTests.gui import timeline_input as tl
+
     h.check("Cancel closed it", st.panel() is None)
     h.check("no new body", len(st.surface_bodies()) == s["count"], len(st.surface_bodies()))
+    h.fit()
+    tl.menu("Patch 1", "Suppress Features")
+
+
+def _no_red(where):
+    from sciforge import surface
+
+    steps = [o for o in App.ActiveDocument.Objects if surface.is_surface_step(o)]
+    h.check(
+        "%s: no step is red" % where,
+        all("Invalid" not in list(o.State) and "Error" not in list(o.State) for o in steps),
+        [(o.Label, list(o.State)) for o in steps],
+    )
+    h.check("%s: no error pop-up" % where, not h.popups(), h.popups())
+
+
+def lid_off():
+    from sciforge import bodies
+    from SciForgeTests.gui import timeline_input as tl
+
+    h.idle_step()()
+    step = s["lid"].Tip
+    h.check("Patch 1 is off", step is not None and bodies.is_suppressed(step))
+    h.check("the lid's body is empty (Patch 1 is its first step)", st.area(s["lid"]) == 0.0)
+    h.check("the tube unchanged", st.near(st.area(s["tube"]), 800.0), st.area(s["tube"]))
+    _no_red("Patch 1 suppressed")
+    tl.menu("Patch 1", "Unsuppress Features")
+
+
+def lid_on():
+    from sciforge import bodies
+
+    h.idle_step()()
+    step = s["lid"].Tip
+    h.check("Patch 1 is on", step is not None and not bodies.is_suppressed(step))
+    h.check("the lid back: 400", st.near(st.area(s["lid"]), 400.0), st.area(s["lid"]))
+    _no_red("Patch 1 unsuppressed")
 
 
 h.run(
@@ -397,5 +438,7 @@ h.run(
         refused,
         still_waits,
         cancelled,
+        lid_off,
+        lid_on,
     ],
 )

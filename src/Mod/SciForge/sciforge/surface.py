@@ -210,8 +210,38 @@ class SurfaceFeature:
     def onChanged(self, obj, prop):
         if prop == META:  # its choices changed (a dialog, undo / redo, a Cancel)
             apply_number_modes(obj)
+        elif prop == "Shape":
+            self._keep_surface_when_suppressed(obj)
+
+    def _keep_surface_when_suppressed(self, obj):
+        """Suppressed in the timeline: FreeCAD's PartDesign gives a suppressed step the step
+        before it only when that is a solid, so a surface step came out empty, its body went
+        blank and the steps after it red. The step then shows the surface before it,
+        unchanged (as SurfaceModifyFeature does); the first step of a body stays empty."""
+        if getattr(self, "_passing", False):
+            return
+        try:
+            if not getattr(obj, "Suppressed", False) or not obj.Shape.isNull():
+                return
+            doc = obj.Document
+            if doc.Restoring or getattr(doc, "Transacting", False):
+                return  # the file / the undo step brings its own shape
+            base = getattr(obj, "BaseFeature", None)
+            if base is not None and not base.Shape.isNull() and base.Shape.Faces:
+                self._passing = True
+                obj.Shape = base.Shape.copy()
+        except Exception:
+            pass
+        finally:
+            self._passing = False
 
     def execute(self, obj):
+        if getattr(obj, "Suppressed", False):
+            # Off in the timeline: FreeCAD throws the result away and shows the step before
+            # it (onChanged above keeps a surface). Building it anyway fails when the step
+            # before it went off too (the first step of the body), and FreeCAD then prints
+            # that error at every recompute.
+            return
         try:
             try:
                 curves.refind(obj, LINKS)  # elements FreeCAD lost after a reopen
