@@ -60,23 +60,36 @@ def is_cylinder(face):
 
 
 def inner_point(face):
-    """A point inside the face (not in a hole, not on the boundary)."""
+    """A point inside the face (not in a hole, well away from the boundary)."""
     u0, u1, v0, v1 = face.ParameterRange
-    best = None
-    steps = 9
+    steps = 8
+    inside = []
     for i in range(1, steps):
         for j in range(1, steps):
-            u = u0 + (u1 - u0) * (0.5 + (i - steps / 2.0) / steps)
-            v = v0 + (v1 - v0) * (0.5 + (j - steps / 2.0) / steps)
-            p = face.Surface.value(u, v)
-            if not face.isInside(p, LIN_TOL, False):
-                continue
-            score = abs(i - steps / 2.0) + abs(j - steps / 2.0)
-            if best is None or score < best[0]:
-                best = (score, p)
-    if best is None:
-        # a thin face: the centre of mass is good enough
+            u = u0 + (u1 - u0) * i / float(steps)
+            v = v0 + (v1 - v0) * j / float(steps)
+            try:
+                ok = face.isPartOfDomain(u, v)
+            except Exception:
+                ok = False
+            if ok:
+                inside.append(face.Surface.value(u, v))
+    if not inside:
         return face.CenterOfMass
+    if len(inside) == 1:
+        return inside[0]
+    wire = face.OuterWire
+    best = None
+    for p in inside:
+        try:
+            d = wire.distToShape(Part.Vertex(p))[0]
+            for w in face.Wires:
+                if not w.isSame(wire):
+                    d = min(d, w.distToShape(Part.Vertex(p))[0])
+        except Exception:
+            d = 0.0
+        if best is None or d > best[0]:
+            best = (d, p)
     return best[1]
 
 
@@ -287,9 +300,7 @@ def develop_face(fmap):
     """The bend face developed into its entry tangent plane (parent not applied)."""
     fn = fmap.develop_local
     outer = _map_wire(fmap.face.OuterWire, fn)
-    inner = [
-        _map_wire(w, fn) for w in fmap.face.Wires if not w.isSame(fmap.face.OuterWire)
-    ]
+    inner = [_map_wire(w, fn) for w in fmap.face.Wires if not w.isSame(fmap.face.OuterWire)]
     face = Part.makeFace([outer] + inner, "Part::FaceMakerBullseye")
     if face.isNull() or face.Area < 1e-9:
         raise UnfoldError("bend %d could not be developed" % (fmap.index + 1))
@@ -723,7 +734,9 @@ def _fold_piece(fmap, piece, T, gap):
     lo_r = fmap.inner_radius - gap
     hi_r = fmap.inner_radius + T + gap
     for wire in wires:
-        pts = wire.discretize(Deflection=0.002)
+        # dense steps: a straight edge of the flat across the bend folds into an arc
+        step = max(0.01, min(0.2, fmap.rn * 0.03))
+        pts = wire.discretize(Distance=step)
         if len(pts) > 1 and (pts[0] - pts[-1]).Length < 1e-7:
             pts = pts[:-1]
         if len(pts) < 3:
@@ -740,5 +753,7 @@ def _fold_piece(fmap, piece, T, gap):
                 tool.reverse()
             tools.append(tool)
         except Exception as exc:
-            raise UnfoldError("the cut across bend %d could not be folded: %s" % (fmap.index + 1, exc))
+            raise UnfoldError(
+                "the cut across bend %d could not be folded: %s" % (fmap.index + 1, exc)
+            )
     return tools
