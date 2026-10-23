@@ -51,10 +51,12 @@ keys in `docs/sciforge/dev/research/fusion-surface.md`), **F** = Autodesk Commun
 | **Pattern** (Rectangular / Circular / on Path) and **Mirror** of surface bodies, Object Type Bodies | Same dialogs. A click on a surface body sets Pattern Type to Bodies (a surface body has no features to pattern); with nothing selected and no solid, the dialog opens on the shown surface body | A |
 | **Mirror, Operation Join**: the mirrored surface bodies are **stitched** to the originals with a **Stitch Tolerance** | Same: SciForge's PatternFeature stitches the copy to the body (`surface_geom.stitch`); a stitch that closes is a solid. Stitch Tolerance row (shown for a surface body with Join), default 1 mm; kept on edit | A (stitch, tolerance), G (default 1 mm) |
 | **Scale** of surface bodies | Same dialog and step; uniform or per-axis. Faces that end up in one plane are merged (Refine, as for solids) | A |
-| **Merge**: adjacent faces of one surface body merged into one face; only in direct modelling (Capture Design History off) or inside a base feature; "it will change the shape of the surface" | SURFACE > MODIFY > Merge: picked adjacent faces that lie on **one** surface (one plane, cylinder, ... e.g. the pieces Split Face or Trim left) become one face, exactly (`UnifySameDomain`). Faces on different surfaces are refused with the reason. Offered in parametric designs too, as a "Merge" step in the timeline (Fusion hides it there) | A, F; G (offered with history on) |
+| **Merge**: adjacent faces of one surface body merged into one face; only in direct modelling (Capture Design History off) or inside a base feature; "it will change the shape of the surface" | SURFACE > MODIFY > Merge: picked adjacent faces that lie on **one** surface (one plane, cylinder, ... e.g. the pieces Split Face or Trim left) become one face, exactly (`UnifySameDomain`). Faces that only meet smoothly (tangent, within 1 degree) are refitted as one surface through their outer boundary and points sampled on them; the dialog says how far it moved them (refused above 0.01 mm or 0.1 % of their size). Faces meeting at a sharp edge are refused with the reason. Offered in parametric designs too, as a "Merge" step in the timeline (Fusion hides it there) | A, F; G (the tolerances; offered with history on) |
 | **Combine** | A surface body is refused with the reason: "...Combine works on solids. Join surfaces with Stitch, or make it a solid with Thicken" (the forum's workaround) | G, F |
 | **Silhouette Split**: Target Body = one solid body | A surface body is refused with the reason (Split Face, or make it a solid first) | A |
 | **Physical Material**, **Appearance** | Work on surface bodies (they did); the Physical Material dialog now lists surface bodies under In This Design (no mass: no volume) | G |
+| Value fields take parameters and formulas | The surface dialogs' Radius / Distance fields (and the box beside the arrow) take a parameter or a formula; the step's value then follows it (an expression on the property, as the SOLID dialogs do); Change Parameters lists them | A |
+| Components | Every step works in the body's own coordinates: a surface body in a moved component is filleted, pushed and deleted where it is shown | G |
 
 ## How each one works (for Luca)
 
@@ -68,7 +70,8 @@ keys in `docs/sciforge/dev/research/fusion-surface.md`), **F** = Autodesk Commun
   (or MODIFY > Fillet / Chamfer), type the radius or drag the arrow, OK.
 - **Push or pull a flat face**: press Q, click the face, type a distance (+ along the face's
   arrow) or drag the arrow: the walls around it grow or shrink with it.
-- **Merge**: MODIFY > Merge, click faces that lie on one surface, OK: one face.
+- **Merge**: MODIFY > Merge, click faces that lie on one surface or run into each other
+  smoothly, OK: one face.
 - **Move, Align, Scale, Pattern, Mirror**: exactly as for solids; Mirror with Operation Join
   stitches the mirrored half on (Stitch Tolerance closes small gaps).
 
@@ -77,19 +80,22 @@ saved with the design.
 
 ## Tests
 
-- Scenarios (real input, FreeCAD 1.1.4): `surface4_fillet` (fillet, edit, chamfer with a
-  pre-selected edge, a free-edge refusal, Esc), `surface4_split` (a box split by a curved
-  surface, undo / redo, save with Ctrl+S, reopen), `surface4_delete_merge` (an empty design,
-  SURFACE Delete of a floor, of a solid's face, SOLID Delete still heals, edit from the
-  timeline, Merge, a Merge refusal), `surface4_presspull` (Q hand-over, -5, edit to +3,
-  undo / redo, Q on an edge, a curved-face refusal), `surface4_move_mirror` (Mirror Join with
-  stitch, edit with Stitch Tolerance, Move, Move with Create Copy, Scale), `surface4_pattern`
-  (rectangular and circular patterns of a surface body, undo / redo, Esc), `surface4_misc`
-  (Align, Combine refusal, Physical Material).
-- Golden models `surface4_*.json` (9): fillet + edit + reopen, chamfer + SURFACE delete,
-  press pull + edit + reopen, press pull of a tray with slanted walls, merge, split of a
-  solid by a surface, split of a surface, rectangular pattern of a surface body, mirror
-  join + scale.
+- Scenarios (real input, FreeCAD 1.1.4): `surface4_fillet` (fillet, edit with a parameter
+  that the radius then follows, chamfer with a pre-selected edge, a free-edge refusal, Esc),
+  `surface4_split` (a box split by a curved surface, undo / redo, save with Ctrl+S, reopen),
+  `surface4_delete_merge` (an empty design, SURFACE Delete of a floor, of a solid's face,
+  SOLID Delete still heals, edit from the timeline, Merge, a Merge refusal),
+  `surface4_presspull` (Q hand-over, -5, edit to +3, undo / redo, Q on an edge, Q on the
+  fillet's face edits the fillet, a curved-face refusal), `surface4_move_mirror` (Mirror Join
+  with stitch, edit with Stitch Tolerance, Move, Move with Create Copy, Scale),
+  `surface4_pattern` (rectangular and circular patterns of a surface body, undo / redo, Esc),
+  `surface4_misc` (Align, Combine refusal, Physical Material, Appearance),
+  `surface4_component` (fillet, press pull and delete on a surface body in a moved
+  component, undo / redo).
+- Golden models `surface4_*.json` (10): fillet + edit + reopen, chamfer + SURFACE delete,
+  press pull + edit + reopen, press pull of a tray with slanted walls, merge, merge of
+  tangent faces (refit), split of a solid by a surface, split of a surface, rectangular
+  pattern of a surface body, mirror join + scale.
 - Unit tests: `SciForgeTests/unit/test_surfmod_core.py`.
 
 ## Known gaps
@@ -100,9 +106,10 @@ saved with the design.
   shell bound to Python (`BRepOffset_MakeOffset::SetOffsetOnFace` is not exposed:
   `research/surface-gaps.md`): SciForge slides the corners among flat polygons, and grows /
   trims the faces that run along the move otherwise.
-- **Merge of faces on different surfaces** (Fusion refits them as one surface, "it will
-  change the shape"): refused. SciForge merges faces of one underlying surface only, which
-  never changes the shape. A refit (`BSplineSurface.approximate`) is possible later.
+- **Merge of faces that meet at a sharp edge** is refused; faces that meet smoothly are
+  refitted (OpenCASCADE's filling through their boundary and sample points), not tangent to
+  the faces around them along the outer boundary (it passes through that boundary).
+  Fusion's own refit rules are not documented (G).
 - **Surface Fillet options**: Constant radius only; Chord Length, Variable radius,
   Curvature (G2), Setback corners and Rule Fillet are not offered on surface bodies (their
   SOLID implementations build on PartDesign::Fillet / SciForge's rule fillet, which need a

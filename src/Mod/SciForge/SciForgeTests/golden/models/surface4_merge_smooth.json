@@ -1,0 +1,89 @@
+{
+  "id": "surface4_merge_smooth",
+  "title": "Merge of a flat face and the round face it runs into smoothly (an extruded line and tangent arc): refitted as one face",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "merge"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            10,
+            10,
+            10
+          ]
+        },
+        {
+          "arc": [
+            10,
+            0,
+            10,
+            0,
+            90
+          ]
+        }
+      ],
+      "comment": "a line ending tangent to a quarter circle of radius 10"
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            5,
+            10
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 257.0796326794897,
+        "faces": 2,
+        "solids": 0,
+        "source": "analytic",
+        "note": "10 x 10 + a quarter cylinder pi 10 / 2 x 10"
+      }
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "m1",
+      "kind": "surface_merge",
+      "faces": {
+        "all": true,
+        "count": 2
+      }
+    }
+  ],
+  "expect": {
+    "area": 257.0796326794897,
+    "faces": 1,
+    "solids": 0,
+    "rel_tol": 0.002,
+    "bbox": [
+      0,
+      0,
+      0,
+      20,
+      10,
+      10
+    ],
+    "abs_tol": 0.01,
+    "source": "analytic",
+    "note": "one face through both (refitted: Merge changes the shape slightly, as in Fusion): the same area within 0.2 %"
+  }
+}

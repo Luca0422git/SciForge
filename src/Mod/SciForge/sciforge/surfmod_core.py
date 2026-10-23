@@ -171,16 +171,41 @@ def press_pull_action(direction_dot, distance):
     return "trim"
 
 
-def merge_outcome(picked, after):
-    """The Merge dialog's verdict on picked faces (count) that became `after` faces."""
+# Merge of faces that only meet smoothly refits them as one surface (Fusion: Merge "will
+# change the shape of the surface", F): refused when that moves the surface more than this
+# (mm), or this share of the faces' size.
+MERGE_DEVIATION = 0.01
+MERGE_DEVIATION_SHARE = 1e-3
+
+
+def merge_outcome(picked, after, smooth=False):
+    """The Merge dialog's verdict on picked faces (count) that became `after` faces. smooth:
+    the faces that did not merge meet smoothly (tangent), so they can be refitted."""
     if picked < 2:
         raise NeedsPick("Select two or more faces next to each other on one surface body.")
-    if after >= picked:
+    if after >= picked and not smooth:
         raise SurfaceModifyError(
-            "These faces lie on different surfaces, so they cannot become one face. SciForge "
-            "merges faces that lie on one plane, cylinder, cone, sphere or spline (pieces "
-            "left by Split Face, Trim or a patch); faces that only meet smoothly stay apart."
+            "These faces lie on different surfaces and meet at a sharp edge, so they cannot "
+            "become one face. Merge joins faces that lie on one surface (pieces left by Split "
+            "Face, Trim or a patch) or meet smoothly (tangent)."
         )
+    if after >= picked:  # smooth: refitted as one surface (merge_refit_message says more)
+        return "The %d faces become one face (refitted)." % picked
     if after == 1:
         return "The %d faces become one face." % picked
     return "The %d faces become %d faces (only faces on one surface merge)." % (picked, after)
+
+
+def merge_refit_message(picked, deviation, size):
+    """The verdict on faces that meet smoothly, refitted as one surface that moves by
+    `deviation` (mm) at most; `size` is the faces' size (their bounding box diagonal)."""
+    limit = max(MERGE_DEVIATION, MERGE_DEVIATION_SHARE * size)
+    if deviation > limit:
+        raise SurfaceModifyError(
+            "One surface through these faces would move them by %.2f mm, more than %.2f mm: "
+            "they are not smooth enough to merge. Merge fewer faces at a time." % (deviation, limit)
+        )
+    return "The %d faces become one face (refitted: the surface moves by %.3f mm at most)." % (
+        picked,
+        deviation,
+    )

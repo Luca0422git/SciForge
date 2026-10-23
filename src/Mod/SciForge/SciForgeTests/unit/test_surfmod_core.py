@@ -114,6 +114,14 @@ class Rules(unittest.TestCase):
             core.merge_outcome(1, 1)
         with self.assertRaises(core.SurfaceModifyError):
             core.merge_outcome(2, 2)
+        self.assertIn("one face", core.merge_outcome(2, 2, smooth=True))
+
+    def test_merge_refit(self):
+        self.assertIn("refitted", core.merge_refit_message(2, 0.0005, 30.0))
+        with self.assertRaises(core.SurfaceModifyError):
+            core.merge_refit_message(2, 0.5, 30.0)
+        # a big part may move a little more (0.1 % of its size)
+        core.merge_refit_message(2, 0.05, 100.0)
 
     def test_stitch_tolerance_default(self):
         self.assertEqual(core.STITCH_TOLERANCE, 1.0)

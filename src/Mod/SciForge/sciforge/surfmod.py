@@ -256,10 +256,82 @@ def merge_faces(shape, names):
     if len(surface_geom.shells_or_faces(group)) > 1:
         raise SurfaceModifyError("The picked faces must touch each other (share edges).")
     merged = _unify(group)
-    message = core.merge_outcome(len(picked), len(merged.Faces))
+    smooth = len(merged.Faces) >= len(picked) and _meet_smoothly(group)
+    message = core.merge_outcome(len(picked), len(merged.Faces), smooth)
+    if smooth:
+        merged, deviation = _refit(group)
+        message = core.merge_refit_message(len(picked), deviation, group.BoundBox.DiagonalLength)
     rest = [f.copy() for f in shape.Faces if not any(f.isSame(p) for p in picked)]
     result = sew(rest + [f.copy() for f in merged.Faces])
     return _result(result, "Merge"), message
+
+
+def _meet_smoothly(group, degrees=1.0):
+    """True when every edge two of the faces share is smooth: the faces' normals agree along
+    it (tangent faces), so one surface can run through them."""
+    limit = math.cos(math.radians(degrees))
+    shared = 0
+    for edge in group.Edges:
+        owners = faces_of_edge(group, edge)
+        if len(owners) != 2:
+            continue
+        shared += 1
+        for frac in (0.2, 0.5, 0.8):
+            point = edge.valueAt(
+                edge.FirstParameter + frac * (edge.LastParameter - edge.FirstParameter)
+            )
+            normals = []
+            for face in owners:
+                try:
+                    u, v = face.Surface.parameter(point)
+                    normals.append(App.Vector(face.normalAt(u, v)).normalize())
+                except Exception:
+                    return False
+            if abs(normals[0].dot(normals[1])) < limit:
+                return False
+    return shared > 0
+
+
+def _refit(group):
+    """One face through faces that meet smoothly: filled inside their outer boundary,
+    through points sampled on them. Returns (face, how far it is from them at most)."""
+    from . import surface_geom
+
+    free = surface_geom.free_edges(group)
+    points = []
+    for face in group.Faces:
+        u0, u1, v0, v1 = face.ParameterRange
+        for i in range(1, 6):
+            for j in range(1, 6):
+                point = face.valueAt(u0 + (u1 - u0) * i / 6.0, v0 + (v1 - v0) * j / 6.0)
+                try:
+                    if face.isInside(point, 1e-6, True):
+                        points.append(point)
+                except Exception:
+                    continue
+    try:
+        filled = surface_geom.patch([(e, None) for e in free], "connected", points=points)
+    except Exception as exc:
+        raise SurfaceModifyError(
+            "These faces cannot be refitted as one surface (%s). Merge fewer faces." % _text(exc)
+        )
+    if len(filled.Faces) != 1:
+        raise SurfaceModifyError(
+            "These faces have a hole between them: Merge them in pieces around it."
+        )
+    face = filled.Faces[0]
+    deviation = 0.0
+    for point in points:
+        deviation = max(deviation, face.distToShape(Part.Vertex(point))[0])
+    if group.Faces:  # keep the side the faces had
+        ref = group.Faces[0]
+        u0, u1, v0, v1 = ref.ParameterRange
+        mid = ref.valueAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+        before = ref.normalAt((u0 + u1) / 2.0, (v0 + v1) / 2.0)
+        u, v = face.Surface.parameter(mid)
+        if App.Vector(face.normalAt(u, v)).dot(before) < 0:
+            face.reverse()
+    return face, deviation
 
 
 # -- Press Pull on a surface face ---------------------------------------------------------------
