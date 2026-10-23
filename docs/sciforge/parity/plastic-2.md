@@ -121,8 +121,10 @@ between the bottom and top offsets. Lip and groove volumes are exact (golden mod
 
 Wall thickness at a point: the distance along the inward normal to the next face; where that
 ray runs along inside a wall (a rim's top, a hole through a wall), the wall across there
-(nearest face straight through to the opposite one); thickness that breaks the rule is
-measured again on the exact shape (the display triangles cut corners off round faces).
+(nearest face straight through to the opposite one). The rays run against the body's display
+triangles, looked up in a grid of cubes (only the triangles near a ray are tested), and each
+hit is then moved onto the exact face it lies on (the triangles cut corners off round faces:
+a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
 
 ## Tests
 
@@ -131,19 +133,21 @@ measured again on the exact shape (the display triangles cut corners off round f
     typed; the catch depth arrow dragged; OK; undo / redo; edit from the timeline; Esc;
     save / reopen; the design's rule changed (linked values follow, typed ones stay); Change
     Parameters lists it; timeline Delete takes its groove step too.
-  - `plastic2_snap_options` (78): Manual (a point clicked), Hook and Loop, Perpendicular,
-    Automatic, Aligned, Independent (angles typed, a rotation handle dragged), Align To a
-    clicked face and a clicked edge, the other body picked, Hide Other Body, the catch-length refusal, Esc,
-    components (a moved component), Hook Body picked (refused, then Flip), an empty design.
+  - `plastic2_snap_options` (84): Manual (no point until one is clicked, then a point
+    clicked), Hook and Loop, Perpendicular, Automatic, Aligned, Independent (angles typed, a
+    rotation handle dragged), Align To a clicked face and a clicked edge, the other body
+    picked, Hide Other Body, the catch-length refusal, Esc, components (a moved component),
+    Hook Body picked (refused, then Flip), an empty design.
   - `plastic2_lip` (85): lip on a base and groove in its lid; drafts; height typed and
     dragged; the edges' body refused as the other body; Swap; Groove; Lip; the wall refusal;
     Face Guide; a direction picked along the rim refused; OK; undo / redo; edit; Esc; save /
     reopen; a lip ring on a cone's round rim (Pull Direction exact, Face Guide leaning with
     the cone, exact); walls of different draft refused.
-  - `plastic2_advice` (69): checks, colours, click-to-zoom, Draft unticked, Thickness display,
+  - `plastic2_advice` (73): checks, colours, click-to-zoom, Draft unticked, Thickness display,
     a body left out and back, the pull direction picked and flipped, browser eye, reopen from
     the browser, it follows the design (and waits while hidden), save / reopen, the empty
-    bodies refusal, an empty design.
+    bodies refusal, an empty design, a round boss (its 1.5 mm wall read exactly from both
+    round faces, its hole no undercut).
   - `ribbon_sweep` with `SWEEP_TABS=plastic` (112): every PLASTIC command opens with no
     pop-up or error.
 - Golden models (hand-derived volumes, `SciForgeTests/golden/models/plastic2_*.json`, 18):
@@ -153,7 +157,8 @@ measured again on the exact shape (the display triangles cut corners off round f
   tapered rim; Fusion's usual flow (a hollow box split in two, Lip And Groove, Hook and
   Loop); a lip suppressed and back; a snap fit with the history marker rolled back before it
   and to the end (the other body's step follows both).
-- Unit tests: `SciForgeTests/unit/test_plastic2_core.py` (31).
+- Unit tests: `SciForgeTests/unit/test_plastic2_core.py` (34; the ray grid is checked
+  against testing every triangle).
 
 ## Known gaps
 
@@ -173,7 +178,9 @@ measured again on the exact shape (the display triangles cut corners off round f
 - **Root Radius** defaults to 0 (the research's guess is the rule's Nominal Radius, which
   would not fit the default 0.1 mm clearance without the mouth round SciForge adds).
 - **Design Advice thickness** is sampled (up to 8 points a face), not a continuous map; a
-  thin spot between samples can be missed; the Thickness display colours whole faces. No
-  alert badge on the component in the browser (a shared file). A hidden Design Advice waits
-  and checks again when shown. On big parts (hundreds of faces) a check takes seconds.
+  thin spot between samples can be missed (the Thickness display blends the samples into a
+  smooth map). No alert badge on the component in the browser (a shared file). A hidden
+  Design Advice waits and checks again when shown. A check takes about 2 s for a 60-face
+  enclosure with bosses and 6 s for a 130-face one (measured in the sandbox under load); it
+  runs in the recompute, so FreeCAD waits that long after a change to a checked body.
 - **Injection-moulding simulation** is out of scope (outline 8).

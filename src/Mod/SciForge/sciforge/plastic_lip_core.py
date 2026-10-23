@@ -2,7 +2,7 @@
 """Lip (PLASTIC > CREATE: Lip / Groove / Lip And Groove), the pure part: options, defaults from
 the plastic rule, the checks the dialog shows and the cross-section of the lip and of the
 groove as offsets from the picked edges. No FreeCAD, no Qt: unit tested
-(test_plastic_lip_core.py); plastic_lip.py makes the solids.
+(test_plastic2_core.py); plastic_lip.py makes the solids.
 
 Fusion (docs/sciforge/dev/research/fusion-plastic.md 2.5, 4.4): pick the tangent chain of
 edges where the two halves of an enclosure meet (the inside edge of the rim, so the reveal is

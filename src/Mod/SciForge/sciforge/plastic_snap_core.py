@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Snap Fit (PLASTIC > CREATE), the pure part: options, defaults from the plastic rule, the
 checks the dialog shows, the hook's cross sections and catch profile, the groove / loop boxes
-and the beam strain check. No FreeCAD, no Qt: unit tested (test_plastic_snap_core.py);
+and the beam strain check. No FreeCAD, no Qt: unit tested (test_plastic2_core.py);
 plastic_snap.py turns these numbers into solids.
 
 Fusion's Snap Fit puts a cantilever hook at each sketch point between two bodies and the

@@ -14,7 +14,8 @@ edited (this file is the session log entry).
   and catch profile, the groove / slot / loop boxes, the strain check (tapered factor
   1 / 1.09 per the research's critic pass C5), the lip and groove sections as offsets from
   the picked edges, the Design Advice checks, colours, list rows, a smooth thickness blend
-  and a numpy ray caster.
+  and a numpy ray caster (triangles in a grid of cubes: a 130-face part checks in 6 s,
+  95 s when every ray tested every triangle).
 - `sciforge/plastic_snap.py`, `plastic_lip.py`: the steps. A lead step in one body
   (`SnapFitFeature`, `LipFeature`) and a hidden follower in the other body
   (`SnapGrooveFollower`, `LipGrooveFollower`, subclasses of `modify_bodies._Follower`, role
@@ -41,8 +42,8 @@ edited (this file is the session log entry).
   hand-worked volumes (they give every size, so they do not depend on the default rule).
 - Icons `pl_snap_fit`, `pl_lip`, `pl_design_advice`, `pl_snap_groove`
   (`tools/sciforge/icons_plastic2.py`); the three ribbon entries wired.
-- Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (78), `plastic2_lip` (85),
-  `plastic2_advice` (70); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
+- Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (84), `plastic2_lip` (85),
+  `plastic2_advice` (73); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
   `test_plastic2_core.py` (34).
 
 ## FreeCAD facts and traps found
@@ -57,7 +58,16 @@ edited (this file is the session log entry).
   are and would show the same shift after a primitive (not seen with sketch + extrude, whose
   steps have no Placement): worth a check by their owners.
 - `Mesh.nearestFacetOnRay` ignores the ray's direction (it returned a facet behind the
-  origin): Design Advice casts its own rays (numpy Moller-Trumbore).
+  origin) and `Mesh.foraminate` returns hits both ways, each about 2.4 ms a ray on 20 000
+  triangles: Design Advice casts its own rays (numpy Moller-Trumbore on the triangles of a
+  grid of cubes).
+- The display triangles cut corners off round faces, by up to the tessellation tolerance:
+  a ray from a boss's round side first meets the triangles cutting its own corner (a wall
+  of 0 mm), and a point on a hole's side lies inside the triangles, so a ray up the hole
+  meets the top face (a false undercut). Hits are moved onto the exact face (Newton steps
+  along the ray with `Surface.parameter / value / normal`), a hit landing back on the ray's
+  own face is passed, and undercut rays start outside the triangles. `shape.Faces` builds a
+  new list on every call (3 ms on 130 faces): keep it.
 - `Wire.makeOffset2D` refuses a single straight edge (no plane of its own): the band beside
   a straight chain is made as a rectangle in the rim's plane.
 - Which side a `makeOffset2D` with a positive distance grows to depends on the wire's
@@ -82,8 +92,9 @@ Fusion's exact Snap Fit / Lip dialogs (no page access, no API objects: labels, d
 the Parallel / Perpendicular geometry are SciForge's reading); Face Guide on a chain whose
 walls have different drafts (refused); lip edges not in one plane (refused); Snap Fit
 visibility controls (read as Hide Other Body); Aligned to a face uses its centre; Root
-Radius defaults to 0; Design Advice is sampled (8 points a face), no browser alert badge;
-injection-moulding simulation out of scope.
+Radius defaults to 0; Design Advice is sampled (8 points a face) and checks in the recompute
+(about 6 s for a 130-face part), no browser alert badge; injection-moulding simulation out
+of scope.
 
 ## Notes for the integrator
 

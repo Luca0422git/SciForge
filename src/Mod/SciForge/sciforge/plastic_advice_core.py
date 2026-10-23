@@ -1,7 +1,7 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
 """Design Advice (PLASTIC > INSPECT), the pure part: the checks against the plastic rule, the
 ray casting they use, the colours and the rows of the issues list. No FreeCAD, no Qt: unit
-tested (test_plastic_advice_core.py); plastic_advice.py measures the bodies.
+tested (test_plastic2_core.py); plastic_advice.py measures the bodies.
 
 Fusion's Design Advice (docs/sciforge/dev/research/fusion-plastic.md 2.11, 4.7; Autodesk)
 uses the plastic rule of the component that holds a body and flags:
