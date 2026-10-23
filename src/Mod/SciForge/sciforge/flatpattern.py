@@ -25,7 +25,7 @@ import math
 import FreeCAD as App
 import Part
 
-from . import bodies, components, log, warn
+from . import bodies, components, curves, log, warn
 from . import flatpattern_dxf as fdxf
 from . import sheetmetal, sheetmetal_flat
 from . import sheetmetal_unfold as unfolder
@@ -164,7 +164,7 @@ class FlatPatternFeature:
                     lines.append(Part.makeLine(App.Vector(a.x, a.y, 0), App.Vector(b.x, b.y, 0)))
             bends.append(d)
         if obj.CornerReliefs:
-            flat = with_corner_reliefs(flat, bends, body, result.thickness)
+            flat = with_corner_reliefs(flat, bends, body, result.thickness, folded=shape)
         text = json.dumps(bends, sort_keys=True)
         if obj.BendsJson != text:
             obj.BendsJson = text
@@ -188,30 +188,119 @@ class FlatPatternFeature:
     __setstate__ = loads
 
 
-def with_corner_reliefs(flat, bends, body, thickness):
-    """The flat with the rule's 2-bend corner relief (Round: a hole of the Size's diameter,
-    Square: a square of that side) where two bends meet at a corner, centred on the crossing
-    of their centre lines (Fusion's Intersection placement). The folded part keeps its corner
-    as the Flange made it (sm-forming's known gap): the relief is the flat's."""
+CLOSURE_KIND = "SheetMetalCornerClosure"  # sm-more's Corner Closure step
+
+
+def _bend_axis(folded, bend):
+    """(centre, direction) of a bend's axis in the folded part, or None."""
+    try:
+        surface = folded.Faces[bend["face"] - 1].Surface
+        c, a = surface.Center, surface.Axis
+    except Exception:
+        return None
+    return (c.x, c.y, c.z), (a.x, a.y, a.z)
+
+
+def corner_settings(body):
+    """What the body's own steps say about its 2-bend corners: (closures, flanges).
+    closures: [(edge, edge)] the two flange ends of each Corner Closure step (sm-more): that
+    corner keeps the Corner Closure's own relief (already in the folded part, or none).
+    flanges: [((x, y, z), corner)] the corners an edge Flange (sm-forming) mitres, with the
+    relief it asks for there (its Override Corner Relief, else the rule's)."""
+    closures, flanges = [], []
+    try:
+        from . import sheetmetal_flange as flange
+    except ImportError:
+        flange = None
+    try:
+        steps = list(body.Group)
+    except Exception:
+        steps = []
+    for obj in steps:
+        try:
+            if bodies.kind(obj) == CLOSURE_KIND:
+                edges = []
+                for link in (obj.DominantEdge, obj.SubmissiveEdge):
+                    if link and link[1]:
+                        edge = curves.edge_of(link[0], link[1][0])
+                        if edge is not None:
+                            edges.append(edge)
+                if len(edges) == 2:
+                    closures.append(tuple(edges))
+            elif flange is not None and flange.is_flange(obj):
+                for corner in flange.corner_reliefs(obj):
+                    p = corner["point"]
+                    flanges.append(((p.x, p.y, p.z), corner))
+        except Exception as exc:
+            warn("flat pattern: the corner settings of %s not read: %s" % (obj.Label, exc))
+    return closures, flanges
+
+
+def _closed(closures, meet, reach):
+    point = Part.Vertex(App.Vector(*meet))
+    for pair in closures:
+        try:
+            if all(edge.distToShape(point)[0] <= reach for edge in pair):
+                return True
+        except Exception:
+            continue
+    return False
+
+
+def with_corner_reliefs(flat, bends, body, thickness, folded=None):
+    """The flat with a 2-bend corner relief (Round: a hole of the Size's diameter, Square: a
+    square of that side) where two bends meet at a corner, at the Relief Placement
+    (Intersection: where their centre lines cross; Tangent: reaching the far side of both
+    bend zones). The relief is the edge Flange's at that corner (its Override Corner Relief),
+    else the rule's; a corner a Corner Closure step closed keeps the Corner Closure's own
+    relief (folded: the folded part, whose bend faces the bends name; without it, the rule's
+    relief everywhere). The folded part keeps its corner as the Flange made it (sm-forming's
+    known gap): this relief is the flat's."""
     from . import flatpattern_core as core
 
     if len(bends) < 2:
         return flat
+    thickness = float(thickness)
     try:
         rule = sheetmetal.rule_for_body(body)
     except Exception:
         return flat
-    shape, size = core.relief_size(rule)
-    if size <= 0:
-        return flat
-    reach = max(b["allowance"] for b in bends) + 2 * thickness + size
+    rule_shape, rule_size = core.relief_size(rule)
+    rule_place = rule.get("corner_relief_2bend_placement", "intersection")
+    closures, flanges = corner_settings(body) if folded is not None else ([], [])
+    radius = max(b["radius"] for b in bends)
+    reach_3d = 2.0 * (radius + thickness) + 2.0
+    biggest = max([rule_size] + [float(c.get("size") or 0.0) for _p, c in flanges])
+    reach = max(b["allowance"] for b in bends) + 2 * thickness + biggest
     tools = []
-    for x, y, i, _j in core.corner_points(bends, reach):
-        base = App.Vector(x, y, -thickness - 1.0)
+    for x, y, i, j in core.corner_points(bends, reach):
+        shape, size, place = rule_shape, rule_size, rule_place
+        if folded is not None and (closures or flanges):
+            a, b = _bend_axis(folded, bends[i]), _bend_axis(folded, bends[j])
+            meet = core.axes_meet(a[0], a[1], b[0], b[1]) if a and b else None
+            if meet is not None and _closed(closures, meet, reach_3d):
+                log(
+                    "flat pattern: the corner at bends %d and %d is the Corner Closure's"
+                    % (i + 1, j + 1)
+                )
+                continue
+            k = None if meet is None else core.nearest(meet, [p for p, _c in flanges], reach_3d)
+            if k is not None:
+                corner = flanges[k][1]
+                shape = corner.get("shape", shape)
+                place = corner.get("placement", place)
+                size = float(corner.get("size", 0.0) or 0.0)
+        if shape not in core.RELIEF_SHAPES or size <= 0:
+            continue
+        centre = core.relief_centre(
+            place, core.bend_frame(bends[i]), core.bend_frame(bends[j]), size
+        )
+        cx, cy = centre if centre is not None else (x, y)
+        base = App.Vector(cx, cy, -thickness - 1.0)
         if shape == "round":
             tools.append(Part.makeCylinder(size / 2.0, thickness + 2.0, base))
         else:
-            (x1, y1), (x2, y2) = bends[i]["centre"]
+            (x1, y1), (x2, y2) = [p[:2] for p in bends[i]["centre"]]
             angle = math.degrees(math.atan2(y2 - y1, x2 - x1))
             box = Part.makeBox(size, size, thickness + 2.0, App.Vector(-size / 2, -size / 2, 0))
             box.rotate(App.Vector(), App.Vector(0, 0, 1), angle)

@@ -1,0 +1,135 @@
+{
+  "id": "sm_flat_corner_closure",
+  "title": "Flat pattern of a corner closed by Corner Closure (Tear): no rule corner relief there",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "corner-closure"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              100,
+              0
+            ],
+            [
+              100,
+              55
+            ],
+            [
+              95,
+              55
+            ],
+            [
+              95,
+              60
+            ],
+            [
+              0,
+              60
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          100,
+          20,
+          1
+        ]
+      ],
+      "options": {
+        "height": 20
+      }
+    },
+    {
+      "op": "sf_flange",
+      "id": "f3",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          60,
+          1
+        ]
+      ],
+      "options": {
+        "height": 20
+      }
+    },
+    {
+      "op": "sf_sm_corner_closure",
+      "id": "c1",
+      "dominant": [
+        100,
+        55,
+        12
+      ],
+      "submissive": [
+        95,
+        60,
+        12
+      ],
+      "options": {
+        "alignment": "symmetric",
+        "gap": 1.0,
+        "relief": "tear"
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "bbox": [
+      0,
+      0,
+      -1,
+      119.26195,
+      79.26195,
+      0
+    ],
+    "volume": 9007.93213,
+    "solids": 1,
+    "faces": 14,
+    "rel_tol": 1e-06,
+    "abs_tol": 0.001,
+    "source": "baseline-freecad-1.1.4",
+    "note": "bbox by hand: the walls are 21 - (R + T) = 19 long, so 100 - 2 + BA 2.26195 + 19 by 60 - 2 + BA + 19. The volume is the flat with Corner Reliefs off (checked): the corner the Corner Closure closed keeps its Tear, the rule's 4 mm Round is not cut there (it would take material: scenario flatpattern_corners)"
+  }
+}
