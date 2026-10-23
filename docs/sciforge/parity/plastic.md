@@ -128,7 +128,7 @@ rule when the component has none, and say so in the dialog.
 | Golden | `plastic_rest_cut` | a rest whose plane lies below a round bar's crown: only cuts (exact; QA pass) |
 | Golden | `plastic_boss_major_draft` | the enclosure's counterbores drafted 5 deg (frustum by hand, exact; QA pass) |
 | Scenario | `plastic_qa_rules` (QA pass) | an empty design (Assign gives the default rule and is no timeline step, Ctrl+Z; Manage opens and Esc; Rule Fillet says it needs a solid); a Shell made with the rule follows a reassigned rule, Ctrl+Z puts both back; Assign names the design's copy of a library rule it already holds; Manage: an edit the Shell follows at once, Esc drops both; rename a rule (still assigned, browser row renamed), Ctrl+Z; a new rule switched to inches converts its numbers; a Draft linked to PP 1.5 mm keeps its angle when FDM PLA (no draft) is assigned, a new Draft then opens with its own 1 deg, ABS moves the linked Draft to 1 deg and makes the part ABS, Ctrl+Z (PLA, 1.5 deg) / Ctrl+Y; the browser row's right-click menu opens Manage |
-| Scenario | `plastic_qa_tools` (QA pass) | Boss on a face then Esc (no step, no point sketch left); a Rest with the rule's 1 deg draft (flat 20 x 12 face), Esc; a Rest OK'd, then PMMA 2.5 mm assigned: the Rest follows, its edit says the rule and shows 2.5; a boss saved and reopened: edit from the timeline, Offset 1 (moves), Major Draft Angle 5 (frustum by hand), a rounded drafted mouth refused, OK, Ctrl+Z; PMMA assigned after reopen: the boss follows, its edit shows the rule's root radius 1.25; Side 1 Body picked (the lid) then Flip: the lid moves to the Side 2 box, no error; the lid in a component of its own (placed by the component) with PMMA 2.5 mm, the enclosure with no rule: each side found, built and shown with its own rule (volumes by hand), OK, Ctrl+Z |
+| Scenario | `plastic_qa_tools` (QA pass) | Boss on a face then Esc (no step, no point sketch left); a Rest with the rule's 1 deg draft (flat 20 x 12 face), Esc; a Rest OK'd, then PMMA 2.5 mm assigned: the Rest follows, its edit says the rule and shows 2.5; a boss saved and reopened: edit from the timeline, Offset 1 (moves), Major Draft Angle 5 (frustum by hand), a rounded drafted mouth refused, OK, Ctrl+Z; the default ribs switched on at the enclosure's bosses (the rib ends by the walls left square, said, OK); PMMA assigned after reopen: the boss follows, its edit shows the rule's root radius 1.25; Side 1 Body picked (the lid) then Flip: the lid moves to the Side 2 box, no error; the lid in a component of its own (placed by the component) with PMMA 2.5 mm, the enclosure with no rule: each side found, built and shown with its own rule (volumes by hand), OK, Ctrl+Z |
 | Unit | `test_plastic_core.py` (24) | the library against the research table, inch rules, expressions, refusals, describe, materials; Boss defaults, rule links, refusals, rib angles; the PLASTIC tab's wiring |
 
 ## Known gaps (not built, with the reason)
@@ -142,10 +142,13 @@ rule when the component has none, and say so in the dialog.
   on a spigot as wide as the boss's tip (there is no corner; refused with the reason).
 - **Per-rib extent per point**: Fusion sets each rib of each point; SciForge sets each rib
   once for all the side's points (Each Rib).
-- **A rib ending within the root radius of a wall**: OpenCASCADE cannot make the root fillet
-  there; the dialog refuses with the reason ("make the root radius smaller or 0, or keep the
-  ribs clear of the walls"). Evidence: `boss2.py` probe, rib at 0 / 180 deg 0.25 mm short of
-  the wall fails, the same rib turned 45 deg passes.
+- **A rib ending within the root radius of a wall**: OpenCASCADE cannot round the base of
+  that rib's end (StdFail_NotDone; each of those edges fails alone, every other root edge
+  rounds). Since the QA pass the boss is built with those rib ends left square and the dialog
+  says so ("N rib ends next to a wall are left square: ... shorten the ribs, turn them, or
+  run them To Next"); before, the whole boss was refused, and the default ribs of a boss
+  10 mm from the case's edge (7.75 mm long, 0.25 mm short of the inside wall) hit it. If the
+  rest still cannot be rounded the dialog refuses as before. Fusion rounds them.
 - **Rest clearance** (Inventor's Rest has one; Fusion's is unconfirmed) and a drafted rest on a
   profile with holes (refused with the reason: set the draft to 0).
 - **Boss and Rest values in Change Parameters**: not listed (a rule-linked value would
@@ -184,7 +187,9 @@ converted now (G); Assign showed the library's values for a library rule the des
 holds under that name, while the component takes the design's copy (it says so now); a boss
 whose two bodies are in components with different rules was built with each body's rule but
 showed the active body's rule's values for both sides (each side shows its own rule's values
-now, and the dialog names both rules). New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
+now, and the dialog names both rules); turning on the default ribs of a boss 10 mm from the
+case's edge refused the whole boss (the rib ends 0.25 mm from the wall cannot be rounded by
+OpenCASCADE): those rib ends are left square now, said in the dialog. New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
 golden `plastic_boss_major_draft`, unit tests. Every builder scenario, the plastic golden
 models, the unit tests and the shared dialogs' scenarios pass after the fixes.
 

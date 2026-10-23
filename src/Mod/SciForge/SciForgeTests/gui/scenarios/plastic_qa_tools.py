@@ -543,6 +543,54 @@ def comp_undone():
     )
 
 
+# -- the default ribs of a boss 10 mm from the case's edge -----------------------------------------
+def ribs_setup():
+    doc, bottom, lid, _sk = ps.enclosure("PlasticQARibs")
+    s.update(rb=bottom.Name, rv=ps.volume(bottom))
+    ps.plastic_tab()
+    Gui.Selection.clearSelection()
+    h.ribbon("Boss")
+
+
+def ribs_points():
+    h.check("clicked the sketch's row", ps.click_row("Boss Points"))
+
+
+def ribs_on():
+    p = ps.boss_panel()
+    ps.settle(p)
+    s["rv1"] = ps.volume(App.ActiveDocument.getObject(s["rb"]))
+    ps.tab_of(p, "Ribs")
+    ps.check_box(p.rib_on[2])
+
+
+def ribs_default():
+    """The default ribs (4, at 0 / 90 / 180 / 270 deg, 7.75 mm from the axis) of the bosses at
+    (10, 10) and (50, 30) end 0.25 mm short of the case's inside walls: OpenCASCADE cannot
+    round their base there. The boss is built (those rib ends square) and the dialog says
+    so; it used to refuse the whole boss."""
+    p = ps.boss_panel()
+    ps.settle(p)
+    b = App.ActiveDocument.getObject(s["rb"])
+    text = p.message.text() if p else ""
+    h.check("no refusal", p is not None and not text.startswith("⚠"), text)
+    h.check("the dialog says which rib ends stay square", "left square" in text, text)
+    h.check("the ribs are built", ps.volume(b) > s["rv1"] + 50.0, (ps.volume(b), s["rv1"]))
+    h.check("one valid solid", b.Shape.isValid() and len(b.Shape.Solids) == 1)
+    ps.ok()
+
+
+def ribs_done():
+    h.check("OK closes the Boss", ps.boss_panel() is None)
+    steps = boss_steps()
+    h.check(
+        "both steps valid",
+        len(steps) == 2 and all("Invalid" not in o.State for o in steps),
+        [o.State for o in steps],
+    )
+    App.closeDocument(App.ActiveDocument.Name)
+
+
 h.run(
     "plastic_qa_tools",
     [
@@ -591,5 +639,10 @@ h.run(
         comp_previewed,
         comp_done,
         comp_undone,
+        ribs_setup,
+        ribs_points,
+        ribs_on,
+        ribs_default,
+        ribs_done,
     ],
 )

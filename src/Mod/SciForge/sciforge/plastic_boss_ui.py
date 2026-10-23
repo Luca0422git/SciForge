@@ -845,7 +845,9 @@ class BossPanel(Panel):
             if text:
                 self.message.setText("⚠ " + text)
                 return
-        self.message.setText("")
+        # built, with something done differently from what was asked (rib ends left square)
+        notes = [n for step in self.steps for n in pb.notes_of(step)]
+        self.message.setText("\n".join(notes))
 
     # -- the offset arrow --------------------------------------------------------------------------
     def _remove_arrow(self):

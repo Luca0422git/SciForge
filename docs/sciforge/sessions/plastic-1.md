@@ -116,6 +116,10 @@ did not. What it found and fixed, in plain words for Luca:
   a gap: it is built now (0 by default), with a golden model checked by hand.
 - **Flip with a picked body**: a body picked in a Side box stays on its side of the parting
   plane when you Flip (it moves to the other box), instead of an error.
+- **Ribs next to a wall no longer refuse the boss.** Switching on the default ribs of a boss
+  10 mm from the case's edge refused the whole boss (FreeCAD's geometry kernel cannot round
+  the foot of a rib that stops 0.25 mm short of a wall). The boss is now built, those few rib
+  ends are left square, and the dialog says so and how to round them.
 - **A lid in its own component with its own rule**: each side of the boss already used the
   rule of the body it joins, but the dialog showed one rule's numbers for both sides. It now
   shows each side's own values and names both rules.

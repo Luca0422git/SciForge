@@ -518,9 +518,10 @@ def _rib(frame, e, s, s_top, s_bottom, length, od, label):
     return slab.Solids[0]
 
 
-def build_shape(base, frames, side_settings, label="Side"):
+def build_shape(base, frames, side_settings, label="Side", notes=None):
     """The side's body (global solid) with the boss at every frame: shanks, steps and ribs
-    joined, the root fillet, then the holes cut."""
+    joined, the root fillet, then the holes cut. `notes` (a list) receives what was built
+    differently from what was asked (said in the dialog)."""
     # removeSplitter() on a result can corrupt the shapes it was made from (FreeCAD 1.1.4,
     # shared sub-shapes): work on a copy
     base = base.copy()
@@ -539,7 +540,7 @@ def build_shape(base, frames, side_settings, label="Side"):
             pass
         radius = float(side_settings["root_radius"])
         if radius > TOL:
-            result = _root_fillet(result, base, roots, radius, side_settings, label)
+            result = _root_fillet(result, base, roots, radius, side_settings, label, notes)
     if cuts:
         result = result.cut(cuts)
         try:
@@ -551,12 +552,20 @@ def build_shape(base, frames, side_settings, label="Side"):
     return result
 
 
-def _root_fillet(result, base, roots, radius, s, label):
+def _fillet(result, radius, edges):
+    filleted = result.makeFillet(radius, edges)
+    if filleted.isNull() or not filleted.isValid():
+        raise ValueError("the fillet is not a valid solid")
+    return filleted
+
+
+def _root_fillet(result, base, roots, radius, s, label, notes=None):
     """Fillet the new edges where the shank (and its ribs) meet the body."""
     import Part
 
     od = outer_diameter(s)
     edges = []
+    rib_edges = []  # base edges of the ribs (beyond the shank's root circle)
     for edge in result.Edges:
         try:
             mid = edge.valueAt(
@@ -565,6 +574,7 @@ def _root_fillet(result, base, roots, radius, s, label):
         except Exception:
             continue
         near = False
+        on_rib = False
         for frame, info in roots:
             axial = (mid - frame.a).dot(frame.d)
             radial = ((mid - frame.a) - frame.d * axial).Length
@@ -572,6 +582,8 @@ def _root_fillet(result, base, roots, radius, s, label):
             if abs(axial - info["s_in"]) < 0.5 * (info["s_out"] - info["s_in"]) + 1e-6:
                 if radial <= reach:
                     near = True
+                    shank_root = od / 2.0 + max(0.0, info["root"] - info["tip"]) * _tan(s["draft"])
+                    on_rib = bool(info["ribs"]) and radial > shank_root + 1e-3
                     break
         if not near:
             continue
@@ -590,19 +602,45 @@ def _root_fillet(result, base, roots, radius, s, label):
             continue
         # concave edges only: the shank / rib meets the body here
         edges.append(edge)
+        if on_rib:
+            rib_edges.append(edge)
     if not edges:
         return result
     try:
-        filleted = result.makeFillet(radius, edges)
-        if filleted.isNull() or not filleted.isValid():
-            raise ValueError("the fillet is not a valid solid")
-        return filleted
+        return _fillet(result, radius, edges)
     except Exception as exc:
-        raise BossError(
-            "%s: the root radius (%.2f mm) could not be made where the boss meets the body "
-            "(%s). Make the root radius smaller or 0, or keep the ribs clear of the walls "
-            "(rib length, rotation, or To Next)." % (label, radius, exc)
-        )
+        first = exc
+    # OpenCASCADE cannot round the base of a rib that ends within the root radius of a wall
+    # (StdFail_NotDone; Fusion can). Those rib ends are left sharp, the rest is rounded, and
+    # the dialog says so (QA pass: the default ribs of a boss 10 mm from the case's edge
+    # end 0.25 mm short of its wall, which refused the whole boss).
+    sharp = []
+    for edge in rib_edges:
+        try:
+            _fillet(result, radius, [edge])
+        except Exception:
+            sharp.append(edge)
+    if sharp:
+        keep = [e for e in edges if not any(e.isSame(x) for x in sharp)]
+        try:
+            filleted = _fillet(result, radius, keep)
+            many = len(sharp) > 1
+            text = (
+                "%s: %d rib end%s next to a wall %s left square: the %.2f mm root radius does "
+                "not fit there (shorten the ribs, turn them, or run them To Next to round them)"
+                % (label, len(sharp), "s" if many else "", "are" if many else "is", radius)
+            )
+            log("boss: " + text)
+            if notes is not None:
+                notes.append(text)
+            return filleted
+        except Exception:
+            pass
+    raise BossError(
+        "%s: the root radius (%.2f mm) could not be made where the boss meets the body "
+        "(%s). Make the root radius smaller or 0, or keep the ribs clear of the walls "
+        "(rib length, rotation, or To Next)." % (label, radius, first)
+    )
 
 
 # -- points of a sketch ----------------------------------------------------------------------------
@@ -817,6 +855,8 @@ def _refs(obj):
 def compute(obj):
     import Part
 
+    notes = []  # what was built differently from what was asked (the dialog says it)
+    set_notes(obj, notes)
     base_feature = obj.BaseFeature
     if base_feature is None or base_feature.Shape.isNull() or not base_feature.Shape.Solids:
         raise BossError("A boss needs a body to join: make the part first.")
@@ -834,7 +874,7 @@ def compute(obj):
     else:
         points = global_points(refs)
         frames = frames_for(sketch, points, toward, float(options.get("offset", 0.0)))
-        result = build_shape(base, frames, settings, "Side %d" % side)
+        result = build_shape(base, frames, settings, "Side %d" % side, notes)
     if body is not None:
         result = bodies.to_local(result, body)
     if obj.Refine:
@@ -844,6 +884,21 @@ def compute(obj):
             pass
     solids = result.Solids
     obj.Shape = solids[0] if len(solids) == 1 else Part.makeCompound(solids)
+
+
+def set_notes(obj, notes):
+    """Keep the step's notes (not saved: they come back with the next recompute)."""
+    try:
+        obj.Proxy.notes = notes
+    except Exception:
+        pass
+
+
+def notes_of(obj):
+    try:
+        return list(getattr(obj.Proxy, "notes", None) or [])
+    except Exception:
+        return []
 
 
 def _attach_view_provider(obj):
