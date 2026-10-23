@@ -4,7 +4,65 @@ Implemented in `src/Mod/SciForge/sciforge/`: `surface_core.py` (the tools as dat
 pure Python), `surface_geom.py` (the geometry), `surface.py` (the steps in the document),
 `surface_pick.py` (picked shapes and cells drawn in the view), `surface_ui.py` (the dialogs
 and commands). Status: **first pass (2026-10-14), part 2 (2026-10-16: the Extrude, Revolve,
-Sweep and Loft options in the next section), not yet signed off by Luca.**
+Sweep and Loft options in the next section), part 3 (2026-10-23, wave 6: the options of the
+surface tools, Environmental Map Analysis, Isoparametric Curve; next section), not yet signed
+off by Luca.**
+
+## Part 3: the options of the surface tools (wave 6, branch `sf/surface-3`)
+
+The gaps of the audit `dev/research/surface-gaps.md` that are in the `surface*` files (its
+numbers in brackets), researched in `dev/research/fusion-surface.md`. **A** = Autodesk: the
+help pages (Offset [H-OFF](https://help.autodesk.com/cloudhelp/ENU/Fusion-Patch/files/SFC-OFFSET.htm),
+Patch [H-PATCH-REF](https://help.autodesk.com/cloudhelp/ENU/Fusion-Patch/files/SFC-REF-PATCH.htm),
+Untrim [H-UNTRIM](https://help.autodesk.com/cloudhelp/ENU/Fusion-Patch/files/SFC-UNTRIM.htm),
+Revolve [H-REV-REF](https://help.autodesk.com/cloudhelp/ENU/Fusion-Patch/files/SFC-REF-REVOLVE.htm),
+Sweep [H-SWP](https://help.autodesk.com/cloudhelp/ENU/Fusion-Patch/files/SFC-SWEEP.htm),
+Loft [H-LOFT-REF](https://help.autodesk.com/cloudhelp/ENU/Fusion-Patch/files/SFC-REF-LOFT-DLG.htm),
+Extend [H-EXTEND-REF](https://help.autodesk.com/cloudhelp/ENU/Fusion-Patch/files/SFC-REF-EXTEND.htm),
+Extrude [H-EXT-REF](https://help.autodesk.com/cloudhelp/ENU/Fusion-Patch/files/SFC-REF-EXTRUDE.htm),
+[Stitch](https://help.autodesk.com/view/fusion360/ENU/?contextId=SFC-STITCH)), the API reference
+(`OffsetTypes`, `PatchFeatureInput.groupWeight` / `isGroupEdges`, `UntrimLoopTypes`,
+`RuledSurfaceCornerTypes`, `SweepFeatureInput.guideSurfaces`, `StitchFeatureInput.operation`,
+`SketchIsoparametricCurves`, the `adsk` stubs) and the product-update blogs
+([May 2025](https://www.autodesk.com/products/fusion-360/blog/whats-new-may-2025-major-product-update/):
+Rounded Offset; [January 2026](https://www.autodesk.com/products/fusion-360/blog/january-2026-product-update-whats-new/):
+Patch Reverse Normal; [March 2026](https://www.autodesk.com/products/fusion-360/blog/march-2026-product-update-whats-new/):
+Isoparametric Curve; [September 2026](https://www.autodesk.com/products/fusion-360/blog/september-2026-major-product-update-whats-new/):
+closed-loft corners, Environmental Map Analysis). **G** = SciForge's guess.
+
+| Fusion | SciForge | Src |
+|---|---|---|
+| Offset: Offset Type **Sharp Offset** / **Rounded Offset**, Sharp by default (May 2025) [3] | Same: Sharp carries the offset faces on until they meet (OpenCASCADE's intersection join), Rounded fills each outside corner with an arc of the distance. A design saved before part 3 keeps Rounded (its result does not change on reopen). Sharp that cannot close (OpenCASCADE fails): refused, "try Rounded Offset" | A |
+| Patch: **Group Edges** off gives a Continuity per boundary edge [8] | Same: Group Edges off lists one row per edge (Edge 1, Edge 2...), each Connected / Tangent / Curvature; a Tangent edge OpenCASCADE cannot meet is refused with the reason | A |
+| Patch: **Reverse Normal** check box + **Flip** (January 2026) [8] | Same: the patch faces the other way; Flip turns it over again | A |
+| Patch: Tangency Weight, 0.5 by default [8] | Shown 0.5, greyed: OpenCASCADE's plate surface takes the faces' direction but no strength (see the gaps) | A |
+| Untrim: Type **Manual** (pick the loops) and **Keep Copy** [11] | Same: Manual swaps the Faces box for a Loops box (a click on an edge takes its loop: a hole or the outer boundary); Extend works on an outer loop. Keep Copy puts the surface as it was in a body of its own (it goes with the step: undo, delete, clearing Keep Copy) | A |
+| Revolve: **Project Axis** (on), the extent word **Partial**, **To** with **Two Sides** [12] | Same: Project Axis lays the axis into the profile's sketch plane (off: the axis where it is; an axis square to that plane is refused with the reason); Type Partial / To / Full (saved files keep the key "angle"); To offers One Side / Two Sides (no Symmetric), Two Sides asks for Object Two and turns the first side the right-handed way to the first object, the second side the other way to the second (overlapping sides refused). A revolve saved before part 3 keeps its axis unprojected | A, G (Project Axis on) |
+| Extrude: flat faces as Profiles; To Object **Chain Faces / Extend Faces** [13] | Same: a click on a flat face takes the curves round it (holes too); the Faces row offers Chain Faces (the face and the faces joined smoothly to it) / Extend Faces (the face alone, carried on past its edges) | A |
+| Sweep: Type **Path + Guide Surface** [7] | Same: a Guide Surface box (faces; Chain Selection adds tangent faces); the profile keeps the angle it has to the surface along the path (the solid Sweep's rule, `sweep.py`); Orientation, Taper and Twist are not offered | A |
+| Sweep Path + Guide Rail: Extent **Perpendicular to Path** (default) / **Full Extents**; Path Distance and **Guide Rail Distance** [14] | Same: Perpendicular to Path stops square to the path where the shorter of path and rail ends; Full Extents runs both to their ends (the rail spread over the whole path); Guide Rail Distance takes that share of the rail. A rail sweep saved before part 3 keeps Full Extents (what it did then) | A, G (Full Extents' mapping) |
+| Loft: closed profiles with the same number of clearly defined corners are matched corner to corner (September 2026) [15] | Same: when every profile is a closed curve with the same number (3 or more) of sharp corners, each profile is restarted (and turned round when drawn the other way) so that corner meets corner with the least twist; other profiles loft as before | A |
+| Loft: Edge Alignment Free Edges / Align Edges / Align to Surface [15] | The row is shown with a Tangent or Curvature end; Free Edges only, the other two greyed with the reason (see the gaps) | A |
+| Extend Natural carries the face's own surface on (free-form faces too) [9] | Same for faces that are their surface's parameter rectangle: cylinders, cones, spheres, tori, revolved and extruded curves are carried on by their own definition (one face, still the same surface); free-form (B-spline, Bezier) faces by their own polynomial, refitted through 24 x 24 points of it (OpenCASCADE cannot trim a B-spline past its bounds). Past a sphere's pole or round onto itself: refused. Other faces: tangent bands as before | A, G (refit) |
+| Extend Natural, Edge Alignment **Align Edges** [9] | Same: the extension's sides carry on the outside edges meeting the picked one (a trapezoid's slanted sides go on slanting; a flat face stays one face); where no outside edge meets it, or that one is extended too, the side leaves square to the edge as with Free Edges. A face that is its surface's parameter rectangle carries itself on, its sides being the surface's own curves (aligned either way). Neighbours turning back too sharply: refused ("Use Free Edges") | A, G (the side directions blended along the edge) |
+| Stitch: Operation (New Body / Join / Cut / Intersect) when the result closes [21] | Same: Join, Cut and Intersect combine the closed stitch with the solid it touches (the step goes into that solid's body, the surfaces are used up); a stitch that does not close is refused ("do not close into a solid"), as is one that touches no solid | A |
+| Trim: a single face of a body as the Trimming Tool [22] | Same: a click on a face of a solid takes that face alone (a surface body is still taken whole, as before) | A |
+| Ruled: Corner Type **Rounded** / **Mitered**, Rounded by default [24] | Same: the Mitered Corners check box became the Corner Type row. Ruled Type stays Tangent first (Fusion's default was not found, **G**) | A, G |
+| INSPECT > **Environmental Map Analysis** (September 2026): a live reflection of the surroundings on the faces, Reflection Strength [17] | Same: Environment Studio (three soft light strips over a dark floor) / Horizon (sky over ground), Reflection Strength 0 .. 100 % (70 by default), Opacity, High Quality; a sphere map looked up by the reflection direction (Coin's environment mapping), so the bands slide over the surface as the view turns and a kink shows as a kink; listed in the browser's Analysis folder, saved with the design | A, G (the studio pictures) |
+| Sketch > Project / Include > **Isoparametric Curve** (March 2026): U or V curves of a face, one at a distance from the face edge or several distributed, associative [18] | Same: click a face in an open sketch: its U curve through the clicked place is drawn (purple); Direction U / V; Type Single (Distance from the face's first edge, measured along the face) / Distributed (Count curves spread evenly); OK or Enter keeps them. They follow the face when the design changes. Kept like Project to Surface's curves, in a companion of the sketch (FreeCAD's sketches are flat) | A, G (Single's distance measured along the middle of the face) |
+| Change Parameters lists the surface features' numbers | Same: every surface step's distances, angles, ratios and tolerance are rows of Change Parameters | A (H-MOD), G |
+
+Implemented in `surface_core.py` (the choices, `LEGACY` / `with_saved` for files saved
+before, `turn_angle` / `two_sided_to`, `corner_shift`, the isocurve fractions: unit tested),
+`surface_geom.py` (`offset_faces` join type, `patch` per-edge orders and reverse,
+`untrim_loops`, `project_axis`, `_rail_extent`, `match_corners`, `_grow_rectangle` / `_refit`,
+`_aligned_extend`,
+`stitched_operation`), `surface.py` (Keep Copy's piece body, the guide faces, the stitch
+target), `surface_ui.py` (the rows), `surface_analysis*.py` (Environmental Map),
+`surface_iso.py` / `surface_iso_ui.py` (Isoparametric Curve). Golden models `surface3_*` (10,
+analytic) and `surface3_extend_align_edges`; scenarios `surface3_offset_patch`, `surface3_untrim_revolve` (with save / reopen
+and a component), `surface3_sweep_extrude`, `surface3_stitch_trim_ruled`,
+`surface3_extend_envmap`, `surface3_isocurve`.
 
 ## Part 2: Extrude, Revolve, Sweep and Loft options (wave 5, branch `sf/surface-2`)
 
@@ -133,10 +191,10 @@ is undone or rolled back; the icon follows.
 | Revolve | Profile, Axis (a line, edge or origin axis), Type Angle / To / Full, Direction, Angle | Same (To since part 2); Symmetric turns the angle each way (at most 180) | A |
 | Sweep | Single Path or Path + Guide Rail; Distance; Orientation; Twist / Taper | Same: Single Path and Path + Guide Rail with Profile Scaling (part 2); Distance and Distance Two (a share of the path, when the profile sits inside it); Orientation Perpendicular / Parallel; Twist Angle, Taper Angle | A |
 | Loft | Profiles (curves, points) in order; Guide Type Rails / Centerline; end conditions; Closed; Tangent Edges Merge | Profiles in a list (Up / Down / Remove), Chain Selection, Closed; rails (one or two), a centerline, end conditions and Merge since part 2 | A |
-| Patch | Boundary Edges (a closed loop: one click finds the loop), Enable Chaining, Group Edges, Continuity Connected / Tangent / Curvature (sketch curves: ignored), Tangency Weight, Interior Rails / Points | Same boxes; Continuity for edges of bodies (G0 / G1 / G2); Interior Rails / Points. A boundary that does not close is refused with the count of open curves | A |
+| Patch | Boundary Edges (a closed loop: one click finds the loop), Enable Chaining, Group Edges, Continuity Connected / Tangent / Curvature (sketch curves: ignored), Tangency Weight, Interior Rails / Points, Reverse Normal | Same boxes; Continuity for edges of bodies (G0 / G1 / G2), per edge with Group Edges off (part 3); Interior Rails / Points; Reverse Normal + Flip (part 3). A boundary that does not close is refused with the count of open curves | A |
 | Patch, Tangent | The patch meets the surrounding faces tangent | Same, and SciForge measures it: where OpenCASCADE could not turn the patch to meet the walls (walls steeper than its patch can follow, such as a vertical tube's rim), the dialog says so instead of making a near-flat patch | A |
-| Ruled | Edges; Ruled Type Normal / Tangent / Direction; Distance; Angle; Alternate Faces; Mitered Corners (default rounded) | Same | A |
-| Offset | Faces (Chain Selection on: tangent faces too); Distance (positive along the face normal); New Body / New Component | Same | A |
+| Ruled | Edges; Ruled Type Normal / Tangent / Direction; Distance; Angle; Alternate Faces; Corner Type Rounded / Mitered (default Rounded) | Same (Corner Type since part 3) | A |
+| Offset | Faces (Chain Selection on: tangent faces too); Offset Type Sharp / Rounded; Distance (positive along the face normal); New Body / New Component | Same (Offset Type since part 3, Sharp by default) | A |
 | Thicken | Faces or surface bodies; Thickness; Direction One Side / Symmetric; Thicken Type Sharp / Rounded (rounded corners take the thickness as radius); Operation Join / Cut / Intersect / New Body / New Component; also on the SOLID tab | Same; a negative thickness thickens the other way; Join / Cut / Intersect act on the solid the faces belong to, else the solid the thickened shape touches; too thick: refused ("use a smaller thickness") | A, F (radius) |
 | Boundary Fill | Tools (bodies, surfaces, planes); cells of the closed spaces, picked in the view or the list; Remove Tools; Operation; also on the SOLID tab | Same: the cells are drawn see-through when the Cells box is blue, the one under the mouse lights up, a click picks it (blue); the list ticks them too; "No closed cell yet" when the tools close no space | A |
 | Boundary Fill, Remove Tools | Off: the tools stay | Off by default | G |
@@ -145,12 +203,12 @@ is undone or rolled back; the icon follows.
 
 | Tool / option | Fusion | SciForge | Src |
 |---|---|---|---|
-| Trim | Trimming Tool: a surface, a plane or a sketch curve; then click the pieces to remove (they turn red; click again to keep) | Same. A sketch curve cuts straight through along its sketch's normal. A whole body (a click on any face of it) can be the tool | A, F (red) |
+| Trim | Trimming Tool: a surface, a plane or a sketch curve; then click the pieces to remove (they turn red; click again to keep) | Same. A sketch curve cuts straight through along its sketch's normal. A surface body (a click on any face of it) is the tool whole; a click on a face of a solid takes that face alone (part 3) | A, F (red) |
 | Trim, the tool's own body | The tool surface is trimmed by the surfaces it crosses too (Trim "splits intersecting surfaces") | Same: both walls of a cross are cut, one step changes both | A |
 | Trim, nothing cut | | The dialog says the tool cuts no surface and OK waits | G |
-| Untrim | Faces; Type All Edges / Internal Edges / External Edges; Extend (the outer edges, a distance) | Same; only loops that touch no other face are removed (the API's rule); none: refused with the reason | A |
-| Extend | Edges (outer edges only), Enable Chaining (tangent edges); Distance (an arrow); Extend Type Natural / Perpendicular / Tangent; Edge Alignment Free / Align (Natural only) | Same, except Align Edges (greyed with the reason). Natural carries the face's own surface on where it can (a flat face stays one face; cylinders, cones); Natural and Tangent extend outwards only, Perpendicular both ways | A |
-| Stitch | Surface bodies; Tolerance (default 1.0 mm, forum); a closed result becomes a solid; the edges within tolerance are shown green, the ones left open red | Same; the open edges left are drawn red and counted, the ones the stitch closes green (part 2), "Closed" when it makes a solid; a solid picked is refused ("Unstitch it first") | A, F (1.0 mm) |
+| Untrim | Faces; Type All Edges / Internal Edges / External Edges / Manual; Extend (the outer edges, a distance); Keep Copy | Same (Manual and Keep Copy since part 3); only loops that touch no other face are removed (the API's rule); none: refused with the reason | A |
+| Extend | Edges (outer edges only), Enable Chaining (tangent edges); Distance (an arrow); Extend Type Natural / Perpendicular / Tangent; Edge Alignment Free / Align (Natural only) | Same (Align Edges since part 3). Natural carries the face's own surface on (a flat face stays one face; cylinders, cones, spheres, tori, revolved, extruded and free-form faces since part 3); Natural and Tangent extend outwards only, Perpendicular both ways | A |
+| Stitch | Surface bodies; Tolerance (default 1.0 mm, forum); a closed result becomes a solid; the edges within tolerance are shown green, the ones left open red; Operation when it closes | Same; the open edges left are drawn red and counted, the ones the stitch closes green (part 2), "Closed" when it makes a solid; a solid picked is refused ("Unstitch it first"); New Body / Join / Cut / Intersect (part 3) | A, F (1.0 mm) |
 | Unstitch | Faces or bodies; Chain Selection (on: every face joined to the clicked one) | Same: each face becomes a surface body | A, F |
 | Reverse Normal | Surface bodies: every face turned over | Same, a short arrow shows which way each surface faces; a solid is refused (its faces always point out) | A |
 | Replace Face, Split Face (SURFACE > MODIFY too) | Faces of solids; the target or tool may be a surface body | Same commands as on the SOLID tab (`direct-modify.md`); since modify-2 Replace Face takes any target surface, a surface body's face included | A |
@@ -162,16 +220,20 @@ is undone or rolled back; the icon follows.
 |---|---|
 | Patch Continuity Curvature on stock FreeCAD 1.1.4 | FreeCAD bug: `MakeFilling.add` casts order 2 to `GeomAbs_C1`, which OpenCASCADE's filling ignores (the patch silently came out tangent-less). Fixed by core patch #14 (`docs/sciforge/core-patches.md`); until a full build ships it, the dialog refuses Curvature with the reason (Tangent works). `surface_geom.g2_available()` tells a patched build |
 | Patch Tangent onto vertical walls (a tube's rim) | OpenCASCADE's plate surface cannot turn that far (the reached tangency is off by about 90 degrees, measured): refused with the reason instead of a wrong patch. Sloped walls work |
-| Patch: Group Edges off (a continuity per edge), Tangency Weight | OpenCASCADE's filling has no tangency weight; per-edge continuity is possible in it but its dialog rows are not built. Both shown greyed with the reason |
+| Patch Tangency Weight | OpenCASCADE's filling (`BRepFill_Filling` / GeomPlate) matches the neighbouring faces' direction but has no strength for it, so the weight could not change the shape: shown 0.5 (Fusion's default) and greyed with the reason. Group Edges off works since part 3 |
 | Extrude All after the design changes | All goes through the bodies that were visible when the step was made (they are saved with it, so a reopened design gives the same surface); a body shown or added later is not taken in until the step is edited. Fusion's rule for a later change is not documented (**G**) |
 | Extrude From Object with a taper from a slanted or curved start | Refused with the reason: a taper is measured from a start plane, and a curved start has none |
-| Sweep Path + Guide Rail: Full Extents / Perpendicular To Path, Path Distance and Guide Rail Distance (**A**) | Not built: the rail sweep runs the share of the path set by Distance (the whole path by default). Needs a second distance handle on the rail and the rule for where Perpendicular To Path stops |
+| Sweep Path + Guide Rail, Full Extents with a rail shorter or longer than the path | Built (part 3), but how Fusion maps the rail onto the path then was not found: SciForge spreads the rail evenly over the path, so the profile turns to keep touching it (**G**). Guide Rail Distance has a field, no drag handle on the rail yet |
 | Loft with three or more rails | Refused with the reason ("one or two rails"): SciForge fits each section to the rails by a turn, move and stretch, which two rails fix exactly; more would need a real multi-rail fit (OpenCASCADE has no rail loft) |
 | A closed loft with rails or a centerline | Refused with the reason (Fusion's behaviour not found, **G**) |
 | Tangent Edges Merge off by default | Fusion's default was not found (the API page is cut off). Merge is off because OpenCASCADE measures the volume of a merged side (one B-spline face closed round the profile) several percent wrong: a slot lofted to the same slot gives +5.6 % (golden `sf_loft_merge_slot_volume`, expected failure); the shape itself is right (its mesh gives the true volume) |
 | Loft rails between profiles that turn | The rail loft fits 8 sections between each pair of profiles: within 1 % of the true shape (a square turned a quarter round two arc rails: 3889 against 3927 mm³, golden `sf_loft_rails_turning`) |
-| A closed loft of sketch profiles that twists | OpenCASCADE pairs the profiles' start points as they come; a profile drawn from another corner makes a twisted closed loop (no start-point matching yet) |
-| Offset corner type | The research mentions sharp / rounded offset corners (unconfirmed, **F**); SciForge's offset rounds convex corners. Not built while Fusion's option is unconfirmed |
-| Extend Edge Alignment Align Edges | Not built (greyed); Natural on a free-form face falls back to a tangent band. OpenCASCADE has no extension that keeps neighbouring extended edges aligned; it needs SciForge's own surface building |
+| A loft of closed smooth profiles (no corners) that twists | Corner matching (part 3) needs sharp corners, as Fusion's September 2026 rule does; smooth closed profiles still pair where OpenCASCADE starts them |
+| Extend Natural on a trimmed curved face | A face that is not its surface's parameter rectangle (a trimmed face) still gets a band (tangent, or with Align Edges along its neighbours), not its own surface: OpenCASCADE cannot grow a trimmed face's boundary along its surface |
+| Extend Natural on a free-form face | Carried on by the surface's own polynomial and refitted through 24 x 24 of its points: the extended face is a new B-spline that matches the old one at those points (between them it can differ by a hair: measured 3e-6 mm on a wavy B-spline face, 2e-3 mm on a circle-to-ellipse loft carried on 20 %); a neighbouring face is sewn to it with a 0.001 mm tolerance |
+| Loft Edge Alignment Align Edges / Align to Surface | Shown greyed with the reason: OpenCASCADE's loft (ThruSections) takes no direction for the side curves at a profile's ends; SciForge's own end rule (`loft_ends.py`) sets the takeoff across the profile only |
+| Extrude To Object Match Shape | Not built: Fusion's documentation found does not describe it (Autodesk's Inventor has a Match Shape for open profiles, [reference](https://help.autodesk.com/cloudhelp/2015/ENU/Inventor-Help/files/GUID-951A7AC9-D30D-4834-ADB9-959AC4CD404E.htm)); the audit's row came from one search excerpt. Chain Faces / Extend Faces is built |
+| Isoparametric Curve inside the sketch | Fusion puts the curves in the sketch itself; FreeCAD's sketches are flat, so they live in a companion of the sketch (like Project to Surface's): drawn, hidden, listed and deleted with the sketch, but the sketch's own tools (constraints, Trim) cannot use them. Editing them again means deleting and picking again (no edit dialog yet) |
+| Environmental Map pictures | Fusion's studio images were not found; SciForge draws its own two (Studio, Horizon) |
 | Boundary Fill from planes alone | Fusion is reported to need at least one body (**F**, one forum report); SciForge accepts planes alone, which does no harm, so it is kept until Luca's Fusion confirms it |
 | The design's first sketch body | A new design's first sketch lives in a body (FreeCAD needs one); when the first thing made from it is a surface, that body stays in the browser with only the sketch in it. Fusion keeps sketches outside bodies |

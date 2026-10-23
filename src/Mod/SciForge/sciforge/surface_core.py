@@ -42,15 +42,38 @@ EXTEND_TYPES = ("natural", "perpendicular", "tangent")
 EXTEND_LABELS = {"natural": "Natural", "perpendicular": "Perpendicular", "tangent": "Tangent"}
 ALIGNMENTS = ("free", "align")
 ALIGNMENT_LABELS = {"free": "Free Edges", "align": "Align Edges"}
-LOOP_TYPES = ("all", "internal", "external")
-LOOP_LABELS = {"all": "All Edges", "internal": "Internal Edges", "external": "External Edges"}
+LOOP_TYPES = ("all", "internal", "external", "manual")
+LOOP_LABELS = {
+    "all": "All Edges",
+    "internal": "Internal Edges",
+    "external": "External Edges",
+    "manual": "Manual",
+}
 THICKEN_TYPES = ("sharp", "rounded")
 THICKEN_LABELS = {"sharp": "Sharp", "rounded": "Rounded"}
+# Offset Type (Fusion May 2025): Sharp keeps the offset faces meeting in sharp edges (the
+# faces carried on until they meet), Rounded rounds the convex corners (an arc of the
+# distance about the corner). Sharp is Fusion's default; steps saved before SciForge had
+# the choice keep Rounded (LEGACY below), so a reopened design keeps its shape.
+OFFSET_TYPES = ("sharp", "rounded")
+OFFSET_LABELS = {"sharp": "Sharp Offset", "rounded": "Rounded Offset"}
+# Ruled Corner Type (Fusion: Rounded / Mitered, default Rounded) -> the "mitered" option.
+CORNER_TYPES = (("Rounded", False), ("Mitered", True))
 ORIENTATIONS = ("perpendicular", "parallel")
 REVOLVE_TYPES = ("angle", "to", "full")
+# Fusion's word for the Angle extent is Partial (the key stays "angle" in saved files).
+REVOLVE_LABELS = {"angle": "Partial", "to": "To", "full": "Full"}
 EXTENTS = ("distance", "to_object", "all")
 STARTS = ("profile", "offset", "object")
-SWEEP_TYPES = ("single", "rail")
+SWEEP_TYPES = ("single", "rail", "surface")
+SWEEP_LABELS = {
+    "single": "Single Path",
+    "rail": "Path + Guide Rail",
+    "surface": "Path + Guide Surface",
+}
+# Path + Guide Rail extent (Fusion: where the sweep stops relative to the rail).
+RAIL_EXTENTS = ("perpendicular", "full")
+RAIL_EXTENT_LABELS = {"perpendicular": "Perpendicular to Path", "full": "Full Extents"}
 SCALINGS = ("scale", "stretch", "none")
 SCALING_LABELS = {"scale": "Scale", "stretch": "Stretch", "none": "None"}
 GUIDES = ("rails", "centerline")
@@ -66,8 +89,10 @@ MAX_TAPER = 89.0
 STITCH_TOLERANCE = 1.0
 MAX_TOLERANCE = 10.0
 MIN_TOLERANCE = 1e-6
-# Patch: Fusion's tangency weight scale (its fillet weights run 0.1 .. 2.0, default 1).
+# Patch: Fusion's tangency weight scale (its fillet weights run 0.1 .. 2.0); the Patch
+# dialog starts at 0.5 (API PatchFeatureInput.groupWeight).
 WEIGHT_RANGE = (0.1, 2.0)
+PATCH_WEIGHT = 0.5
 
 KINDS = {
     "extrude": {
@@ -103,6 +128,7 @@ KINDS = {
             "direction": "one_side",
             "angle": 360.0,
             "angle2": 0.0,
+            "project_axis": True,
             "chain": True,
             "operation": "new_body",
         },
@@ -121,6 +147,8 @@ KINDS = {
             "twist": 0.0,
             "taper": 0.0,
             "scaling": "scale",
+            "rail_extent": "perpendicular",
+            "rail_distance": 1.0,
             "chain": True,
             "operation": "new_body",
         },
@@ -141,6 +169,7 @@ KINDS = {
             "end_condition": "free",
             "end_weight": 1.0,
             "end_angle": 0.0,
+            "edge_alignment": "free",
             "chain": True,
             "operation": "new_body",
         },
@@ -153,8 +182,10 @@ KINDS = {
         "operations": CREATE_OPERATIONS,
         "defaults": {
             "continuity": "connected",
-            "weight": 1.0,
+            "weight": PATCH_WEIGHT,
             "group_edges": True,
+            "edge_continuity": [],
+            "reverse": False,
             "chain": True,
             "operation": "new_body",
         },
@@ -181,7 +212,12 @@ KINDS = {
         "type": "SurfaceOffset",
         "create": True,
         "operations": CREATE_OPERATIONS,
-        "defaults": {"distance": 0.0, "chain": True, "operation": "new_body"},
+        "defaults": {
+            "distance": 0.0,
+            "offset_type": "sharp",
+            "chain": True,
+            "operation": "new_body",
+        },
     },
     "boundary_fill": {
         "title": "Boundary Fill",
@@ -219,7 +255,7 @@ KINDS = {
         "type": "Untrim",
         "create": False,
         "operations": (),
-        "defaults": {"loop_type": "all", "extend": False, "distance": 0.0},
+        "defaults": {"loop_type": "all", "extend": False, "distance": 0.0, "keep_copy": False},
     },
     "extend": {
         "title": "Extend",
@@ -239,7 +275,8 @@ KINDS = {
         "icon": "stitch",
         "type": "Stitch",
         "create": False,
-        "operations": ("new_body",),
+        # Fusion: the operation is used when the stitch closes into a solid
+        "operations": ("new_body", "join", "cut", "intersect"),
         "defaults": {"tolerance": STITCH_TOLERANCE, "operation": "new_body"},
     },
     "unstitch": {
@@ -266,6 +303,15 @@ KINDS = {
         "operations": (),
         "defaults": {},
     },
+}
+
+# Options a step saved before SciForge had them reads as it was built then (a reopened
+# design keeps its shape): an Offset without Offset Type was Rounded, a Revolve without
+# Project Axis used the axis where it is, a rail Sweep ran both curves to their ends.
+LEGACY = {
+    "offset": {"offset_type": "rounded"},
+    "revolve": {"project_axis": False},
+    "sweep": {"rail_extent": "full"},
 }
 
 # SciForgeType -> kind
@@ -342,6 +388,15 @@ def with_defaults(kind, options=None):
     return merged
 
 
+def with_saved(kind, saved):
+    """The options of a saved step: what it saved, the LEGACY value for an option it was
+    saved without, the starting values for the rest."""
+    saved = dict(saved or {})
+    for key, value in LEGACY.get(kind, {}).items():
+        saved.setdefault(key, value)
+    return with_defaults(kind, saved)
+
+
 def operations(kind):
     return list(spec(kind)["operations"])
 
@@ -386,9 +441,11 @@ def check_values(kind, options):
             raise SurfaceError("The taper angle must be between -89 and 89 degrees.")
     elif kind == "revolve":
         if o.get("type") not in REVOLVE_TYPES:
-            raise SurfaceError("Pick Angle, To or Full.")
+            raise SurfaceError("Pick Partial, To or Full.")
         if o.get("direction") not in DIRECTIONS:
             raise SurfaceError("Pick One Side, Two Sides or Symmetric.")
+        if o.get("type") == "to" and o.get("direction") == "symmetric":
+            raise SurfaceError("To turns One Side or Two Sides (each side to its own object).")
         a1 = _finite(o.get("angle", 0.0), "Angle")
         a2 = _finite(o.get("angle2", 0.0), "Angle Two")
         if o.get("type") == "angle":
@@ -403,8 +460,14 @@ def check_values(kind, options):
                 raise SurfaceError("A revolve turns at most 360 degrees in all.")
     elif kind == "sweep":
         if o.get("type", "single") not in SWEEP_TYPES:
-            raise SurfaceError("Pick Single Path or Path + Guide Rail.")
-        for key, what in (("distance", "Distance"), ("distance2", "Distance Two")):
+            raise SurfaceError("Pick Single Path, Path + Guide Rail or Path + Guide Surface.")
+        if o.get("rail_extent", "perpendicular") not in RAIL_EXTENTS:
+            raise SurfaceError("Pick Perpendicular to Path or Full Extents.")
+        for key, what in (
+            ("distance", "Distance"),
+            ("distance2", "Distance Two"),
+            ("rail_distance", "Guide Rail Distance"),
+        ):
             value = _finite(o.get(key, 1.0), what)
             if not 0.0 <= value <= 1.0:
                 raise SurfaceError("%s is a share of the path: type a number from 0 to 1." % what)
@@ -435,6 +498,9 @@ def check_values(kind, options):
     elif kind == "patch":
         if o.get("continuity") not in CONTINUITY:
             raise SurfaceError("Pick Connected, Tangent or Curvature.")
+        for value in o.get("edge_continuity") or []:
+            if value not in CONTINUITY:
+                raise SurfaceError("Pick Connected, Tangent or Curvature for every edge.")
         weight = _finite(o.get("weight", 1.0), "Tangency Weight")
         if not WEIGHT_RANGE[0] - 1e-9 <= weight <= WEIGHT_RANGE[1] + 1e-9:
             raise SurfaceError(
@@ -453,6 +519,8 @@ def check_values(kind, options):
         distance = _finite(o.get("distance", 0.0), "Distance")
         if abs(distance) < 1e-7:
             raise NeedsPick("Drag the arrow or type a distance.")
+        if kind == "offset" and o.get("offset_type", "sharp") not in OFFSET_TYPES:
+            raise SurfaceError("Pick Sharp Offset or Rounded Offset.")
         if kind == "extend":
             if o.get("extend_type") not in EXTEND_TYPES:
                 raise SurfaceError("Pick Natural, Perpendicular or Tangent.")
@@ -460,6 +528,8 @@ def check_values(kind, options):
                 raise SurfaceError(
                     "Natural and Tangent extend outwards only: type a positive distance."
                 )
+            if o.get("alignment", "free") not in ALIGNMENTS:
+                raise SurfaceError("Pick Free Edges or Align Edges.")
     elif kind == "thicken":
         thickness = _finite(o.get("thickness", 0.0), "Thickness")
         if abs(thickness) < 1e-7:
@@ -470,7 +540,7 @@ def check_values(kind, options):
             raise SurfaceError("Pick Sharp or Rounded.")
     elif kind == "untrim":
         if o.get("loop_type") not in LOOP_TYPES:
-            raise SurfaceError("Pick All Edges, Internal Edges or External Edges.")
+            raise SurfaceError("Pick All Edges, Internal Edges, External Edges or Manual.")
         distance = _finite(o.get("distance", 0.0), "Extend distance")
         if distance < 0:
             raise SurfaceError("The extend distance must not be negative.")
@@ -542,6 +612,76 @@ def stop_angle(start, directions, axis):
             "The object is where the profile already is. Pick one the revolve turns to."
         )
     return best
+
+
+def turn_angle(start, directions, axis, sign):
+    """Revolve To with Two Sides: the degrees (more than 0, less than 360) the profile turns
+    `sign` way (+1 right-handed about `axis`, -1 the other way) until it reaches the first of
+    `directions`. All unit 3-tuples."""
+    best = None
+    for w in directions:
+        cross = (
+            start[1] * w[2] - start[2] * w[1],
+            start[2] * w[0] - start[0] * w[2],
+            start[0] * w[1] - start[1] * w[0],
+        )
+        angle = math.degrees(
+            math.atan2(
+                sum(a * c for a, c in zip(axis, cross)), sum(a * b for a, b in zip(start, w))
+            )
+        )
+        angle = (angle * sign) % 360.0
+        if angle < 1e-6 or angle > 360.0 - 1e-6:
+            continue
+        if best is None or angle < best:
+            best = angle
+    if best is None:
+        raise SurfaceError(
+            "The object is where the profile already is. Pick one the revolve turns to."
+        )
+    return best
+
+
+def two_sided_to(start, first, second, axis):
+    """Revolve To with Two Sides: (start angle, sweep) in degrees. The first side turns the
+    right-handed way to the first object, the second side the other way to the second."""
+    a1 = turn_angle(start, first, axis, 1.0)
+    a2 = turn_angle(start, second, axis, -1.0)
+    if a1 + a2 > 360.0 + 1e-9:
+        raise SurfaceError(
+            "The two sides would overlap (%.0f + %.0f degrees is more than a full turn). Pick "
+            "objects that leave a gap between them, or use Full." % (a1, a2)
+        )
+    return -a2, a1 + a2
+
+
+def corner_shift(previous, corners, centre_prev, centre):
+    """Loft of closed profiles with the same number of corners (Fusion Sept 2026): the
+    (shift, reverse) that lines `corners` up with the corners of the profile before it, so
+    corner i of one meets corner i of the next. previous / corners: points (3-tuples) in
+    order round each profile; centres: their middles. The pairing with the shortest total
+    distance between matched corners (each measured from its profile's middle) wins; on a
+    tie the profile keeps its own start and direction."""
+    n = len(corners)
+    if n == 0 or n != len(previous):
+        return 0, False
+
+    def rel(p, c):
+        return tuple(a - b for a, b in zip(p, c))
+
+    prev = [rel(p, centre_prev) for p in previous]
+    mine = [rel(p, centre) for p in corners]
+    best = None
+    for reverse in (False, True):
+        for shift in range(n):
+            cost = 0.0
+            for i in range(n):
+                q = mine[(shift - i) % n] if reverse else mine[(i + shift) % n]
+                cost += math.sqrt(sum((a - b) ** 2 for a, b in zip(prev[i], q)))
+            key = (round(cost, 9), reverse, shift)
+            if best is None or key < best[0]:
+                best = (key, shift, reverse)
+    return best[1], best[2]
 
 
 def all_lengths(direction, flip, reach_up, reach_down):
@@ -770,3 +910,47 @@ def cell_name(index, size, solid):
     """'Cell 2 (125.0 mm³)' / 'Cell 2 (40.0 mm²)' for the cells list."""
     unit = "mm³" if solid else "mm²"
     return "Cell %d (%.1f %s)" % (index + 1, size, unit)
+
+
+# -- Isoparametric Curve (Sketch > Project / Include, surface_iso.py) ---------------------------
+MAX_ISO_COUNT = 50
+
+
+def clamp_fraction(value):
+    return min(1.0, max(0.0, float(value)))
+
+
+def iso_fractions(count):
+    """Distributed: `count` curves at even steps across the face, none on its edges."""
+    n = int(count)
+    if n < 1 or n > MAX_ISO_COUNT:
+        raise SurfaceError("Type how many curves: from 1 to %d." % MAX_ISO_COUNT)
+    return [(i + 1.0) / (n + 1.0) for i in range(n)]
+
+
+def fraction_at_length(lengths, distance):
+    """Single: the parameter fraction (0 .. 1) where the cumulative `lengths` (mm, at even
+    parameter steps from 0 to the face's width) reach `distance`."""
+    total = lengths[-1] if lengths else 0.0
+    d = float(distance)
+    if total < 1e-12:
+        raise SurfaceError("The face has no width that way.")
+    if d < -1e-9 or d > total + 1e-9:
+        raise SurfaceError(
+            "The distance must be from 0 to %.2f mm (the face's width that way)." % total
+        )
+    steps = len(lengths) - 1
+    for i in range(1, len(lengths)):
+        if lengths[i] >= d - 1e-12:
+            span = lengths[i] - lengths[i - 1]
+            part = (d - lengths[i - 1]) / span if span > 1e-12 else 0.0
+            return clamp_fraction((i - 1 + part) / steps)
+    return 1.0
+
+
+def length_at_fraction(lengths, fraction):
+    """The inverse of fraction_at_length: mm from the first edge at a parameter fraction."""
+    steps = len(lengths) - 1
+    x = clamp_fraction(fraction) * steps
+    i = min(int(x), steps - 1)
+    return lengths[i] + (lengths[i + 1] - lengths[i]) * (x - i)

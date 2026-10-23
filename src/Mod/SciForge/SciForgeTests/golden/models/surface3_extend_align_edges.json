@@ -1,0 +1,129 @@
+{
+  "id": "surface3_extend_align_edges",
+  "title": "Surface Extend Natural, Edge Alignment: a trapezoid's top edge carried on 5, its sides aligned, then free",
+  "tags": [
+    "surface",
+    "extend",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              20,
+              0
+            ],
+            [
+              15,
+              10
+            ],
+            [
+              5,
+              10
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            10,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 150,
+        "faces": 1,
+        "solids": 0,
+        "source": "analytic",
+        "note": "a trapezoid 20 / 10 wide, 10 high"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "x1",
+      "kind": "extend",
+      "refs": [
+        {
+          "step": "p1",
+          "edges": {
+            "type": "line",
+            "at": {
+              "axis": "y",
+              "value": "max"
+            },
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "distance": 5,
+        "extend_type": "natural",
+        "alignment": "align"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 187.5,
+        "faces": 1,
+        "solids": 0,
+        "bbox": [
+          0,
+          0,
+          0,
+          20,
+          15,
+          0
+        ],
+        "source": "analytic",
+        "note": "Align Edges: the slanted sides carried on 5 up (2.5 in): a trapezoid 10 / 5 wide, 5 high added, one flat face"
+      }
+    },
+    {
+      "op": "sf_surface_edit",
+      "target": "x1",
+      "set": {
+        "alignment": "free"
+      }
+    }
+  ],
+  "expect": {
+    "area": 200,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      20,
+      15,
+      0
+    ],
+    "source": "analytic",
+    "note": "Free Edges: the extension leaves square to the edge, a 10 x 5 rectangle added"
+  }
+}

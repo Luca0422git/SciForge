@@ -379,7 +379,7 @@ def model_color(owner):
 # in the display, never in the design) so they cannot shine through, and come back as soon
 # as no shown analysis covers them. The model's edges stay. Opacity below 100 % mixes the
 # model's colour into the analysis instead of letting the faces show through.
-SHADED = (sa.ZEBRA, sa.DRAFT, sa.CURVATURE_MAP, sa.ACCESSIBILITY, sa.MIN_RADIUS)
+SHADED = (sa.ZEBRA, sa.DRAFT, sa.CURVATURE_MAP, sa.ACCESSIBILITY, sa.MIN_RADIUS, sa.ENVIRONMENT)
 _FACES = {"held": {}}  # (document, object) -> [(node, old style)]
 
 
@@ -628,6 +628,8 @@ class ViewProviderSurfaceAnalysis:
             if kind == sa.ZEBRA:
                 node = self._zebra(coin, group, m, base, opacity)
                 self.stripes.append((owner.Name, m, frame.Rotation, node))
+            elif kind == sa.ENVIRONMENT:
+                self._environment(coin, group, m, base, obj, opacity)
             else:
                 colors = self._colors(obj, kind, owner, m, frame)
                 colors = [core.mix(base, c, opacity) for c in colors]
@@ -712,6 +714,35 @@ class ViewProviderSurfaceAnalysis:
         faces.textureCoordIndex.setValues(0, len(index), index)
         group.addChild(faces)
         return texcoords
+
+    def _environment(self, coin, group, m, base, obj, opacity):
+        """Environmental Map: the studio reflected in the surface (a sphere map looked up by
+        the reflection direction, which Coin works out per point for the camera, so it stays
+        live while the view turns). Reflection Strength blends the reflection over the
+        body's own colour."""
+        strength = core.clamp(int(getattr(obj, "ReflectionStrength", 70)), 0, 100) / 100.0
+        name = getattr(obj, "Environment", "Studio") or "Studio"
+        light = coin.SoLightModel()
+        light.model = coin.SoLightModel.BASE_COLOR
+        material = coin.SoMaterial()
+        dark = core.mix(base, (0.0, 0.0, 0.0), strength * 0.85)
+        bright = core.mix(base, (1.0, 1.0, 1.0), strength)
+        material.diffuseColor.setValue(*core.mix(base, dark, opacity))
+        texture = coin.SoTexture2()
+        size = 128
+        texture.image.setValue(coin.SbVec2s(size, size), 1, sa.environment_image(name, size))
+        texture.model = coin.SoTexture2.BLEND
+        texture.blendColor.setValue(*core.mix(base, bright, opacity))
+        texture.wrapS = coin.SoTexture2.CLAMP
+        texture.wrapT = coin.SoTexture2.CLAMP
+        mapping = coin.SoTextureCoordinateEnvironment()
+        group.addChild(light)
+        group.addChild(material)
+        group.addChild(texture)
+        group.addChild(mapping)
+        faces, _index = surface_nodes(coin, group, m)
+        group.addChild(faces)
+        self.environment = (name, strength)  # what is drawn (the scenarios read it)
 
     def restripe(self, obj, view=None):
         """Work the zebra stripes out again for the camera (or the locked one)."""
@@ -852,6 +883,8 @@ LABELS = {
     "MinimumRadius": "Minimum Radius",
     "ToolRadius": "Maximum Tool Radius",
     "IncludeSharpCurves": "Include Sharp Curves",
+    "Environment": "Environment",
+    "ReflectionStrength": "Reflection Strength",
 }
 # (property, kind of widget, extra) in the dialog's order, after the selection boxes
 FIELDS = {
@@ -890,6 +923,12 @@ FIELDS = {
     ],
     sa.ACCESSIBILITY: [
         ("AccessMode", "combo", core.ACCESS_MODES),
+        ("Opacity", "slider", (0, 100)),
+        ("HighQuality", "check", None),
+    ],
+    sa.ENVIRONMENT: [
+        ("Environment", "combo", sa.ENVIRONMENTS),
+        ("ReflectionStrength", "slider", (0, 100)),
         ("Opacity", "slider", (0, 100)),
         ("HighQuality", "check", None),
     ],
@@ -1514,6 +1553,7 @@ TIPS = {
     sa.ISOCURVE: "Lines of constant U and V on the faces, with combs",
     sa.ACCESSIBILITY: "Where a tool from a direction can reach the bodies",
     sa.MIN_RADIUS: "Concave rounds coloured by whether a tool fits",
+    sa.ENVIRONMENT: "A studio reflected in the surfaces: smooth reflections, smooth surfaces",
 }
 
 
@@ -1546,5 +1586,6 @@ COMMANDS = {
     "SciForge_IsocurveAnalysis": _command(sa.ISOCURVE),
     "SciForge_AccessibilityAnalysis": _command(sa.ACCESSIBILITY),
     "SciForge_MinimumRadiusAnalysis": _command(sa.MIN_RADIUS),
+    "SciForge_EnvironmentMapAnalysis": _command(sa.ENVIRONMENT),
 }
 EDITORS = {"SciForge::" + kind: edit for kind in sa.KINDS}

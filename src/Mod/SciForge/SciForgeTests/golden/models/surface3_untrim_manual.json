@@ -1,0 +1,118 @@
+{
+  "id": "surface3_untrim_manual",
+  "title": "Untrim Type Manual: a 30 x 30 patch with a round hole and the outer loop picked, extended 5",
+  "tags": [
+    "surface",
+    "untrim",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              30
+            ],
+            [
+              0,
+              30
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "circle": [
+            15,
+            15,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        },
+        {
+          "sketch": "s1",
+          "at": [
+            20,
+            15
+          ]
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 821.4601836602552,
+        "faces": 1,
+        "solids": 0,
+        "source": "analytic",
+        "note": "the square with the hole: 900 - 25 pi"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "u1",
+      "kind": "untrim",
+      "refs": [
+        {
+          "step": "p1",
+          "edges": {
+            "type": "line",
+            "at": {
+              "axis": "y",
+              "value": "min"
+            },
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "loop_type": "manual",
+        "extend": true,
+        "distance": 5
+      }
+    }
+  ],
+  "expect": {
+    "area": 1521.460183660255,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      -5,
+      -5,
+      0,
+      35,
+      35,
+      0
+    ],
+    "source": "analytic",
+    "note": "only the outer loop (the edge picked is on it) goes: the face back to its plane, pushed out 5 each way (40 x 40); the hole picked by no edge stays"
+  }
+}

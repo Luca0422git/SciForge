@@ -1,0 +1,110 @@
+{
+  "id": "surface3_loft_corner_matching",
+  "title": "Surface Loft of two squares drawn from different corners: corner meets corner",
+  "tags": [
+    "surface",
+    "loft",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              10,
+              0
+            ],
+            [
+              10,
+              10
+            ],
+            [
+              0,
+              10
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 10,
+      "curves": [
+        {
+          "polyline": [
+            [
+              10,
+              10
+            ],
+            [
+              0,
+              10
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              10,
+              0
+            ],
+            [
+              10,
+              10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "l1",
+      "kind": "loft",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            5,
+            0
+          ]
+        },
+        {
+          "sketch": "s2",
+          "at": [
+            5,
+            0
+          ]
+        }
+      ]
+    }
+  ],
+  "expect": {
+    "area": 400,
+    "faces": 4,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      10,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "each corner lofts to the corner above it: four flat 10 x 10 walls, no twist"
+  }
+}

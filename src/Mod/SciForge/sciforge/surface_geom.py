@@ -817,10 +817,30 @@ def _halfspace(point, keep_dir, around):
 
 
 # -- CREATE: Revolve -------------------------------------------------------------------------------
-def revolve_curves(edges, center, axis, options, to_directions=None):
+def project_axis(edges, center, axis, plane=None):
+    """Revolve's Project Axis: the axis line laid into the plane of the profile (moved
+    square onto it), as Fusion projects it onto the profile's sketch plane (`plane`: (point,
+    normal) of that sketch; else the plane the curves lie in). A profile that is not flat,
+    or an axis that already lies in its plane, keeps the axis as it is."""
+    flat = plane if plane is not None else plane_of(wires_of(edges))
+    c, a = vec(center), unit(axis)
+    if flat is None:
+        return c, a
+    origin, n = flat
+    along = a - n * a.dot(n)
+    if along.Length < 1e-7:
+        raise SurfaceError(
+            "The axis stands square to the profile's plane, so it cannot be projected onto "
+            "it. Clear Project Axis, or pick an axis beside the profile."
+        )
+    return c - n * (c - origin).dot(n), unit(along)
+
+
+def revolve_curves(edges, center, axis, options, to_directions=None, second=None):
     """Fusion's surface Revolve. Type To: `to_directions` are the half-planes (unit vectors
     from the axis) the picked object marks (revolve.target_directions); the curves turn the
-    shorter way to the nearest one."""
+    shorter way to the nearest one. With Two Sides, the first side turns the right-handed
+    way to the first object and the second the other way to `second`'s."""
     o = core.with_defaults("revolve", options)
     core.check_values("revolve", o)
     wires = wires_of(edges)
@@ -836,8 +856,16 @@ def revolve_curves(edges, center, axis, options, to_directions=None):
                 "edge or a point."
             )
         start_dir = _radial_of(wires, c, a)
-        angle = core.stop_angle(tuple(start_dir), [tuple(unit(w)) for w in to_directions], tuple(a))
-        start, sweep = 0.0, angle
+        first = [tuple(unit(w)) for w in to_directions]
+        if o["direction"] == "two_sides":
+            if not second:
+                raise NeedsPick("Select the object the second side revolves to.")
+            start, sweep = core.two_sided_to(
+                tuple(start_dir), first, [tuple(unit(w)) for w in second], tuple(a)
+            )
+        else:
+            angle = core.stop_angle(tuple(start_dir), first, tuple(a))
+            start, sweep = 0.0, angle
     else:
         start, sweep = core.revolve_range(o["type"], o["direction"], o["angle"], o["angle2"])
     faces = []
@@ -901,11 +929,15 @@ def _check_axis(wires, c, a):
 
 
 # -- CREATE: Sweep ---------------------------------------------------------------------------------
-def sweep_curves(profile_edges, path, options, rail=None):
+def sweep_curves(profile_edges, path, options, rail=None, guide=None):
     """`path`, `rail`: curves.Path. The profile curves (open or closed) are carried along the
     path from where they sit (sweep.Plan: Distance, Distance Two). Single Path: Orientation,
     Twist Angle and Taper Angle (Perpendicular); Path + Guide Rail: the rail turns the profile
-    and, with Profile Scaling Scale / Stretch, resizes it to keep reaching the rail."""
+    and, with Profile Scaling Scale / Stretch, resizes it to keep reaching the rail; its
+    Extent stops the sweep square to the path where the shorter of path and rail ends
+    (Perpendicular to Path) or runs both to their ends (Full Extents), and Guide Rail
+    Distance uses that share of the rail. Path + Guide Surface (`guide`: faces): the
+    profile keeps the angle it has to the surface along the path (sweep.py's solid rule)."""
     from . import curves, sweep as sweep_core
 
     o = core.with_defaults("sweep", options)
@@ -920,10 +952,20 @@ def sweep_curves(profile_edges, path, options, rail=None):
         point = path.start
     s_p = path.length_at(point)
     with_rail = o["type"] == "rail"
+    with_surface = o["type"] == "surface"
     if with_rail and rail is None:
         raise NeedsPick("Select the guide rail: sketch curves or edges of a body.")
+    if with_surface and not guide:
+        raise NeedsPick("Select the guide surface: faces the path runs along.")
     if with_rail and rail.closed != path.closed:
         raise SurfaceError("The guide rail must be open or closed like the path.")
+    if with_rail:
+        path, rail = _rail_extent(path, rail, o, at_end=s_p > 0.5 * path.length)
+        try:
+            point = path.wire().distToShape(Part.Vertex(centre))[1][0][0]
+        except Exception:
+            point = path.start
+        s_p = path.length_at(point)
     try:
         plan = sweep_core.Plan(
             path,
@@ -942,7 +984,10 @@ def sweep_curves(profile_edges, path, options, rail=None):
         aux = None
         sections_for = None
         try:
-            if with_rail:
+            if with_surface:
+                size = max(1.0, bound_box(wires).DiagonalLength)
+                aux = sweep_core._surface_aux(spine, guide, size)
+            elif with_rail:
                 part = sweep_core._rail_part(rail, path, plan, spine, sign)
                 aux = part.wire()
                 if o["scaling"] != "none":
@@ -967,6 +1012,63 @@ def sweep_curves(profile_edges, path, options, rail=None):
 
 
 STATIONS = 9  # sections along a guide rail that does not keep a straight course
+
+
+def _rail_extent(path, rail, o, at_end=False):
+    """Path + Guide Rail: the path and rail the sweep runs along. Guide Rail Distance takes
+    that share of the rail (from the end the profile sits at); Perpendicular to Path stops
+    where the plane square to the path through the rail's end (or the path's, when the path
+    is the shorter) cuts the other; Full Extents runs each to its own end. at_end: the
+    profile sits at the path's end (the sweep runs back along it)."""
+    if at_end and not path.closed:
+        back_path, back_rail = _rail_extent(path.reversed(), rail.reversed(), o)
+        return back_path.reversed(), back_rail.reversed()
+    share = float(o.get("rail_distance", 1.0))
+    if share < 1e-6:
+        raise SurfaceError("Guide Rail Distance is 0: type a share of the rail above 0.")
+    if path.closed:
+        return path, rail
+    if share < 1.0 - 1e-9:
+        rail = rail.sub(0.0, rail.length * share)
+    if o.get("rail_extent", "perpendicular") != "perpendicular":
+        return path, rail
+    # where the plane square to the path end meets the rail, and the other way round
+    end = path.end
+    t = path.tangent_at(path.length)
+    reach_rail = _plane_cut(rail, end, t)
+    if reach_rail is not None and reach_rail < rail.length - 1e-6:
+        return path, rail.sub(0.0, reach_rail)
+    r_end = rail.end
+    r_t = rail.tangent_at(rail.length)
+    reach_path = _plane_cut(path, r_end, r_t)
+    if reach_path is not None and reach_path < path.length - 1e-6:
+        return path.sub(0.0, reach_path), rail
+    return path, rail
+
+
+def _plane_cut(curve_path, point, normal):
+    """The length along `curve_path` where it crosses the plane through `point` square to
+    `normal` (the last crossing), or None."""
+    n = unit(normal)
+    count = 200
+    previous = None
+    found = None
+    for k in range(count + 1):
+        s = curve_path.length * k / float(count)
+        h = (curve_path.point_at(s) - point).dot(n)
+        if previous is not None and (previous[1] < 0) != (h < 0):
+            a, b = previous[0], s
+            ha = previous[1]
+            for _i in range(40):  # bisection on the crossing
+                m = 0.5 * (a + b)
+                hm = (curve_path.point_at(m) - point).dot(n)
+                if (ha < 0) == (hm < 0):
+                    a, ha = m, hm
+                else:
+                    b = m
+            found = 0.5 * (a + b)
+        previous = (s, h)
+    return found
 
 
 def _taper_sections(spine, wires, o, aux):
@@ -1103,9 +1205,83 @@ def loft_surface(items, options, rails=None, centerline=None, profiles=None):
                     )
                 )
             return surface_result(_loft_rows(items, kinds, profiles, o))
-        return surface_result(_thru_shell(items, closed))
+        # a plain loft (no rails, centerline or end conditions): corner meets corner. The
+        # rail stations keep the pairing their rails give (_rail_stations reads the plain
+        # loft of the profiles as given)
+        return surface_result(_thru_shell(match_corners(items), closed))
     except loft_ends.EndError as exc:
         raise SurfaceError(str(exc))
+
+
+def _corners_of(wire):
+    """The points where a closed wire turns sharply (its corners), in order round it, with
+    the index of the edge starting at each; [] when it has none (a circle, a smooth
+    spline)."""
+    edges = list(wire.OrderedEdges)
+    found = []
+    for i, edge in enumerate(edges):
+        before = edges[i - 1]
+        try:
+            p = edge.valueAt(edge.FirstParameter)
+            a = unit(before.tangentAt(before.LastParameter))
+            b = unit(edge.tangentAt(edge.FirstParameter))
+            if edge.Orientation == "Reversed":
+                p = edge.valueAt(edge.LastParameter)
+                b = unit(edge.tangentAt(edge.LastParameter)) * -1.0
+            if before.Orientation == "Reversed":
+                a = unit(before.tangentAt(before.FirstParameter)) * -1.0
+        except Exception:
+            return []
+        if a.getAngle(b) > math.radians(1.0):
+            found.append((i, p))
+    return found
+
+
+def match_corners(items):
+    """Fusion's closed-profile loft (Sept 2026): when every profile is a closed curve with
+    the same number of sharp corners, each one is restarted (and turned round if needed) so
+    that corner i of one profile lofts to corner i of the next, the pairing with the least
+    twist. Other profiles stay as they are."""
+    wires = [w for w in items if w.ShapeType == "Wire"]
+    if len(wires) != len(items) or len(wires) < 2 or not all(w.isClosed() for w in wires):
+        return list(items)
+    corners = [_corners_of(w) for w in wires]
+    n = len(corners[0])
+    if n < 3 or any(len(c) != n for c in corners):
+        return list(items)
+    out = [wires[0]]
+    prev_points = [p for _i, p in corners[0]]
+    prev_centre = wires[0].BoundBox.Center
+    for wire, found in zip(wires[1:], corners[1:]):
+        centre = wire.BoundBox.Center
+        points = [p for _i, p in found]
+        shift, reverse = core.corner_shift(
+            [tuple(p) for p in prev_points],
+            [tuple(p) for p in points],
+            tuple(prev_centre),
+            tuple(centre),
+        )
+        edges = list(wire.OrderedEdges)
+        start = found[shift][0]
+        try:
+            if reverse:  # backwards from that corner: the edge ending there comes first
+                ordered = [
+                    edges[(start - 1 - k) % len(edges)].reversed() for k in range(len(edges))
+                ]
+            else:
+                ordered = edges[start:] + edges[:start]
+            new = Part.Wire(ordered)
+            if not new.isClosed():
+                new = wire
+        except Exception:
+            new = wire
+        out.append(new)
+        if reverse:
+            prev_points = [points[(shift - i) % n] for i in range(n)]
+        else:
+            prev_points = [points[(shift + i) % n] for i in range(n)]
+        prev_centre = centre
+    return out
 
 
 def _thru_shell(items, closed):
@@ -1309,15 +1485,19 @@ def _anchored(curves, wire, faces, vs):
 
 
 # -- CREATE: Patch ---------------------------------------------------------------------------------
-def patch(boundary, continuity="connected", interior=(), points=()):
+def patch(boundary, continuity="connected", interior=(), points=(), reverse=False):
     """Fusion's Patch: a surface filling closed boundary loops.
 
-    boundary: [(edge, support face or None)]; a support face (the face of a body the edge
-    bounds) carries the continuity (Connected G0, Tangent G1, Curvature G2); sketch curves
-    have none (Fusion ignores the continuity for them too). interior: curves the patch must
-    pass through; points: Part.Vertex / App.Vector it must pass through."""
-    order = core.CONTINUITY[continuity]
-    edges = [e for e, _f in boundary]
+    boundary: [(edge, support face or None[, order])]; a support face (the face of a body
+    the edge bounds) carries the continuity (Connected G0, Tangent G1, Curvature G2); sketch
+    curves have none (Fusion ignores the continuity for them too). An order per edge (0, 1,
+    2: Group Edges off) replaces `continuity` for that edge. interior: curves the patch
+    must pass through; points: Part.Vertex / App.Vector it must pass through. reverse:
+    Fusion's Reverse Normal in the Patch dialog (the patch faces the other way)."""
+    group = core.CONTINUITY[continuity]
+    boundary = [(b[0], b[1], group if len(b) < 3 or b[2] is None else int(b[2])) for b in boundary]
+    order = max([o for _e, f, o in boundary if f is not None] or [0])
+    edges = [e for e, _f, _o in boundary]
     wires = wires_of(edges)
     if not wires:
         raise NeedsPick("Select the boundary: edges of a body or sketch curves.")
@@ -1327,19 +1507,24 @@ def patch(boundary, continuity="connected", interior=(), points=()):
             "The boundary is not closed: %d of its curves do not meet another one at both "
             "ends. Pick curves that form a closed loop." % len(open_wires[0].Edges)
         )
-    supports = [(e, f) for e, f in boundary if f is not None]
+    supports = [(e, f) for e, f, o in boundary if f is not None and o > 0]
     flat = plane_of(wires)
-    plain = (order == 0 or not supports) and not interior and not points
+    plain = not supports and not interior and not points
+    result = None
     if flat is not None and plain:
         try:
-            face = Part.makeFace(wires, "Part::FaceMakerBullseye")
-            return surface_result(face)
+            result = Part.makeFace(wires, "Part::FaceMakerBullseye")
         except Exception:
-            pass
-    faces = []
-    for wire in wires:
-        faces.append(_fill(wire, boundary, order, interior, points))
-    return surface_result(compound(faces))
+            result = None
+    if result is None:
+        faces = []
+        for wire in wires:
+            faces.append(_fill(wire, boundary, order, interior, points))
+        result = compound(faces)
+    if reverse:
+        result = result.copy()
+        result.reverse()
+    return surface_result(result)
 
 
 _G2 = {}
@@ -1366,7 +1551,7 @@ def _occ_order(order):
 
 
 def _fill(wire, boundary, order, interior, points):
-    if order >= 2 and any(f is not None for _e, f in boundary) and not g2_available():
+    if any(o >= 2 and f is not None for _e, f, o in boundary) and not g2_available():
         raise SurfaceError(
             "Curvature continuity needs SciForge's next full build: FreeCAD 1.1.4 passes it "
             "to OpenCASCADE as a setting OpenCASCADE ignores (core patch #14 fixes it). Use "
@@ -1374,13 +1559,13 @@ def _fill(wire, boundary, order, interior, points):
         )
     mk = Part.BRepOffsetAPI.MakeFilling()
     for edge in wire.OrderedEdges:
-        support = None
-        for e, f in boundary:
+        support, own = None, 0
+        for e, f, o in boundary:
             if f is not None and (e.isSame(edge) or _same_place_edge([e], edge) is not None):
-                support = f
+                support, own = f, o
                 break
-        if support is not None and order > 0:
-            mk.add(edge, support, _occ_order(order), True)
+        if support is not None and own > 0:
+            mk.add(edge, support, _occ_order(own), True)
         else:
             mk.add(edge, 0, True)
     for edge in interior:
@@ -1401,11 +1586,11 @@ def _fill(wire, boundary, order, interior, points):
     face = shape.Faces[0] if shape.Faces else None
     if face is None or not face.isValid():
         raise SurfaceError("The patch came out broken. Try Continuity Connected.")
-    if order > 0 and any(f is not None for _e, f in boundary):
+    if order > 0 and any(f is not None and o > 0 for _e, f, o in boundary):
         # OpenCASCADE's patch bends a flat sheet along its normal: it cannot turn to meet
         # walls that rise square to it (a cylinder's rim), and then silently stays flat.
         # Fusion would make a dome; SciForge says so instead of faking tangency.
-        off = _tangency_off(face, boundary)
+        off = _tangency_off(face, [(e, f) for e, f, o in boundary if o > 0])
         if off > TANGENCY_TOLERANCE:
             raise SurfaceError(
                 "Tangent continuity cannot be reached along these edges (off by %.0f degrees): "
@@ -1569,18 +1754,29 @@ def _meet(pa, ta, pb, tb):
 
 
 # -- CREATE: Offset --------------------------------------------------------------------------------
-def offset_faces(faces, distance):
-    """New surfaces `distance` from the faces (positive along each face's normal)."""
+def offset_faces(faces, distance, offset_type="sharp"):
+    """New surfaces `distance` from the faces (positive along each face's normal). Offset
+    Type Sharp: where the offset faces part at a convex corner they are carried on until
+    they meet (OpenCASCADE's intersection join); Rounded: an arc of the distance about the
+    corner fills the gap (arc join)."""
     if not faces:
         raise NeedsPick("Select the faces to offset.")
     d = float(distance)
     if abs(d) < 1e-7:
         raise NeedsPick("Drag the arrow or type a distance.")
+    join = 2 if offset_type == "sharp" else 0
     out = []
     for piece in shells_or_faces(sew(faces)):
         try:
-            result = piece.makeOffsetShape(d, 1e-6, False, False, 0, 0, False)
+            result = piece.makeOffsetShape(d, 1e-6, False, False, 0, join, False)
+            if join == 2 and (result.isNull() or not result.Faces or not result.isValid()):
+                raise ValueError("the sharp corners do not close")
         except Exception as exc:
+            if join == 2:
+                raise SurfaceError(
+                    "These faces cannot be offset by %g mm with sharp corners (%s). Try "
+                    "Offset Type Rounded Offset, or a smaller distance." % (d, exc)
+                )
             raise SurfaceError(
                 "These faces cannot be offset by %g mm (%s). A curved face whose radius is "
                 "smaller than the distance often causes this." % (d, exc)
@@ -1894,6 +2090,50 @@ def untrim(target, faces, loop_type="all", extend=0.0):
     return surface_result(sew(replaced))
 
 
+def untrim_loops(target, loops, extend=0.0):
+    """Untrim Type Manual: the loops (wires) holding the picked edges are removed from their
+    faces; the outer one goes back to the face's own surface, pushed out by `extend`. A loop
+    that touches another face cannot be removed (the API's rule)."""
+    if not loops:
+        raise NeedsPick("Select the loops to remove: click an edge of each.")
+    free = free_edges(target)
+    picked = {}
+    for edge in loops:
+        owners = faces_of_edge(target, edge)
+        if not owners:
+            raise SurfaceError("An edge picked has no face.")
+        face = owners[0]
+        wire = next((w for w in face.Wires if any(e.isSame(edge) for e in w.Edges)), None)
+        if wire is None or not _free_wire(wire, free):
+            raise SurfaceError(
+                "That loop touches another face, so it cannot be untrimmed: only loops whose "
+                "edges belong to one face can be removed. Unstitch the face first."
+            )
+        key = face.hashCode()
+        picked.setdefault(key, (face, []))[1].append(wire)
+    faces = []
+    for face in target.Faces:
+        entry = picked.get(face.hashCode())
+        if entry is None or not any(face.isSame(entry[0]) for _x in [0]):
+            faces.append(face)
+            continue
+        drop = entry[1]
+        outer = face.OuterWire
+        drop_outer = any(w.isSame(outer) for w in drop)
+        base = _natural_face(face, float(extend or 0.0)) if drop_outer else None
+        if base is None:
+            base = Part.Face(face.Surface, outer)
+        for hole in face.Wires:
+            if hole.isSame(outer) or any(hole.isSame(w) for w in drop):
+                continue
+            try:
+                base = base.cut(Part.Face(face.Surface, hole))
+            except Exception:
+                pass
+        faces.extend(base.Faces)
+    return surface_result(sew(faces))
+
+
 def _free_wire(wire, free):
     return all(any(e.isSame(f) for f in free) for e in wire.Edges)
 
@@ -1944,7 +2184,9 @@ def _natural_face(face, extend):
 def extend(target, edges, distance, extend_type="natural", alignment="free"):
     """Fusion's Extend: free edges of a surface carried on by `distance`. Natural continues
     the face's own surface (a flat face stays one flat face); Tangent adds flat faces that
-    carry the face on; Perpendicular adds faces square to it."""
+    carry the face on; Perpendicular adds faces square to it. Edge Alignment Align Edges
+    (Natural): the extension's sides carry on the neighbouring outside edges (G1) instead of
+    leaving square to the extended edge."""
     if not edges:
         raise NeedsPick("Select edges on the outside of a surface body.")
     d = float(distance)
@@ -1958,9 +2200,15 @@ def extend(target, edges, distance, extend_type="natural", alignment="free"):
                 "Pick a free edge."
             )
     if extend_type == "natural":
+        # a face that is its surface's parameter rectangle carries itself on: its sides are
+        # the surface's own curves, so they stay aligned with the outside edges either way
         natural = _natural_extend(target, edges, d)
         if natural is not None:
             return natural
+    if extend_type == "natural" and alignment == "align":
+        aligned = _aligned_extend(target, edges, d, free)
+        if aligned is not None:
+            return aligned
     ruled_type = "normal" if extend_type == "perpendicular" else "tangent"
     items = []
     for edge in edges:
@@ -1975,6 +2223,83 @@ def extend(target, edges, distance, extend_type="natural", alignment="free"):
             joined = joined.removeSplitter()  # a flat face carried on stays one face
         except Exception:
             pass
+    return surface_result(joined)
+
+
+def _side_direction(edge, point, free, picked):
+    """Align Edges: the direction the outside edge meeting `edge` at `point` carries on in
+    past that corner (unit), or None (no single such edge, or it is extended too)."""
+    meeting = []
+    for other in free:
+        if other.isSame(edge):
+            continue
+        a, b = other.valueAt(other.FirstParameter), other.valueAt(other.LastParameter)
+        if (a - point).Length < SAME:
+            meeting.append((other, other.FirstParameter, -1.0))
+        elif (b - point).Length < SAME:
+            meeting.append((other, other.LastParameter, 1.0))
+    if len(meeting) != 1 or any(meeting[0][0].isSame(p) for p in picked):
+        return None
+    other, u, sign = meeting[0]
+    try:
+        return unit(other.tangentAt(u) * sign)
+    except Exception:
+        return None
+
+
+def _aligned_extend(target, edges, d, free):
+    """Natural extension with Edge Alignment Align Edges: each picked edge grows a band
+    whose sides carry on the outside edges meeting it (where none meets it, or it is
+    extended too, the side leaves square to the edge, as Free Edges), every ruling reaching
+    `d` out from the edge. A band on a flat face is flat and merges with it. None when no
+    picked edge has a neighbour to align with (Free Edges' result then)."""
+    bands = []
+    aligned_any = False
+    for edge in edges:
+        owners = faces_of_edge(target, edge)
+        if not owners:
+            raise SurfaceError("An edge picked has no face to extend.")
+        face = owners[0]
+        a, b = edge.FirstParameter, edge.LastParameter
+        ends = []
+        for u in (a, b):
+            p = edge.valueAt(u)
+            t = unit(edge.tangentAt(u))
+            away = away_in_face(face, edge, p, t)
+            side = _side_direction(edge, p, free, edges)
+            if side is None or side.dot(away) < 0.2:
+                side = away  # nothing to align with (or it turns back): square to the edge
+            else:
+                aligned_any = True
+            ends.append(side)
+
+        def rule(u, a=a, b=b, ends=ends, face=face, edge=edge):
+            s = (u - a) / (b - a) if abs(b - a) > 1e-12 else 0.0
+            r = unit(ends[0] * (1.0 - s) + ends[1] * s)
+            p = edge.valueAt(u)
+            away = away_in_face(face, edge, p, unit(edge.tangentAt(u)))
+            k = r.dot(away)
+            if k < 0.2:
+                raise SurfaceError(
+                    "The neighbouring edges turn back too sharply to align the extension. "
+                    "Use Free Edges."
+                )
+            return r * (1.0 / k)
+
+        straight = edge.Curve.TypeId in ("Part::GeomLine", "Part::GeomLineSegment")
+        if straight and face.Surface.TypeId == "Part::GeomPlane":
+            p0, p1 = edge.valueAt(a), edge.valueAt(b)
+            q0, q1 = p0 + rule(a) * d, p1 + rule(b) * d
+            bands.append(Part.Face(Part.makePolygon([p0, p1, q1, q0, p0])))
+        else:
+            bands.append(_ruled_face(edge, rule, d))
+    if not aligned_any:
+        return None
+    joined = sew(list(target.Faces) + bands)
+    try:
+        joined = joined.removeSplitter()  # a flat face carried on stays one face
+    except Exception:
+        pass
     return surface_result(joined)
 
 
@@ -1998,36 +2323,162 @@ def _natural_extend(target, edges, d):
             return None
         rebuilt[key] = new
     faces = [rebuilt.get(f.hashCode(), f) for f in target.Faces]
-    return surface_result(sew(faces))
+    # a refitted face may differ from its neighbours' shared edges by a hair: sew loosely
+    return surface_result(sew(faces, 1e-3 if len(faces) > 1 else 0.0))
+
+
+# Surfaces whose own definition reaches past the face (toShape takes a bigger rectangle):
+# u (around) of these is an angle, v runs on along a line or an arc.
+_OPEN_SURFACES = (
+    "Part::GeomCylinder",
+    "Part::GeomCone",
+    "Part::GeomSphere",
+    "Part::GeomToroid",
+    "Part::GeomSurfaceOfRevolution",
+    "Part::GeomSurfaceOfExtrusion",
+)
+_ANGLE_IN_U = (
+    "Part::GeomCylinder",
+    "Part::GeomCone",
+    "Part::GeomSphere",
+    "Part::GeomToroid",
+    "Part::GeomSurfaceOfRevolution",
+)
+REFIT = 24  # rows and columns of points a free-form face is refitted through
+
+
+def _speed(surface, u, v, along_u):
+    """How far the surface moves per unit of u (or v) at (u, v), in mm."""
+    try:
+        du, dv = surface.getD1(u, v)[1:3] if hasattr(surface, "getD1") else (None, None)
+    except Exception:
+        du = dv = None
+    if du is None:
+        h = 1e-4
+        a = surface.value(u, v)
+        b = surface.value(u + h, v) if along_u else surface.value(u, v + h)
+        return max((b - a).Length / h, 1e-9)
+    return max((du if along_u else dv).Length, 1e-9)
 
 
 def _grow_rectangle(face, picked, d):
+    """Natural Extend of a face that is its surface's parameter rectangle: the rectangle
+    made bigger past each picked side by about `d` mm along the surface. Analytic surfaces
+    (cylinders, cones, spheres, tori, revolved and extruded curves) carry their own
+    definition on; free-form ones (B-spline, Bezier) are carried on by their own polynomial
+    and refitted through REFIT x REFIT points (OpenCASCADE cannot trim a B-spline beyond
+    its bounds). None when the face is not a parameter rectangle."""
     surface = face.Surface
-    if surface.TypeId not in ("Part::GeomCylinder", "Part::GeomCone"):
+    kind = surface.TypeId
+    if kind == "Part::GeomPlane":
         return None
-    if len(face.Wires) != 1 or len(face.Edges) != 4:
+    if len(face.Wires) != 1:
         return None
     u0, u1, v0, v1 = face.ParameterRange
-    radius = getattr(surface, "Radius", 1.0) or 1.0
-    du, dv = d / radius, d
+    um, vm = 0.5 * (u0 + u1), 0.5 * (v0 + v1)
+    grow = [0.0, 0.0, 0.0, 0.0]
     for edge in picked:
         mid = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
-        u, v = surface.parameter(mid)
+        try:
+            u, v = surface.parameter(mid)
+        except Exception:
+            return None
         if abs(u - u0) < 1e-6:
-            u0 -= du
+            grow[0] = d / _speed(surface, u0, v, True)
         elif abs(u - u1) < 1e-6:
-            u1 += du
+            grow[1] = d / _speed(surface, u1, v, True)
         elif abs(v - v0) < 1e-6:
-            v0 -= dv
+            grow[2] = d / _speed(surface, u, v0, False)
         elif abs(v - v1) < 1e-6:
-            v1 += dv
+            grow[3] = d / _speed(surface, u, v1, False)
         else:
             return None
-    if u1 - u0 > 2 * math.pi + 1e-9:
+    # every edge of the face must lie on the rectangle (a trimmed face is not one)
+    for edge in face.Edges:
+        if edge.Length < 1e-9:
+            continue  # a sphere's pole
+        mid = edge.valueAt((edge.FirstParameter + edge.LastParameter) / 2.0)
+        try:
+            u, v = surface.parameter(mid)
+        except Exception:
+            return None
+        on = min(abs(u - u0), abs(u - u1), abs(v - v0), abs(v - v1))
+        if on > 1e-5 * max(1.0, abs(u1 - u0), abs(v1 - v0)):
+            return None
+    a, b, c_, e = u0 - grow[0], u1 + grow[1], v0 - grow[2], v1 + grow[3]
+    if kind in _ANGLE_IN_U and b - a > 2 * math.pi + 1e-9:
         raise SurfaceError(
-            "The extension would wrap the curved face round onto itself. Use a smaller " "distance."
+            "The extension would wrap the curved face round onto itself. Use a smaller distance."
         )
-    return surface.toShape(u0, u1, v0, v1)
+    if kind == "Part::GeomSphere" and (c_ < -math.pi / 2 - 1e-9 or e > math.pi / 2 + 1e-9):
+        raise SurfaceError(
+            "The extension would run past the sphere's pole. Use a smaller distance."
+        )
+    if kind == "Part::GeomToroid" and e - c_ > 2 * math.pi + 1e-9:
+        raise SurfaceError(
+            "The extension would wrap the torus round onto itself. Use a smaller distance."
+        )
+    bounded = _bounded_params(surface)
+    if kind in _OPEN_SURFACES and not _outside(bounded, (a, b, c_, e)):
+        try:
+            grown = surface.toShape(a, b, c_, e)
+            if grown.isValid():
+                return grown
+        except Exception:
+            pass
+    return _refit(surface, (a, b, c_, e), (um, vm))
+
+
+def _bounded_params(surface):
+    """The surface's own parameter bounds where they are finite and not periodic (a
+    revolved B-spline's v, a free-form surface), as (u0, u1, v0, v1) with None for open."""
+    try:
+        b = list(surface.bounds())
+    except Exception:
+        return (None, None, None, None)
+    out = []
+    for i, x in enumerate(b):
+        periodic = False
+        try:
+            periodic = surface.isUPeriodic() if i < 2 else surface.isVPeriodic()
+        except Exception:
+            pass
+        out.append(None if periodic or abs(x) > 1e50 else x)
+    return tuple(out)
+
+
+def _outside(bounds, rect):
+    u0, u1, v0, v1 = rect
+    lo_u, hi_u, lo_v, hi_v = bounds
+    return (
+        (lo_u is not None and u0 < lo_u - 1e-9)
+        or (hi_u is not None and u1 > hi_u + 1e-9)
+        or (lo_v is not None and v0 < lo_v - 1e-9)
+        or (hi_v is not None and v1 > hi_v + 1e-9)
+    )
+
+
+def _refit(surface, rect, _middle):
+    """A B-spline face through the surface's own points over `rect` (past its bounds the
+    surface's last polynomial pieces carry it on)."""
+    u0, u1, v0, v1 = rect
+    grid = []
+    for i in range(REFIT + 1):
+        u = u0 + (u1 - u0) * i / float(REFIT)
+        row = []
+        for j in range(REFIT + 1):
+            v = v0 + (v1 - v0) * j / float(REFIT)
+            row.append(surface.value(u, v))
+        grid.append(row)
+    try:
+        fitted = Part.BSplineSurface()
+        fitted.interpolate(grid)
+        face = fitted.toShape()
+    except Exception as exc:
+        raise SurfaceError("This face cannot be carried on naturally (%s). Try Tangent." % exc)
+    if not face.isValid():
+        raise SurfaceError("This face cannot be carried on naturally. Try Tangent.")
+    return face
 
 
 def stitch(shapes, tolerance=core.STITCH_TOLERANCE):
@@ -2048,13 +2499,29 @@ def stitch(shapes, tolerance=core.STITCH_TOLERANCE):
                     fixed = solid.copy()
                     fixed.fix(1e-7, 1e-7, float(tolerance))
                     solid = fixed
-                pieces.append(solid)
-                continue
+                if abs(solid.Volume) > 1e-9:  # a face sewn onto a copy of itself is no solid
+                    pieces.append(solid)
+                    continue
             except Exception:
                 pass
         pieces.append(piece)
     result = compound(pieces)
     return surface_result(result), _open_count(result)
+
+
+def stitched_operation(base, stitched, operation):
+    """Stitch with Join / Cut / Intersect: the closed stitch (`stitched`, from stitch())
+    combined with the solid `base`. A stitch that does not close is refused."""
+    solids = list(stitched.Solids)
+    if not solids:
+        raise SurfaceError(
+            "The surfaces do not close into a solid, so the stitch cannot %s. Close the gaps "
+            "(a bigger tolerance or more surfaces), or use New Body." % operation.capitalize()
+        )
+    tool = solids[0] if len(solids) == 1 else Part.makeCompound(solids)
+    if base is None or base.isNull() or not base.Solids:
+        raise SurfaceError("Join, Cut and Intersect need a solid body to act on.")
+    return thicken_cut(base, tool, operation)
 
 
 def unstitch(target, faces):

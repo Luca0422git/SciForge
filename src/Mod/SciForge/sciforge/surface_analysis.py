@@ -30,6 +30,7 @@ CURVATURE_MAP = "CurvatureMapAnalysis"
 ISOCURVE = "IsocurveAnalysis"
 ACCESSIBILITY = "AccessibilityAnalysis"
 MIN_RADIUS = "MinimumRadiusAnalysis"
+ENVIRONMENT = "EnvironmentMapAnalysis"  # Fusion's Environmental Map Analysis (Sept 2026)
 
 # kind -> title (command and dialog), label base (browser: Zebra1 ...), icon, what is picked
 # ("bodies", "faces" or "edges"), whether a pull / access direction is picked too.
@@ -41,10 +42,20 @@ KINDS = {
     ISOCURVE: ("Isocurve Analysis", "Isocurve", "isocurve", "faces", False),
     ACCESSIBILITY: ("Accessibility Analysis", "Accessibility", "accessibility", "bodies", True),
     MIN_RADIUS: ("Minimum Radius Analysis", "Minimum Radius", "min_radius", "bodies", False),
+    ENVIRONMENT: (
+        "Environmental Map Analysis",
+        "Environmental Map",
+        "environment_map",
+        "bodies",
+        False,
+    ),
 }
 ZEBRA_DIRECTIONS = ("Vertical", "Horizontal")
 MAP_DISPLAYS = ("Smooth", "Bands")
 ISO_TYPES = ("U and V", "U", "V")
+# The studio the Environmental Map reflects: soft light strips over a dark floor (Studio),
+# or a bright sky over a dark ground (Horizon).
+ENVIRONMENTS = ("Studio", "Horizon")
 
 # (type, name, tooltip, default) per kind, after the common ones
 COMMON = [
@@ -97,6 +108,11 @@ PROPS = {
     ACCESSIBILITY: SHADED
     + DIRECTION
     + [("App::PropertyEnumeration", "AccessMode", "Which way the tool comes from", None)],
+    ENVIRONMENT: SHADED
+    + [
+        ("App::PropertyEnumeration", "Environment", "The surroundings reflected", None),
+        ("App::PropertyInteger", "ReflectionStrength", "0 .. 100 %: how strong the reflection", 70),
+    ],
     MIN_RADIUS: SHADED
     + [
         ("App::PropertyLength", "MinimumRadius", "Tighter concave rounds: red", 1.0),
@@ -115,7 +131,48 @@ ENUMS = {
     "MapDisplay": MAP_DISPLAYS,
     "IsoType": ISO_TYPES,
     "AccessMode": core.ACCESS_MODES,
+    "Environment": ENVIRONMENTS,
 }
+
+
+_IMAGES = {}
+
+
+def environment_image(name, size=128):
+    """The picture for `name` (made once, then kept)."""
+    key = (name, int(size))
+    if key not in _IMAGES:
+        _IMAGES[key] = _environment_image(name, int(size))
+    return _IMAGES[key]
+
+
+def _environment_image(name, size):
+    """The reflected surroundings as a sphere map (size x size grey levels, bytes, rows from
+    the bottom): what a mirror ball standing in them shows. Studio: three soft horizontal
+    light strips above, a dark floor below; Horizon: a sky brightening to the horizon over a
+    dark ground. Coin maps it by the reflection direction (SoTextureCoordinateEnvironment),
+    so the bands slide over a surface as the view turns, and a kink or a curvature jump in
+    the surface shows as a kink or a jump in them (the point of the analysis)."""
+    data = bytearray()
+    strips = ((0.62, 0.07), (0.28, 0.05), (-0.05, 0.035))  # (height, half width) on the ball
+    for row in range(size):
+        y = (row + 0.5) / size * 2.0 - 1.0
+        for col in range(size):
+            x = (col + 0.5) / size * 2.0 - 1.0
+            r2 = x * x + y * y
+            if r2 > 1.0:
+                data.append(0)
+                continue
+            if name == "Horizon":
+                level = 0.15 + 0.85 * (y + 1.0) / 2.0 if y > -0.05 else 0.08
+            else:
+                level = 0.10 if y < -0.25 else 0.22
+                for height, half in strips:
+                    d = abs(y - height)
+                    if d < half * 2.0:
+                        level = max(level, 1.0 - (d / (half * 2.0)) ** 2)
+            data.append(int(round(255 * max(0.0, min(1.0, level)))))
+    return bytes(data)
 
 
 class AnalysisError(ValueError):

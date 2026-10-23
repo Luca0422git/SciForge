@@ -333,7 +333,8 @@ class PartTwoTests(unittest.TestCase):
         self.assertEqual(core.STARTS, ("profile", "offset", "object"))
         self.assertEqual(core.EXTENTS, ("distance", "to_object", "all"))
         self.assertEqual(core.REVOLVE_TYPES, ("angle", "to", "full"))
-        self.assertEqual(core.SWEEP_TYPES, ("single", "rail"))
+        # part 3 (sf/surface-3) added Path + Guide Surface
+        self.assertEqual(core.SWEEP_TYPES, ("single", "rail", "surface"))
         self.assertEqual(core.SCALINGS, ("scale", "stretch", "none"))
         self.assertEqual(core.GUIDES, ("rails", "centerline"))
         loft = core.with_defaults("loft")
@@ -368,7 +369,7 @@ class PartTwoTests(unittest.TestCase):
         core.check_values("sweep", core.with_defaults("sweep", {"type": "rail"}))
         core.check_values("sweep", core.with_defaults("sweep", {"taper": -20}))
         with self.assertRaises(core.SurfaceError):
-            core.check_values("sweep", core.with_defaults("sweep", {"type": "surface"}))
+            core.check_values("sweep", core.with_defaults("sweep", {"type": "guide"}))
         with self.assertRaises(core.SurfaceError):
             core.check_values("sweep", core.with_defaults("sweep", {"scaling": "grow"}))
         with self.assertRaises(core.SurfaceError):
@@ -461,6 +462,133 @@ class PartTwoTests(unittest.TestCase):
         self.assertTrue(close(core.apply_matrix(one, (0, 0, 0)), (3, 2, 1)))
         with self.assertRaises(core.SurfaceError):
             core.similarity((0, 0, 0), (1, 0, 0), (2, 2, 2), (2, 2, 2))
+
+
+class PartThreeTests(unittest.TestCase):
+    """SURFACE part 3 (sf/surface-3): Offset Type, Patch per edge / Reverse Normal, Untrim
+    Manual / Keep Copy, Revolve Project Axis / Partial / To Two Sides, Sweep Guide Surface and
+    rail extents, Stitch operations, closed-loft corner matching, old files."""
+
+    def test_offset_type_sharp_by_default_old_files_rounded(self):
+        self.assertEqual(core.OFFSET_TYPES, ("sharp", "rounded"))
+        self.assertEqual(core.with_defaults("offset")["offset_type"], "sharp")
+        # a step saved before the choice existed keeps the shape it had (Rounded)
+        self.assertEqual(core.with_saved("offset", {"distance": 2})["offset_type"], "rounded")
+        self.assertEqual(
+            core.with_saved("offset", {"offset_type": "sharp"})["offset_type"], "sharp"
+        )
+        with self.assertRaises(core.SurfaceError):
+            core.check_values(
+                "offset", core.with_defaults("offset", {"distance": 2, "offset_type": "round"})
+            )
+
+    def test_legacy_revolve_and_sweep(self):
+        self.assertTrue(core.with_defaults("revolve")["project_axis"])
+        self.assertFalse(core.with_saved("revolve", {})["project_axis"])
+        self.assertEqual(core.with_defaults("sweep")["rail_extent"], "perpendicular")
+        self.assertEqual(core.with_saved("sweep", {})["rail_extent"], "full")
+        self.assertEqual(core.with_saved("patch", {})["weight"], 0.5)
+
+    def test_patch_defaults_and_per_edge(self):
+        patch = core.with_defaults("patch")
+        self.assertEqual(patch["weight"], 0.5)  # API PatchFeatureInput.groupWeight
+        self.assertTrue(patch["group_edges"])
+        self.assertFalse(patch["reverse"])
+        core.check_values(
+            "patch", core.with_defaults("patch", {"edge_continuity": ["connected", "tangent"]})
+        )
+        with self.assertRaises(core.SurfaceError):
+            core.check_values("patch", core.with_defaults("patch", {"edge_continuity": ["G9"]}))
+
+    def test_untrim_manual_and_keep_copy(self):
+        self.assertIn("manual", core.LOOP_TYPES)
+        self.assertEqual(core.LOOP_LABELS["manual"], "Manual")
+        self.assertFalse(core.with_defaults("untrim")["keep_copy"])
+        core.check_values("untrim", core.with_defaults("untrim", {"loop_type": "manual"}))
+
+    def test_revolve_partial_and_to_two_sides(self):
+        self.assertEqual(core.REVOLVE_LABELS["angle"], "Partial")
+        with self.assertRaises(core.SurfaceError):
+            core.check_values(
+                "revolve", core.with_defaults("revolve", {"type": "to", "direction": "symmetric"})
+            )
+        core.check_values(
+            "revolve", core.with_defaults("revolve", {"type": "to", "direction": "two_sides"})
+        )
+        # +x to +y the right-handed way (90), to -y the other way (90): a half turn in all
+        self.assertEqual(
+            core.two_sided_to((1, 0, 0), [(0, 1, 0)], [(0, -1, 0)], (0, 0, 1)), (-90.0, 180.0)
+        )
+        # the second side to the XZ plane's halves: +x is where it starts, -x half a turn
+        start, sweep = core.two_sided_to((1, 0, 0), [(0, 1, 0)], [(1, 0, 0), (-1, 0, 0)], (0, 0, 1))
+        self.assertAlmostEqual(start, -180.0)
+        self.assertAlmostEqual(sweep, 270.0)
+        self.assertAlmostEqual(core.turn_angle((1, 0, 0), [(0, 1, 0)], (0, 0, 1), -1.0), 270.0)
+        with self.assertRaises(core.SurfaceError):  # the two sides overlap
+            core.two_sided_to((1, 0, 0), [(0, -1, 0)], [(0, 1, 0)], (0, 0, 1))
+
+    def test_sweep_guide_surface_and_rail_extent(self):
+        core.check_values("sweep", core.with_defaults("sweep", {"type": "surface"}))
+        self.assertEqual(core.SWEEP_LABELS["surface"], "Path + Guide Surface")
+        with self.assertRaises(core.SurfaceError):
+            core.check_values("sweep", core.with_defaults("sweep", {"rail_extent": "half"}))
+        with self.assertRaises(core.SurfaceError):
+            core.check_values("sweep", core.with_defaults("sweep", {"rail_distance": 1.5}))
+
+    def test_extend_edge_alignment(self):
+        self.assertEqual(core.ALIGNMENTS, ("free", "align"))
+        core.check_values(
+            "extend", core.with_defaults("extend", {"distance": 5, "alignment": "align"})
+        )
+        with self.assertRaises(core.SurfaceError):
+            core.check_values(
+                "extend", core.with_defaults("extend", {"distance": 5, "alignment": "aligned"})
+            )
+
+    def test_stitch_operations(self):
+        self.assertEqual(core.operations("stitch"), ["new_body", "join", "cut", "intersect"])
+        self.assertEqual(core.with_defaults("stitch")["operation"], "new_body")
+
+    def test_corner_shift(self):
+        square = [(0, 0, 0), (10, 0, 0), (10, 10, 0), (0, 10, 0)]
+        centre = (5, 5, 0)
+        # the same square drawn from the opposite corner: start two corners on
+        drawn = [(10, 10, 5), (0, 10, 5), (0, 0, 5), (10, 0, 5)]
+        self.assertEqual(core.corner_shift(square, drawn, centre, (5, 5, 5)), (2, False))
+        # drawn the other way round from (0, 0): reversed, no shift
+        back = [(0, 0, 5), (0, 10, 5), (10, 10, 5), (10, 0, 5)]
+        self.assertEqual(core.corner_shift(square, back, centre, (5, 5, 5)), (0, True))
+        # different counts: left alone
+        self.assertEqual(core.corner_shift(square, drawn[:3], centre, centre), (0, False))
+
+
+class IsoCurveTests(unittest.TestCase):
+    """Sketch > Project / Include > Isoparametric Curve: where the curves go (surface_iso)."""
+
+    def test_distributed_spreads_evenly_off_the_edges(self):
+        self.assertEqual(core.iso_fractions(1), [0.5])
+        self.assertEqual(core.iso_fractions(3), [0.25, 0.5, 0.75])
+        for bad in (0, -1, core.MAX_ISO_COUNT + 1):
+            with self.assertRaises(core.SurfaceError):
+                core.iso_fractions(bad)
+
+    def test_single_distance_to_fraction_and_back(self):
+        lengths = [0.0, 10.0, 30.0, 40.0]  # three uneven steps of the parameter
+        self.assertAlmostEqual(core.fraction_at_length(lengths, 0.0), 0.0)
+        self.assertAlmostEqual(core.fraction_at_length(lengths, 10.0), 1.0 / 3.0)
+        self.assertAlmostEqual(core.fraction_at_length(lengths, 20.0), 0.5)
+        self.assertAlmostEqual(core.fraction_at_length(lengths, 40.0), 1.0)
+        for d in (0.0, 5.0, 20.0, 33.0, 40.0):
+            f = core.fraction_at_length(lengths, d)
+            self.assertAlmostEqual(core.length_at_fraction(lengths, f), d)
+        with self.assertRaises(core.SurfaceError):  # past the face
+            core.fraction_at_length(lengths, 41.0)
+        with self.assertRaises(core.SurfaceError):
+            core.fraction_at_length([0.0, 0.0], 0.0)
+
+    def test_clamp(self):
+        self.assertEqual(core.clamp_fraction(-0.2), 0.0)
+        self.assertEqual(core.clamp_fraction(1.7), 1.0)
 
 
 class WordTests(unittest.TestCase):

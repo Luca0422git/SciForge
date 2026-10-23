@@ -1,0 +1,117 @@
+{
+  "id": "surface3_sweep_guide_surface",
+  "title": "Surface Sweep Path + Guide Surface: a 10 wide line swept 40 along a path on the top face of a block",
+  "tags": [
+    "surface",
+    "sweep",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "b1",
+      "plane": "XY",
+      "offset": -5,
+      "geometry": [
+        {
+          "rect": [
+            -20,
+            0,
+            20,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "b1",
+      "distance": 5
+    },
+    {
+      "op": "sf_curves",
+      "id": "p",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "s",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            -5,
+            5,
+            5,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "sweep",
+      "refs": [
+        {
+          "sketch": "s",
+          "at": [
+            0,
+            5
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "sketch": "p",
+          "at": [
+            0,
+            20
+          ]
+        }
+      ],
+      "refs3": [
+        {
+          "step": "e1",
+          "faces": {
+            "normal": [
+              0,
+              0,
+              1
+            ],
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "type": "surface"
+      }
+    }
+  ],
+  "expect": {
+    "area": 400,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      -5,
+      0,
+      5,
+      5,
+      40,
+      5
+    ],
+    "source": "analytic",
+    "note": "the profile keeps its angle to the flat guide face: a flat 10 x 40 band at z 5"
+  }
+}
