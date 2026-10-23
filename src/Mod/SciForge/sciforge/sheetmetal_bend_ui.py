@@ -48,7 +48,7 @@ class BendPanel(smp.SmPanel):
             "Values For",
             [("All lines", "")],
             "Fusion's row per bend line: pick a line here to give it its own angle, "
-            "position and flip",
+            "position, flip and Bend Relief",
         )
         self.add_angle("angle", "Angle", "How far the sheet is bent (90° = square)")
         self.add_combo(
@@ -93,7 +93,7 @@ class BendPanel(smp.SmPanel):
                     box.setItemText(box.currentIndex(), text + " *")  # has its own values
             else:
                 self.common.update(values)
-        if key in ("angle", "flip", "position", "line"):
+        if key in ("angle", "flip", "position", "bend_relief", "line"):
             self.after_preview()
 
     def _load_line(self):

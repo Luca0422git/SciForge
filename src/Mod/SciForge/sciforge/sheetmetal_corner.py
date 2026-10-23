@@ -542,6 +542,11 @@ class CornerClosureFeature:
         if add("App::PropertyEnumeration", "Relief", "Corner relief shape"):
             obj.Relief = RELIEFS
             obj.Relief = core.CLOSURE_RELIEF_LABELS["trim_to_bend"]
+        elif list(obj.getEnumerationsOfProperty("Relief") or []) != RELIEFS:
+            # a step saved before Tear was added: offer today's list, keep its choice
+            current = str(obj.Relief)
+            obj.Relief = RELIEFS
+            obj.Relief = current if current in RELIEFS else RELIEFS[-1]
         if add("App::PropertyBool", "UseRuleRelief", "Relief size from the rule"):
             obj.UseRuleRelief = True
         if add("App::PropertyLength", "ReliefSize", "Round: diameter, Square: side"):

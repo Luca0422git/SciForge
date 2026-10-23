@@ -399,7 +399,7 @@ def _bend_zone_solid(
     return list(out.Solids)
 
 
-LINE_KEYS = ("angle", "position", "flip")
+LINE_KEYS = ("angle", "position", "flip", "bend_relief")  # Fusion: per bend line
 
 
 def _extent(shape, along):
@@ -620,6 +620,20 @@ def fold(
         moved.rotate(axis_pt, along, angle if up else -angle)
         merged = fuse_all(stationary, bent_zone + [moved])
         result = one_solid(merged, "This bend")
+        # the pieces must add up: the bent zone holds ((R + T)^2 - R^2) / (2 (R + K T) T) of its
+        # flat volume at any angle; less means the sheet runs into itself, more a failed cut
+        ratio = ((radius + thickness) ** 2 - radius**2) / (2.0 * rn * thickness)
+        want = stationary.Volume + zone.Volume * ratio + moving.Volume
+        # holes in the zone are laid on the bend by their outline: allow a fifth of their
+        # volume for that, no more
+        z0, z1 = _extent(zone, along)
+        holes = max(0.0, (s1 - s0) * thickness * (z1 - z0) - zone.Volume)
+        if abs(result.Volume - want) > 1e-3 + 1e-6 * want + 0.2 * holes:
+            log("bend volume check: %.6f made, %.6f expected" % (result.Volume, want))
+            raise SheetMetalError(
+                "This bend would run the sheet into itself, or it could not be built cleanly "
+                "here: check the angle, the bend line and its Bend Line position."
+            )
     return result
 
 

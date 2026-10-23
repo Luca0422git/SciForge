@@ -8,7 +8,7 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 - **Bend** (SHEET METAL > CREATE > Bend, Fusion's Fold): Stationary Side + Bend Lines boxes,
   Angle (round handle with value box), Bend Line Start / Center / End, Flip, Bend / Corner
   Relief, Override Bend Radius. Several lines in one step (bent farthest first), each
-  line with its own angle / position / flip through "Values For". A line across a tab bends
+  line with its own angle / position / flip / Bend Relief through "Values For". A line across a tab bends
   only the tab and cuts the rule's bend reliefs (Straight / Round, Tear as a 0.01 mm split)
   beside it.
   The zone is laid onto the bend's cylinders by mapping its outline in the cylinder's (angle,
@@ -29,8 +29,8 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 - **Sheet metal Fillet / Chamfer** (MODIFY > Fillet / Chamfer of the SHEET METAL tab): only the
   edges through the thickness; Fillet radius sets ("+ New Set"), a radius arrow with its value
   box; on a solid body they open the SOLID commands.
-- Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 31 golden models,
-  26 unit tests, 8 scenarios (234 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
+- Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 32 golden models,
+  26 unit tests, 8 scenarios (237 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
 
 ## FreeCAD / OpenCASCADE facts found
 
@@ -61,6 +61,11 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
   the axis (its bend end is then a circle arc) gives true cylinders.
 - Folding a relief cut back at a mitred corner (sm-flat's `refold`) can leave specks of a few
   millionths of a mm3 beside the mitre; Corner Closure drops pieces under 0.001 T^3.
+- Booleans next to tangent geometry can go quietly wrong: a relief slot whose side touched a round
+  notch at a tangent was "cut" and then came back in the fuse (16.75 mm3 too much). Every Bend
+  now checks that its pieces add up (bent zone = flat zone x ((R + T)^2 - R^2) / (2 (R + K T) T))
+  and refuses otherwise; a hole in the zone is laid on the bend slightly bigger than that exact
+  ratio (0.06 mm3 on a 1 mm hole), so a fifth of the holes' volume is allowed.
 - sm-flat's `unfold` can raise a raw OpenCASCADE "Wire is not closed" on some cut corners from
   one side of the sheet and lay the same part flat from the other side (a note for sm-flat).
 - Selection inside a component: after a PickPanel `_sync`, FreeCAD can report a later click as
@@ -73,8 +78,12 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 
 ## Tests run (FreeCAD 1.1.4, this sandbox)
 
-- `--only unit`: all pass. Golden models: the 31 `sheetmetal_smm_*` pass (with sm-forming's).
-- Scenarios: smmore_bend 44, smmore_bend_two 18, smmore_bend_tab 17, smmore_hem 40,
+- Final run on the branch with sm-forming and sm-flat merged (09:00 UTC): `--only base` all
+  passed (unit 1906 OK, 9 skipped; golden 505 pass + 2 known xfail, the 32 `sheetmetal_smm_*`
+  among them; smoke, journey, restart).
+- The siblings' 16 scenarios (sheetmetal_* and flatpattern_*) all PASS on this merged branch,
+  and the SHEET METAL ribbon sweep (`SWEEP_TABS=sheet_metal ribbon_sweep`) passes, 109 checks.
+- Scenarios: smmore_bend 44, smmore_bend_two 18, smmore_bend_tab 20, smmore_hem 40,
   smmore_join 25, smmore_corner 37, smmore_round 26, smmore_lofted 27 checks: all PASS.
 
 - sm-flat's unfolder (`sheetmetal_unfold.unfold`, a read-only copy of `sf/sm-flat`'s file in
@@ -82,15 +91,29 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
   (100 x 40, volume 4000.0000): Bend's zone mapping is the exact inverse of the unfolder's
   development (both use R + K T). Hems, Join by Bend and the rounds unfold too.
 
-- Merged `sf/sm-forming` twice (its Flange for scenarios / golden models) and `sf/sm-flat`
-  once (its unfolder for Corner Closure reliefs); no conflicts but `ribbon_config.py`'s
-  adjacent CREATE lines (resolved keeping both builders' entries).
+- Merged `sf/sm-forming` three times (its Flange for scenarios / golden models) and
+  `sf/sm-flat` twice (its unfolder for Corner Closure reliefs); no conflicts but
+  `ribbon_config.py`'s adjacent CREATE lines the first time (resolved keeping both builders'
+  entries). After the last merges (sm-forming `ca79f2b`, sm-flat `83f16ad`) the sm-more
+  golden models still measure the same.
 - Ribbon sweep of the SHEET METAL tab (`SWEEP_TABS=sheet_metal`): every sm-more command passes;
-  the one failure is sm-forming's Sheet Metal Rules opening its window (intended; it needs an
-  `INTENDED` entry in `ribbon_sweep.py`, a shared file).
+  the one failure then was sm-forming's Sheet Metal Rules opening its window, which
+  sm-forming has since listed as intended in `ribbon_sweep.py`.
+
+## Notes for the merge into develop
+
+- sm-flat's Flat Pattern cuts the rule's 2-bend corner relief wherever two bends' centre lines
+  cross (`flatpattern.with_corner_reliefs`). At a corner closed by Corner Closure that adds a
+  relief the folded part does not have (Trim To Bend, Tear) or a second one (Square, Vertex,
+  Tangent): the flat pattern should leave out corners whose relief a `SheetMetalCornerClosure`
+  step chose.
+- `sheetmetal_unfold.unfold` can raise a raw OpenCASCADE "Wire is not closed" (not an
+  `UnfoldError`) on some cut corners; Corner Closure catches it, other callers may not.
+- Lofted Flange steps carry `Developable` (False for Die Form); the flat pattern could give
+  that reason instead of the unfolder's "sharp corner ... fillet it or Rip it".
 
 ## Open (see the parity doc's Known gaps)
 
-Crossing bend lines (corner relief), Relief Remnant, Corner Closure's weld relief shapes,
+Corner relief where bend lines meet with Center (Start / End work), Relief Remnant, Corner Closure's weld relief shapes,
 bend transitions and 3-bend corners, Lofted Flange inside the Flange dialog and with real bends
 between facets (so a Brake Form lofted flange has no flat pattern yet).

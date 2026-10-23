@@ -3,6 +3,7 @@
 # Flange, sheet metal Fillet / Chamfer). Run by make_icons.py in its namespace (icon, path,
 # poly, line, circle, block, iso, GREY, BLUE, STROKE ... are its helpers). Original artwork.
 # A sheet is drawn as a thick stroke (its cross-section) or an isometric plate.
+# flake8: noqa
 
 
 def _smm_sheet(d, color, w=4.2):
