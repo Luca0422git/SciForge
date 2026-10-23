@@ -211,3 +211,8 @@ Left as they are (reported, not fixed):
 - A Flange added later next to an earlier one meets it with an open corner (no mitre against
   the existing flange; Fusion's behaviour here was not found).
 - The Sheet Metal Rules window is not modal: Esc reaches it only while it has the focus.
+- A contour flange drawn from the end of a sheet edge is found by its line's end point: when
+  a rule edit changes the thickness, a sketch point that is not tied to the edge (a plain
+  point, not projected model geometry) no longer sits at the edge's end, so the flange is no
+  longer on that edge. It then turns red with the reason (the in-plane Join check) rather
+  than making a wrong solid; Fusion's projected sketch geometry would follow the edge.
