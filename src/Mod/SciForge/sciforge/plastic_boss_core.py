@@ -202,6 +202,17 @@ def check_options(options):
         raise BossError("Fastener: the length cannot be negative (0 = auto).")
     if fastener["create"] and options["side1"]["shape"] == "blank":
         raise BossError("Fastener: Side 1 is blank (no hole), there is no screw to place.")
+    if (
+        fastener["create"]
+        and fastener["head"] == "flat"
+        and options["side1"].get("hole") != "countersink"
+    ):
+        # (QA: a countersunk head on a counterbore's floor or the outside face sank its cone
+        # into the part: the screw collided with it)
+        raise BossError(
+            "Fastener: a Flat (countersunk) head needs a countersink: set Side 1's Hole Type "
+            "to Countersink, or pick another head type."
+        )
     options["fastener"] = fastener
     for side in (1, 2):
         s = options["side%d" % side]

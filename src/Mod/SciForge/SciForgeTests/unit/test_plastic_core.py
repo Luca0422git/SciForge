@@ -175,6 +175,16 @@ class BossSettingsTest(unittest.TestCase):
             boss.check_options(o)
         return str(ctx.exception)
 
+    def test_flat_head_needs_a_countersink(self):
+        o = boss.default_options(rule(), 3.0)  # Side 1: a counterbore
+        o["fastener"] = {"create": True, "head": "flat", "length": 0}
+        with self.assertRaises(boss.BossError) as ctx:
+            boss.check_options(o)
+        self.assertIn("needs a countersink", str(ctx.exception))
+        o["side1"]["hole"] = "countersink"
+        o["side1"]["major_diameter"] = 6.0
+        boss.check_options(o)
+
     def test_major_draft(self):
         # Fusion's Major Draft Angle (the counterbore wall), added by the QA pass: 0 by
         # default, 0-30 degrees, and a boss saved before it existed reads as 0

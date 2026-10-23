@@ -577,6 +577,30 @@ def ribs_default():
     h.check("the dialog says which rib ends stay square", "left square" in text, text)
     h.check("the ribs are built", ps.volume(b) > s["rv1"] + 50.0, (ps.volume(b), s["rv1"]))
     h.check("one valid solid", b.Shape.isValid() and len(b.Shape.Solids) == 1)
+    ps.tab_of(p, "Boss")
+    ps.check_box(p.fastener)
+    ps.settle(p)
+    ps.choose(p.head, "Flat (countersunk)")
+
+
+def flat_refused():
+    """A Flat (countersunk) head on the counterbore's floor would sink into the part."""
+    p = ps.boss_panel()
+    ps.settle(p)
+    text = p.message.text() if p else ""
+    h.check(
+        "a Flat head without a countersink is refused, said why",
+        "needs a countersink" in text,
+        text,
+    )
+    ps.choose(p.head, "Pan")
+
+
+def pan_ok():
+    p = ps.boss_panel()
+    ps.settle(p)
+    text = p.message.text() if p else ""
+    h.check("Pan: built again (no refusal)", p is not None and not text.startswith("⚠"), text)
     ps.ok()
 
 
@@ -643,6 +667,8 @@ h.run(
         ribs_points,
         ribs_on,
         ribs_default,
+        flat_refused,
+        pan_ok,
         ribs_done,
     ],
 )

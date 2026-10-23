@@ -122,7 +122,8 @@ did not. What it found and fixed, in plain words for Luca:
   ends are left square, and the dialog says so and how to round them.
 - **Hex screw heads fit their counterbore.** A Hex or Hex Washer head was sized across its
   flats, so its corners stuck 0.2 mm into the counterbore wall (the screw collided with the
-  lid). It is sized across its corners now.
+  lid). It is sized across its corners now. A Flat (countersunk) head needs a countersink:
+  on a counterbore it sank into the part, so the dialog now says to pick Countersink.
 - **A lid in its own component with its own rule**: each side of the boss already used the
   rule of the body it joins, but the dialog showed one rule's numbers for both sides. It now
   shows each side's own values and names both rules.
@@ -136,7 +137,7 @@ a rule and Ctrl+Z, Esc in Manage after a followed edit, renaming a rule, the zer
 Boss on a face then Esc, a drafted Rest then Esc, a boss edited after save and reopen, a rule
 assigned after reopen, Flip with a picked body, the inch rule, a lid in its own component
 with its own rule), golden `plastic_boss_major_draft` and `plastic_rest_cut` (the Rest's
-cut-only case, also probed on a shelled pipe crossing the plane: exact), three unit tests (24 in all). Gaps
+cut-only case, also probed on a shelled pipe crossing the plane: exact), four unit tests (25 in all). Gaps
 found but not fixed are in the parity doc's Known gaps (rules of nested components; the
 plastic library settings are not reset between scenarios by the test harness: every plastic
 scenario resets them itself in its setup).
