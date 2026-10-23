@@ -109,6 +109,10 @@ class FlatPatternFeature:
         add("App::PropertyString", "Face", "Stationary face of the body")
         add("App::PropertyString", "FaceMemo", "Where the stationary face is", 4)
         add("App::PropertyString", "BendsJson", "The bends (flat coordinates)", 4)
+        if add("App::PropertyBool", "ShowBendLines", "Show the bend centre lines"):
+            obj.ShowBendLines = True
+        if add("App::PropertyBool", "ShowBendExtents", "Show the bend extent lines"):
+            obj.ShowBendExtents = True
         for name, doc in (
             ("Thickness", "Sheet thickness"),
             ("FlatLength", "Length of the flat (X)"),
@@ -153,7 +157,9 @@ class FlatPatternFeature:
                 a, b = getattr(bend, key)
                 a, b = frame.multiply(a), frame.multiply(b)
                 d[key] = [_xy(a), _xy(b)]
-                lines.append(Part.makeLine(App.Vector(a.x, a.y, 0), App.Vector(b.x, b.y, 0)))
+                shown = obj.ShowBendLines if key == "centre" else obj.ShowBendExtents
+                if shown:  # the lines drawn: line_kinds() says which is which
+                    lines.append(Part.makeLine(App.Vector(a.x, a.y, 0), App.Vector(b.x, b.y, 0)))
             bends.append(d)
         text = json.dumps(bends, sort_keys=True)
         if obj.BendsJson != text:
@@ -248,6 +254,20 @@ def create(body, face, name="FlatPattern"):
     obj.recompute()
     log("flat pattern of %s from %s" % (body.Label, face))
     return obj
+
+
+def line_kinds(fp):
+    """'up' / 'down' / 'extent' of the bend lines drawn after the flat solid's edges, in
+    the order execute() adds them."""
+    kinds = []
+    for bend in bends(fp):
+        if fp.ShowBendExtents:
+            kinds.append("extent")
+        if fp.ShowBendLines:
+            kinds.append("up" if bend.get("up") else "down")
+        if fp.ShowBendExtents:
+            kinds.append("extent")
+    return kinds
 
 
 def bends(fp):

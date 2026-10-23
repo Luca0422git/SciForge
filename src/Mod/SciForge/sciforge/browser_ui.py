@@ -90,6 +90,15 @@ def _flat_pattern_export(obj):
         warn("flat pattern export: %s" % exc)
 
 
+def _flat_pattern_toggle(obj, prop):
+    try:
+        from . import flatpattern_ui
+
+        flatpattern_ui.toggle(obj, prop)
+    except Exception as exc:
+        warn("flat pattern lines: %s" % exc)
+
+
 def _is_linked(obj):
     try:
         from . import design_insert
@@ -1480,6 +1489,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Break Link": lambda: _exchange_action("break_link", obj),
             "Edit Flat Pattern": lambda: _edit_object(obj),
             "Export DXF": lambda: _flat_pattern_export(obj),
+            "Show/Hide Bend Lines": lambda: _flat_pattern_toggle(obj, "ShowBendLines"),
+            "Show/Hide Bend Extents": lambda: _flat_pattern_toggle(obj, "ShowBendExtents"),
         }
         isolated = _isolated_names(doc)
         if node["kind"] in ("body", "component") and isolated:

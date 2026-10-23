@@ -135,6 +135,24 @@ def rule_for_conversion(doc, choice, thickness, radius=None):
     return copy
 
 
+def _is_sheet_metal_component(component):
+    try:
+        from . import sheetmetal_component
+
+        return sheetmetal_component.is_sheet_metal(component)
+    except ImportError:  # without sm-forming's component types: its own rule says so
+        return bool(getattr(component, sheetmetal.RULE_PROP, ""))
+
+
+def _make_sheet_metal_component(component, rule_name):
+    try:
+        from . import sheetmetal_component
+
+        sheetmetal_component.make_sheet_metal(component, rule_name)
+    except ImportError:
+        sheetmetal.set_active_rule(component.Document, rule_name, component)
+
+
 class ConvertFeature:
     """The timeline step of Convert to Sheet Metal (the shape passes through; it records
     the face and the thickness, and turns red when the body stops being sheet metal).
@@ -199,7 +217,9 @@ def make(body, base, face, choice=TEMPLATE, name="ConvertToSheetMetal"):
     doc = body.Document
     component = components.container_of(body)
     rule = None
-    comp_rule = getattr(component, sheetmetal.RULE_PROP, "") if component is not None else ""
+    comp_rule = ""
+    if component is not None and _is_sheet_metal_component(component):
+        comp_rule = sheetmetal.active_rule_name(doc, component)
     if sheetmetal.is_sheet_metal_body(body):
         rule = sheetmetal.find_rule(doc, sheetmetal.body_rule_name(body))
     elif comp_rule:
@@ -228,7 +248,8 @@ def make(body, base, face, choice=TEMPLATE, name="ConvertToSheetMetal"):
             pass
     sheetmetal.make_sheet_metal_body(body, rule["name"])
     if component is not None and not comp_rule:
-        sheetmetal.set_active_rule(doc, rule["name"], component)
+        # Fusion: the Standard component it is in becomes a Sheet Metal component (one way)
+        _make_sheet_metal_component(component, rule["name"])
     log(
         "converted %s to sheet metal (%.3f mm, %d bends, rule %s)"
         % (body.Label, info["thickness"], info["bends"], rule["name"])

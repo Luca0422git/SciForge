@@ -231,12 +231,11 @@ class ViewProviderFlatPattern:
             vobj = obj.ViewObject
             if vobj is None or "LineColorArray" not in vobj.PropertiesList:
                 return
-            bends = flatpattern.bends(obj)
+            kinds = flatpattern.line_kinds(obj)
             edges = obj.Shape.Edges
-            lines = 3 * len(bends)
-            colors = [self.OUTLINE] * max(0, len(edges) - lines)
-            for bend in bends:
-                colors += [self.EXTENT, self.UP if bend.get("up") else self.DOWN, self.EXTENT]
+            colors = [self.OUTLINE] * max(0, len(edges) - len(kinds))
+            look = {"up": self.UP, "down": self.DOWN, "extent": self.EXTENT}
+            colors += [look[k] for k in kinds]
             if len(colors) == len(edges) and colors:
                 vobj.LineColorArray = colors
         except Exception as exc:
@@ -270,6 +269,20 @@ class ViewProviderFlatPattern:
 
 def edit_flat_pattern(fp):
     enter(fp)
+
+
+def toggle(fp, prop):
+    """Browser > Show/Hide Bend Lines or Bend Extents (one undo step)."""
+    try:
+        if not commands.finish_open_dialog():
+            return
+        doc = fp.Document
+        doc.openTransaction("Show/Hide Bend Lines")
+        setattr(fp, prop, not getattr(fp, prop))
+        doc.recompute()
+        doc.commitTransaction()
+    except Exception as exc:
+        warn("flat pattern %s: %s" % (prop, exc))
 
 
 # -- Create Flat Pattern ------------------------------------------------------------------------

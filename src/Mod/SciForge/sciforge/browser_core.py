@@ -669,7 +669,16 @@ MENUS = {
         "Delete",
     ],
     "drawing": ["Open Drawing", "-", "Rename", "Delete"],
-    "flat_pattern": ["Edit Flat Pattern", "Export DXF", "-", "Rename", "Delete"],
+    "flat_pattern": [
+        "Edit Flat Pattern",
+        "Export DXF",
+        "-",
+        "Show/Hide Bend Lines",
+        "Show/Hide Bend Extents",
+        "-",
+        "Rename",
+        "Delete",
+    ],
 }
 
 

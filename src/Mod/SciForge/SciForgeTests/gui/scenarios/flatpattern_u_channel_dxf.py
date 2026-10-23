@@ -7,7 +7,8 @@ outline (4 lines), the hole (1 circle), one up bend centre line per bend, two ex
 bend and a note per bend, each on its own layer; with the bend lines switched off they are
 gone. The browser's right-click Export DXF opens the same dialog. Saved (Ctrl+S) and
 reopened, the flat pattern is still there, still 116.52389 long, and opens with a
-double-click."""
+double-click. Right-click > Show/Hide Bend Lines and Bend Extents hide the lines (Ctrl+Z
+brings them back)."""
 
 import os
 
@@ -148,6 +149,43 @@ def plain_read_back():
     h.check("outline still there", counts.get("OUTER_PROFILES") == {"LINE": 4}, counts)
 
 
+def _loose_lines():
+    fp = fs.flat()
+    return len(fp.Shape.Edges) - len(fp.Shape.Solids[0].Edges)
+
+
+def lines_shown():
+    h.check("2 centre + 4 extent lines drawn", _loose_lines() == 6, _loose_lines())
+    fs.browser_menu("Flat Pattern", "Show/Hide Bend Lines")
+
+
+def lines_hidden():
+    fs.settle()
+    fp = fs.flat()
+    h.check(
+        "bend centre lines hidden", not fp.ShowBendLines and _loose_lines() == 4, _loose_lines()
+    )
+    fs.browser_menu("Flat Pattern", "Show/Hide Bend Extents")
+
+
+def extents_hidden():
+    fs.settle()
+    fp = fs.flat()
+    h.check(
+        "extent lines hidden too", not fp.ShowBendExtents and _loose_lines() == 0, _loose_lines()
+    )
+
+
+def undo_extents():
+    fs.undo()
+
+
+def extents_back():
+    fs.settle()
+    h.check("undo shows the extent lines again", _loose_lines() == 4, _loose_lines())
+    h.check("flat still valid", "Invalid" not in fs.flat().State)
+
+
 def finish():
     h.ribbon("Finish Flat Pattern")
 
@@ -224,6 +262,11 @@ h.run(
         browser_export_dialog,
         browser_export_ok,
         plain_read_back,
+        lines_shown,
+        lines_hidden,
+        extents_hidden,
+        undo_extents,
+        extents_back,
         finish,
         save,
         ctrl_s,
