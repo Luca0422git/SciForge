@@ -183,7 +183,37 @@ def undone():
 
 
 def redone():
+    from sciforge import parameters
+
     h.check("Redo: Sharp (1840)", st.near(st.area(s["offset"]), SHARP, 1e-6))
+    step = s["offset"].Tip
+    rows = [r for r in parameters.model_parameters(doc()) if r["object"] == step.Name]
+    labels = [r["label"] for r in rows]
+    h.check("its Distance is a model parameter (Change Parameters)", "Distance" in labels, labels)
+    row = next((r for r in rows if r["label"] == "Distance"), None)
+    h.check("3 mm there", row is not None and st.near(row["value"], 3.0), row)
+    if row is not None:
+        doc().openTransaction("Change Parameters")
+        parameters.set_model(doc(), row, "4")  # as the Change Parameters dialog does
+        doc().commitTransaction()
+        doc().recompute()
+
+
+def parameter_changed():
+    from sciforge import parameters
+
+    area = st.area(s["offset"])
+    h.check("Distance 4 there: 40 x 34 + 40 x 14 (1920)", st.near(area, 1920.0, 1e-6), area)
+    step = s["offset"].Tip
+    row = next(
+        r
+        for r in parameters.model_parameters(doc())
+        if r["object"] == step.Name and r["label"] == "Distance"
+    )
+    doc().openTransaction("Change Parameters")
+    parameters.set_model(doc(), row, "3")
+    doc().commitTransaction()
+    doc().recompute()
 
 
 def old_file():
@@ -397,6 +427,7 @@ h.run(
         edited,
         undone,
         redone,
+        parameter_changed,
         old_file,
         old_file_rounded,
         back_to_sharp,
