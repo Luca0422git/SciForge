@@ -1,0 +1,93 @@
+{
+  "id": "sheetmetal_smm_bend_after_flange",
+  "title": "Bend a plate that already has an edge flange: the flange swings with the moving side",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          100,
+          20,
+          1
+        ]
+      ],
+      "options": {
+        "height": 15
+      }
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            50,
+            -5,
+            50,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        10,
+        20,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "center"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4578.0177,
+    "bbox": [
+      0.0,
+      0.0,
+      0.0,
+      50.869,
+      40.0,
+      50.869
+    ],
+    "solids": 1,
+    "faces": 14,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: the volume grows by exactly the bend's (pi/2 x 40 x 1.5) less its flat zone (2.26195 x 40) over the flanged plate's",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}
