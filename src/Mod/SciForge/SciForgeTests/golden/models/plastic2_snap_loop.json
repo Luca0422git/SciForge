@@ -1,0 +1,109 @@
+{
+  "id": "plastic2_snap_loop",
+  "title": "Snap Fit, Hook and Loop: the loop stands on the base floor in front of the catch",
+  "tags": [
+    "plastic",
+    "snap_fit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 2,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_snap_fit",
+      "id": "sf1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          30,
+          20
+        ]
+      ],
+      "options": {
+        "fillet": 0,
+        "draft": 0,
+        "thickness": 2,
+        "tip_thickness": 2,
+        "clearance": 0.1,
+        "loop_thickness": 2,
+        "length": 12,
+        "width": 6,
+        "catch_depth": 1,
+        "catch_length": 3,
+        "type": "loop"
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 11898.76,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4956.803847577294,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Hook as plastic2_snap_parallel. Loop: frame 2 (loop thickness) x 10.2 (6 + 2 x 0.1 + 2 x 2) x 12.1 (from 2 above the ledge at 8.9 down to 1 mm into the floor at local 19) = 246.84, minus the opening 2 x 6.2 x 3.2 = 39.68, minus the 1 mm in the floor 2 x 10.2 x 1 = 20.4: 186.76 joined to the base."
+  }
+}

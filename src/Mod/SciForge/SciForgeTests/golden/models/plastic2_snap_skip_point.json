@@ -1,0 +1,125 @@
+{
+  "id": "plastic2_snap_skip_point",
+  "title": "Snap Fit with a third sketch point off the part: that point is left out, the two others as before",
+  "tags": [
+    "plastic",
+    "snap_fit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 2,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_snap_fit",
+      "id": "sf1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          58,
+          20
+        ],
+        [
+          2,
+          20
+        ],
+        [
+          80,
+          20
+        ]
+      ],
+      "options": {
+        "fillet": 0,
+        "draft": 0,
+        "thickness": 2,
+        "tip_thickness": 2,
+        "clearance": 0.1,
+        "loop_thickness": 2,
+        "length": 12,
+        "width": 6,
+        "catch_depth": 1,
+        "catch_length": 3,
+        "rotation": "aligned"
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 11668.352,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 5113.6076951545865,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      8,
+      60,
+      40,
+      22
+    ],
+    "source": "analytic",
+    "note": "The point at x = 80 has no part behind it (the lid ends at x = 60): it is left out, with a note, and the other body gets no groove for it. The two others as plastic2_snap_two_points (Aligned: the middle of the three points is x = 46.7, so the catches still face out)."
+  }
+}

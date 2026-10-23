@@ -1,0 +1,47 @@
+{
+  "id": "plastic2_lip_tip_radius",
+  "title": "Lip on a round rim with a 0.3 mm Tip Radius on both top edges",
+  "tags": [
+    "plastic",
+    "lip"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "c1",
+      "kind": "cylinder",
+      "plane": "XY",
+      "diameter": 16,
+      "height": 10
+    },
+    {
+      "op": "sf_lip",
+      "id": "l1",
+      "of": "c1",
+      "edges": {
+        "type": "circle",
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 1
+      },
+      "options": {
+        "lip_width": 1,
+        "lip_height": 1,
+        "clearance": 0.1,
+        "clearance_height": 0.1,
+        "type": "lip",
+        "inner_draft": 0,
+        "outer_draft": 0,
+        "tip_radius": 0.3
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2055.9228709073573,
+    "solids": 1,
+    "source": "analytic",
+    "note": "plastic2_lip_round_rim less the two rounds: each takes the corner r^2 (1 - pi/4) (r = 0.3) round its edge; by Pappus the corners' centroids sit c inside the radii 8 and 7, so together 2 pi (8 - c + 7 + c) r^2 (1 - pi/4) = 30 pi r^2 (1 - pi/4)."
+  }
+}

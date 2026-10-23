@@ -1,0 +1,69 @@
+{
+  "id": "plastic2_lip_face_guide",
+  "title": "Lip with Face Guide on a tapered round rim: the ring leans in with the side wall",
+  "tags": [
+    "plastic",
+    "lip"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "circle": [
+            0,
+            0,
+            10
+          ],
+          "name": "c"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 10,
+      "taper": -11.309932474020215
+    },
+    {
+      "op": "sf_lip",
+      "id": "l1",
+      "of": "e1",
+      "edges": {
+        "type": "circle",
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 1
+      },
+      "options": {
+        "lip_width": 1,
+        "lip_height": 1,
+        "clearance": 0.1,
+        "clearance_height": 0.1,
+        "type": "lip",
+        "guide": "face",
+        "inner_draft": 0,
+        "outer_draft": 0
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2601.657596192827,
+    "solids": 1,
+    "bbox": [
+      -10,
+      -10,
+      0,
+      10,
+      10,
+      11
+    ],
+    "source": "analytic",
+    "note": "A frustum r 10 -> 8 over 10 (taper atan 0.2): pi/3 h (R^2 + R r + r^2). The lip 1 x 1 inside its 8 mm rim follows the side's lean (0.2 per mm): radii 8 / 7 at the rim, 7.8 / 6.8 at its top: pi/3 (64 + 62.4 + 60.84 - 49 - 47.6 - 46.24) = 14.8 pi."
+  }
+}

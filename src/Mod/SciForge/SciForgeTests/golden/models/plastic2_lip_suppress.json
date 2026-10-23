@@ -1,0 +1,213 @@
+{
+  "id": "plastic2_lip_suppress",
+  "title": "Lip And Groove suppressed from the timeline (both bodies as before), then back",
+  "tags": [
+    "plastic",
+    "lip",
+    "timeline"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "shell",
+      "id": "sh2",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          -1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sf_lip",
+      "id": "l1",
+      "of": "sh1",
+      "edges": {
+        "any_of": [
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 38
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 58
+              }
+            ],
+            "count": 1
+          }
+        ],
+        "count": 4
+      },
+      "options": {
+        "lip_width": 1,
+        "lip_height": 1,
+        "clearance": 0.1,
+        "clearance_height": 0.1,
+        "inner_draft": 0,
+        "outer_draft": 0
+      }
+    },
+    {
+      "op": "suppress",
+      "target": "l1"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "sh1": {
+          "volume": 11712.0,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 7872.0,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "unsuppress",
+      "target": "l1"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e2": {
+          "volume": 7644.036,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11900.0,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Suppressed: the lip and its groove step in the lid both left out (11712, 7872); unsuppressed: as plastic2_lip_and_groove."
+  }
+}

@@ -1,0 +1,152 @@
+{
+  "id": "plastic2_groove_only",
+  "title": "Groove alone in the base's rim: width Thickness / 2 + clearance, depth Reveal Height + clearance",
+  "tags": [
+    "plastic",
+    "lip"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sf_lip",
+      "id": "l1",
+      "of": "sh1",
+      "edges": {
+        "any_of": [
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 38
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 58
+              }
+            ],
+            "count": 1
+          }
+        ],
+        "count": 4
+      },
+      "options": {
+        "type": "groove",
+        "inner_draft": 0,
+        "outer_draft": 0,
+        "groove_width": 1.1,
+        "groove_depth": 1.1
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11484.036,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      40,
+      20
+    ],
+    "source": "analytic",
+    "note": "Groove 1.1 wide (1 + 0.1) from the inner edges, 1.1 deep (1 + 0.1): (58.2 x 38.2 - 56 x 36) x 1.1 = 227.964."
+  }
+}

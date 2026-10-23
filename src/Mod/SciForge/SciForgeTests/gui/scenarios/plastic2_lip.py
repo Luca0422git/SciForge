@@ -1,0 +1,574 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""PLASTIC > Lip on a base and the groove in its lid, like a Fusion user, real input.
+
+A base (60 x 40 x 20, 2 mm walls, open top) and a lid on it (60 x 40 x 10, 2 mm walls, open
+bottom). The lid is hidden with its eye in the browser; PLASTIC tab > Lip; the four inside
+edges of the base's rim are clicked. Lip And Groove with the default rule (lip 1 x 1, 1
+degree drafts, clearance 0.1): the base gains 184.718, the lid loses 225.929 (hand-worked,
+golden model plastic2_lip_drafted). Inner / Outer Draft typed 0, Lip Height 1.5: the base
+gains (58 x 38 - 56 x 36) x 1.5 = 282, the lid loses (58.2 x 38.2 - 56 x 36) x 1.6 = 331.584.
+The height arrow dragged: the lip follows. Swap: the other way round. Type Groove: the lid
+is left alone, the base loses 207.24 x 1.1 = 227.964. Type Lip: only the lip. Lip Width 2.5
+(wider than the 2 mm wall): refused in the dialog, OK keeps it open. Back to Lip And Groove,
+OK: one "Lip 1" in the timeline. Undo / Redo. Double-click "Lip 1": the values read back;
+Lip Height 1, OK. Double-click again, 2, Esc: unchanged. Save, close, reopen: the same.
+A lip ring on a cone's rim (Pull Direction and Face Guide); walls of different draft refused.
+A new design: a click on the rim's flat face takes its 4 inside edges (the same lip and
+groove); Cancel leaves both bodies as they were.
+"""
+
+import math
+import os
+import tempfile
+
+import FreeCAD as App
+from PySide import QtCore
+
+from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plastic2_steps as ps
+from SciForgeTests.gui import versions_input as vi
+
+V = App.Vector
+s = {}
+LIP_DRAFTED = 184.71844779349476
+GROOVE_DRAFTED = 225.92851211069762
+BAND = 58 * 38 - 56 * 36  # 188: the lip's band
+GBAND = 58.2 * 38.2 - 56 * 36  # 207.24: the groove's band in the lid's wall
+EDGES = [V(30, 2, 20), V(30, 38, 20), V(2, 20, 20), V(58, 20, 20)]
+
+
+def changes():
+    return ps.volume(s["base"]) - ps.BASE, ps.volume(s["lid"]) - ps.LID_SHELL
+
+
+def setup():
+    base, lid = ps.enclosure("Lip", lid="shell")
+    s["base"], s["lid"] = base, lid
+    h.fit()
+    h.check("the enclosure", ps.near(ps.volume(base), ps.BASE) and ps.near(ps.volume(lid), 7872))
+
+
+def hide_lid():
+    ps.click_eye("Lid")
+
+
+def open_lip():
+    h.check("the lid is hidden", not s["lid"].ViewObject.Visibility)
+    ps.plastic_tab()
+    h.ribbon("Lip")
+
+
+def asks_for_edges():
+    p = ps.lip_panel()
+    h.check("the Lip dialog is open", p is not None)
+    if p is None:
+        return
+    h.check("it asks for the rim's edges", "edges" in ps.message(p).lower(), ps.message(p))
+    h.check("Lip And Groove first", p.type.currentText() == "Lip And Groove")
+    h.fit()
+    h.click_edge(EDGES[0])
+
+
+def click_edge(i):
+    def step():
+        ps.settle(ps.lip_panel)
+        p = ps.lip_panel()
+        text = p.field.button.text() if p is not None else ""
+        h.check("edge %d picked" % i, text.startswith("%d edge" % i), (text, ps.message(p)))
+        h.click_edge(EDGES[i])
+
+    step.__name__ = "click_edge_%d" % (i + 1)
+    return step
+
+
+def lip_and_groove():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    if not h.check("still open", p is not None):
+        return
+    h.check(
+        "4 edges picked",
+        p.field.button.text() == "4 edges",
+        (p.field.button.text(), p.names, ps.message(p)),
+    )
+    base, lid = changes()
+    h.check("the lip on the base: +184.718", ps.near(base, LIP_DRAFTED, 1e-6), base)
+    h.check("the groove in the lid: -225.929", ps.near(-lid, GROOVE_DRAFTED, 1e-6), lid)
+    h.check("the other body is the lid", p.mate_label.text() == "Lid", p.mate_label.text())
+    h.check("no error", "⚠" not in ps.message(p), ps.message(p))
+    h.check("two arrows (height, width)", set(p.arrows) == {"lip_height", "lip_width"})
+    h.check(
+        "the shoulder left beside the 1 mm lip on the 2 mm wall",
+        "Wall at the edges: 2.00 mm; shoulder beside the lip: 1.00 mm" in p.shoulder.text(),
+        p.shoulder.text(),
+    )
+    h.shot("plastic2_lip_drafted")
+    ps.ui.click(p.mate_field.button)
+
+
+def click_base_as_mate():
+    h.check("the Other Body box takes the clicks", ps.lip_panel().active == "mate")
+    h.click(V(30, 0, 10))
+
+
+def mate_refused():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    text = ps.message(p)
+    h.check("the edges' own body cannot be the other body", "cannot be the one" in text, text)
+    h.check("the lid stays the other body", p.mate_label.text() == "Lid", p.mate_label.text())
+    ps.ui.click(p.field.button)
+    ps.type_field(p, "inner_draft", "0")
+
+
+def outer_draft():
+    ps.settle(ps.lip_panel)
+    ps.type_field(ps.lip_panel(), "outer_draft", "0")
+
+
+def height():
+    ps.settle(ps.lip_panel)
+    base, lid = changes()
+    h.check("no drafts: lip 188", ps.near(base, BAND, 1e-6), base)
+    h.check("no drafts: groove 227.964", ps.near(-lid, GBAND * 1.1, 1e-6), lid)
+    ps.type_field(ps.lip_panel(), "lip_height", "1.5")
+
+
+def taller():
+    ps.settle(ps.lip_panel)
+    base, lid = changes()
+    h.check("Lip Height 1.5: +282", ps.near(base, BAND * 1.5, 1e-6), base)
+    h.check("the groove 0.1 deeper: -331.584", ps.near(-lid, GBAND * 1.6, 1e-6), lid)
+    s["drag"] = ps.drag_arrow(ps.lip_panel(), "lip_height", 2.5)
+
+
+def dragged():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    value = p.options["lip_height"]
+    h.check("the height arrow dragged: taller", value > 1.8, value)
+    base, _lid = changes()
+    h.check("the lip follows the arrow", ps.near(base, BAND * value, 1e-6), (base, value))
+    ps.type_field(p, "lip_height", "1.5")
+
+
+def swap():
+    ps.settle(ps.lip_panel)
+    ps.toggle(ps.lip_panel().swap)
+
+
+def swapped():
+    ps.settle(ps.lip_panel)
+    base, lid = changes()
+    h.check("Swap: the groove in the base", ps.near(-base, GBAND * 1.6, 1e-6), base)
+    h.check("Swap: the lip on the lid", ps.near(lid, BAND * 1.5, 1e-6), lid)
+    ps.toggle(ps.lip_panel().swap)
+
+
+def groove_type():
+    ps.settle(ps.lip_panel)
+    ps.choose(ps.lip_panel().type, "Groove")
+
+
+def groove_only():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    base, lid = changes()
+    h.check("Groove: the lid is left alone", ps.near(lid, 0.0, 1e-9), lid)
+    h.check("Groove: 1.1 wide, 1.1 deep in the base", ps.near(-base, GBAND * 1.1, 1e-6), base)
+    h.check("Groove shows its own width", p.fields["groove_width"].widget.isVisible())
+    h.check("no other body for a groove alone", not ps.followers(p.target))
+    ps.choose(p.type, "Lip")
+
+
+def lip_only():
+    ps.settle(ps.lip_panel)
+    base, lid = changes()
+    h.check("Lip: only the lip", ps.near(base, BAND * 1.5, 1e-6) and ps.near(lid, 0.0), (base, lid))
+    ps.type_field(ps.lip_panel(), "lip_width", "2.5")
+
+
+def too_wide():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    text = ps.message(p)
+    h.check("Lip Width 2.5 refused: wider than the wall", "less than the wall" in text, text)
+    ps.ok()
+
+
+def ok_refused():
+    p = ps.lip_panel()
+    h.check("OK keeps the dialog open", p is not None)
+    if p is None:
+        return
+    ps.type_field(p, "lip_width", "1")
+
+
+def back_to_both():
+    ps.settle(ps.lip_panel)
+    ps.choose(ps.lip_panel().type, "Lip And Groove")
+
+
+def both_again():
+    ps.settle(ps.lip_panel)
+    base, lid = changes()
+    h.check("Lip And Groove again: +282", ps.near(base, BAND * 1.5, 1e-6), base)
+    h.check("and the groove again: -331.584", ps.near(-lid, GBAND * 1.6, 1e-6), lid)
+    ps.choose(ps.lip_panel().guide, "Face Guide")
+
+
+def face_guide_square():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    base, lid = changes()
+    h.check("Face Guide on square walls: no refusal", "⚠" not in ps.message(p), ps.message(p))
+    h.check("Face Guide: the same lip", ps.near(base, BAND * 1.5, 1e-6), base)
+    h.check("no Direction box for Face Guide", not p.direction_field.widget.isVisible())
+    ps.choose(p.guide, "Pull Direction")
+
+
+def direction_box():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    h.check("the Direction box for Pull Direction", p.direction_field.widget.isVisible())
+    ps.ui.click(p.direction_field.button)
+
+
+def click_front_face():
+    h.check("the Direction box takes the clicks", ps.lip_panel().active == "direction")
+    h.fit()
+    h.click(V(30, 0, 10))
+
+
+def direction_picked():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    text = p.direction_field.button.text()
+    h.check("a direction picked", text == "Picked direction", (text, ps.message(p)))
+    h.check("the edges box takes the clicks again", p.active == "edges")
+    msg = ps.message(p)
+    h.check("the front face's normal lies along the rim: refused", "along the rim" in msg, msg)
+    ps.ui.click(p.direction_field.clear)
+
+
+def direction_cleared():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    text = p.direction_field.button.text()
+    h.check("cleared: the rim's normal again", text == "Rim normal", text)
+    h.check("no refusal now", "⚠" not in ps.message(p), ps.message(p))
+    h.check("the same lip", ps.near(changes()[0], BAND * 1.5, 1e-6), changes())
+    ps.ok()
+
+
+def one_step():
+    p = ps.lip_panel()
+    h.check("the dialog closed", p is None, ps.message(p))
+    titles = ps.titles()
+    h.check("one Lip in the timeline", titles.count("Lip 1") == 1, titles)
+    s["after"] = changes()
+    ps.undo()
+
+
+def undone():
+    base, lid = changes()
+    h.check("Undo: both as before", ps.near(base, 0.0) and ps.near(lid, 0.0), (base, lid))
+    ps.redo()
+
+
+def redone():
+    base, lid = changes()
+    h.check("Redo: lip and groove", ps.near(base, s["after"][0]) and ps.near(lid, s["after"][1]))
+    h.check("double-click opens the edit", ps.double_click_timeline("Lip 1"))
+
+
+def edit_reads_back():
+    p = ps.lip_panel()
+    if not h.check("the edit dialog", p is not None and p.editing):
+        return
+    h.check("Lip Height read back", ps.near(p.options["lip_height"], 1.5), p.options)
+    h.check("drafts read back", ps.near(p.options["inner_draft"], 0.0), p.options)
+    h.check("4 edges", p.field.button.text() == "4 edges", p.field.button.text())
+    ps.type_field(p, "lip_height", "1")
+
+
+def edit_ok():
+    ps.settle(ps.lip_panel)
+    ps.ok()
+
+
+def edited():
+    base, lid = changes()
+    h.check("edited: lip 188", ps.near(base, BAND, 1e-6), base)
+    h.check("edited: groove 227.964", ps.near(-lid, GBAND * 1.1, 1e-6), lid)
+    s["after"] = (base, lid)
+    ps.double_click_timeline("Lip 1")
+
+
+def edit_again():
+    p = ps.lip_panel()
+    if not h.check("the edit dialog again", p is not None):
+        return
+    ps.type_field(p, "lip_height", "2")
+
+
+def esc():
+    ps.settle(ps.lip_panel)
+    base, _lid = changes()
+    h.check("the preview shows 2", ps.near(base, BAND * 2, 1e-6), base)
+    ps.esc()
+
+
+def esc_keeps():
+    h.check("Esc closed it", ps.lip_panel() is None)
+    base, lid = changes()
+    h.check("Esc: unchanged", ps.near(base, s["after"][0]) and ps.near(lid, s["after"][1]))
+    path = os.path.join(tempfile.mkdtemp(prefix="sciforge-lip-"), "lip.FCStd")
+    s["path"] = path
+    ps.doc().saveAs(path)
+
+
+def ctrl_s():
+    h.press(QtCore.Qt.Key_S, QtCore.Qt.ControlModifier)
+
+
+def describe():
+    vi.accept_save()
+
+
+def close_reopen():
+    App.closeDocument(ps.doc().Name)
+    App.openDocument(s["path"])
+    h.fit()
+
+
+def reopened():
+    s["base"], s["lid"] = ps.by_label("Base"), ps.by_label("Lid")
+    if not h.check("both bodies are back", None not in (s["base"], s["lid"])):
+        return
+    ps.doc().recompute()
+    base, lid = changes()
+    h.check("reopened: the same lip and groove", ps.near(base, BAND) and ps.near(-lid, GBAND * 1.1))
+    lips = ps.lip_steps()
+    h.check("one Lip step and its groove step", len(lips) == 1 and len(ps.followers(lips[0])) == 1)
+    bad = [o.Name for o in ps.doc().Objects if "Invalid" in o.State or "Error" in o.State]
+    h.check("every step computed", not bad, bad)
+    cone_design()
+
+
+def cone_design():
+    """A cone frustum (radius 10 at the bottom, 8 at the top, 10 high): its top face's rim
+    leans (the cone's side)."""
+    d = App.newDocument("LipCone")
+    body = d.addObject("PartDesign::Body", "Cone")
+    body.Label = "Cone"
+    cone = body.newObject("PartDesign::AdditiveCone", "ConeShape")
+    cone.Radius1, cone.Radius2, cone.Height = 10, 8, 10
+    body.Tip = cone
+    d.recompute()
+    s["cone"] = body
+    s["cone_volume"] = ps.volume(body)
+    h.fit()
+    ps.plastic_tab()
+    h.ribbon("Lip")
+
+
+def cone_lip_type():
+    p = ps.lip_panel()
+    if not h.check("the Lip dialog on the cone", p is not None):
+        return
+    ps.choose(p.type, "Lip")
+
+
+def click_cone_rim():
+    ps.settle(ps.lip_panel)
+    h.click_edge(V(0, -8, 10))
+
+
+def cone_lip():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    added = ps.volume(s["cone"]) - s["cone_volume"]
+    # a 1 x 1 ring inside the 8 mm rim: (64 - 49) pi = 47.12, a little less with 1 degree drafts
+    h.check("a lip ring on the cone's top", 45.0 < added < 47.2, (added, ps.message(p)))
+    ps.type_field(p, "inner_draft", "0")
+
+
+def cone_outer_draft():
+    ps.settle(ps.lip_panel)
+    ps.type_field(ps.lip_panel(), "outer_draft", "0")
+
+
+def cone_pull_exact():
+    ps.settle(ps.lip_panel)
+    added = ps.volume(s["cone"]) - s["cone_volume"]
+    h.check("Pull Direction, no drafts: 15 pi", ps.near(added, 15 * math.pi, 1e-6), added)
+    ps.choose(ps.lip_panel().guide, "Face Guide")
+
+
+def cone_face_guide():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    h.check("Face Guide on the cone: no refusal", "⚠" not in ps.message(p), ps.message(p))
+    added = ps.volume(s["cone"]) - s["cone_volume"]
+    # the ring leans in with the cone's side (tan = 2 / 10): a frustum ring from radii 8 / 7 at
+    # the rim to 7.8 / 6.8 one up: pi / 3 (187.24 - 142.84) = 14.8 pi
+    h.check(
+        "Face Guide: the ring leans with the cone (14.8 pi)",
+        ps.near(added, 14.8 * math.pi, 1e-6),
+        added,
+    )
+    tops = [
+        e
+        for e in s["cone"].Shape.Edges
+        if type(e.Curve).__name__ == "Circle"
+        and abs(e.Curve.Radius - 7.8) < 1e-6
+        and abs(e.Curve.Center.z - 11.0) < 1e-6
+    ]
+    h.check("its outer face goes on along the cone (radius 7.8 at the top)", len(tops) == 1, tops)
+    ps.ok()
+
+
+def cone_done():
+    h.check("Face Guide: OK closes it", ps.lip_panel() is None)
+    h.check("one Lip on the cone", len(ps.lip_steps()) == 1)
+    mixed_walls()
+
+
+def mixed_walls():
+    """Walls of different draft along the chain: Face Guide is refused with the reason (the
+    Lip's own check, called the way its dialog does when the edges are picked)."""
+    import Part
+
+    from sciforge import plastic_lip
+
+    box = Part.makeBox(20, 20, 10)
+    # one side wall drafted, the others square: cut a wedge off the +X side
+    wedge = Part.makePolygon(
+        [App.Vector(20, 0, 0), App.Vector(20, 0, 10), App.Vector(18, 0, 10), App.Vector(20, 0, 0)]
+    )
+    cut = Part.Face(wedge).extrude(App.Vector(0, 20, 0))
+    shape = box.cut(cut)
+    top = [f for f in shape.Faces if abs(f.CenterOfMass.z - 10) < 1e-6][0]
+    rim = plastic_lip.Rim(shape, list(top.Edges))
+    try:
+        plastic_lip.wall_lean(rim)
+        text = ""
+    except plastic_lip.LipError as exc:
+        text = str(exc)
+    h.check("walls of different draft: Face Guide refused, saying why", "different" in text, text)
+    # a lip exactly as wide as the 2 mm wall leaves no shoulder: refused; a hair less fits
+    cup = Part.makeBox(20, 20, 10).cut(Part.makeBox(16, 16, 10, App.Vector(2, 2, 2)))
+    inside = [
+        e
+        for e in cup.Edges
+        if all(abs(v.Point.z - 10) < 1e-6 and 1.9 < v.Point.x < 18.1 for v in e.Vertexes)
+        and all(1.9 < v.Point.y < 18.1 for v in e.Vertexes)
+    ]
+    rim = plastic_lip.Rim(cup, inside)
+    opts = plastic_lip.core.defaults()
+    opts.update({"type": "lip", "lip_width": 2.0})
+    text = plastic_lip.check_fit(rim, opts)
+    h.check("a lip as wide as the wall: refused", "less than the wall" in text, (len(inside), text))
+    opts["lip_width"] = 1.95
+    h.check("a lip a hair narrower fits", plastic_lip.check_fit(rim, opts) == "")
+
+
+def rim_face_design():
+    base, lid = ps.enclosure("LipFace", lid="shell")
+    s["base"], s["lid"] = base, lid
+    h.fit()
+    ps.click_eye("Lid")
+
+
+def rim_face_open():
+    h.check("the new design's lid is hidden", not s["lid"].ViewObject.Visibility)
+    ps.plastic_tab()
+    h.ribbon("Lip")
+
+
+def click_rim_face():
+    ps.settle(ps.lip_panel)
+    h.check("the Lip dialog again", ps.lip_panel() is not None)
+    h.click(V(1, 20, 20))  # the rim's flat face, on the left wall
+
+
+def rim_face_lip():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    if not h.check("still open", p is not None):
+        return
+    text = p.field.button.text()
+    h.check(
+        "a click on the rim's face: its 4 inside edges", text == "4 edges", (text, ps.message(p))
+    )
+    base, lid = changes()
+    h.check("the same lip as with the edges: +184.718", ps.near(base, LIP_DRAFTED, 1e-6), base)
+    h.check("the same groove: -225.929", ps.near(-lid, GROOVE_DRAFTED, 1e-6), lid)
+    ps.cancel()
+
+
+def rim_face_cancelled():
+    h.check("Cancel: no Lip left", not ps.lip_steps())
+    base, lid = changes()
+    h.check("both bodies as they were", ps.near(base, 0.0) and ps.near(lid, 0.0), (base, lid))
+
+
+h.run(
+    "plastic2_lip",
+    [
+        setup,
+        hide_lid,
+        open_lip,
+        asks_for_edges,
+        click_edge(1),
+        click_edge(2),
+        click_edge(3),
+        lip_and_groove,
+        click_base_as_mate,
+        mate_refused,
+        outer_draft,
+        height,
+        taller,
+        dragged,
+        swap,
+        swapped,
+        groove_type,
+        groove_only,
+        lip_only,
+        too_wide,
+        ok_refused,
+        back_to_both,
+        both_again,
+        face_guide_square,
+        direction_box,
+        click_front_face,
+        direction_picked,
+        direction_cleared,
+        one_step,
+        undone,
+        redone,
+        edit_reads_back,
+        edit_ok,
+        edited,
+        edit_again,
+        esc,
+        esc_keeps,
+        ctrl_s,
+        describe,
+        close_reopen,
+        reopened,
+        cone_lip_type,
+        click_cone_rim,
+        cone_lip,
+        cone_outer_draft,
+        cone_pull_exact,
+        cone_face_guide,
+        cone_done,
+        rim_face_design,
+        rim_face_open,
+        click_rim_face,
+        rim_face_lip,
+        rim_face_cancelled,
+    ],
+)

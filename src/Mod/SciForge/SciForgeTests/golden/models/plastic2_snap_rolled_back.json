@@ -1,0 +1,130 @@
+{
+  "id": "plastic2_snap_rolled_back",
+  "title": "Snap Fit with the history marker rolled back before it (both bodies as before), then to the end",
+  "tags": [
+    "plastic",
+    "snap_fit",
+    "timeline"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 2,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_snap_fit",
+      "id": "sf1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          58,
+          20
+        ]
+      ],
+      "options": {
+        "fillet": 0,
+        "draft": 0,
+        "thickness": 2,
+        "tip_thickness": 2,
+        "clearance": 0.1,
+        "loop_thickness": 2,
+        "length": 12,
+        "width": 6,
+        "catch_depth": 1,
+        "catch_length": 3
+      }
+    },
+    {
+      "op": "roll",
+      "before": "sf1"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 11712.0,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 4800.0,
+          "solids": 1
+        }
+      }
+    },
+    {
+      "op": "roll",
+      "end": true
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 11690.176,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4956.803847577294,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Rolled back: the hook and its groove step both wait (11712, 4800); at the end: as plastic2_snap_parallel."
+  }
+}

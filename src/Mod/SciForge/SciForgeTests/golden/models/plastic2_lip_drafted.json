@@ -1,0 +1,191 @@
+{
+  "id": "plastic2_lip_drafted",
+  "title": "Lip And Groove with the rule's 1 degree draft on both sides",
+  "tags": [
+    "plastic",
+    "lip"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "shell",
+      "id": "sh2",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          -1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sf_lip",
+      "id": "l1",
+      "of": "sh1",
+      "edges": {
+        "any_of": [
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 38
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 58
+              }
+            ],
+            "count": 1
+          }
+        ],
+        "count": 4
+      },
+      "options": {
+        "lip_width": 1,
+        "lip_height": 1,
+        "clearance": 0.1,
+        "clearance_height": 0.1,
+        "inner_draft": 1,
+        "outer_draft": 1
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e2": {
+          "volume": 7646.071487889302,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11896.718447793495,
+    "solids": 1,
+    "source": "analytic",
+    "note": "k = tan 1 deg. Lip = integral over the height of (58 - 2kz)(38 - 2kz) - (56 + 2kz)(36 + 2kz) = 2204 - 96k - 2016 - 92k = 184.71845. Groove in the lid wall: a = 1.1 - kz, integral 0..1.1 of 184a + 4a^2 = 225.92851 (numerically)."
+  }
+}

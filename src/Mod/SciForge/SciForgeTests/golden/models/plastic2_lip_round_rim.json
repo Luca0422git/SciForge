@@ -1,0 +1,54 @@
+{
+  "id": "plastic2_lip_round_rim",
+  "title": "Lip alone on the round top edge of a cylinder (a ring inside the rim)",
+  "tags": [
+    "plastic",
+    "lip"
+  ],
+  "steps": [
+    {
+      "op": "sf_primitive",
+      "id": "c1",
+      "kind": "cylinder",
+      "plane": "XY",
+      "diameter": 16,
+      "height": 10
+    },
+    {
+      "op": "sf_lip",
+      "id": "l1",
+      "of": "c1",
+      "edges": {
+        "type": "circle",
+        "at": {
+          "axis": "z",
+          "value": "max"
+        },
+        "count": 1
+      },
+      "options": {
+        "lip_width": 1,
+        "lip_height": 1,
+        "clearance": 0.1,
+        "clearance_height": 0.1,
+        "type": "lip",
+        "inner_draft": 0,
+        "outer_draft": 0
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2057.7431881013144,
+    "solids": 1,
+    "bbox": [
+      -8,
+      -8,
+      0,
+      8,
+      8,
+      11
+    ],
+    "source": "analytic",
+    "note": "Cylinder r 8 h 10 = 640 pi; the lip 1 wide inside the top rim, 1 high: (8^2 - 7^2) pi = 15 pi."
+  }
+}

@@ -1,0 +1,109 @@
+{
+  "id": "plastic2_snap_distance",
+  "title": "Snap Fit with a Distance extent: the hook's base 5 mm from the parting plane (through the lid)",
+  "tags": [
+    "plastic",
+    "snap_fit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 2,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_snap_fit",
+      "id": "sf1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          58,
+          20
+        ]
+      ],
+      "options": {
+        "fillet": 0,
+        "draft": 0,
+        "thickness": 2,
+        "tip_thickness": 2,
+        "clearance": 0.1,
+        "loop_thickness": 2,
+        "length": 12,
+        "width": 6,
+        "catch_depth": 1,
+        "catch_length": 3,
+        "extent": "distance",
+        "extent_distance": 5
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4992.803847577294,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      8,
+      60,
+      40,
+      25
+    ],
+    "source": "analytic",
+    "note": "As plastic2_snap_parallel, plus the base block 2 x 6 from z 20 to 25: the 3 mm above the 2 mm lid stand out (2 x 6 x 3 = 36)."
+  }
+}
