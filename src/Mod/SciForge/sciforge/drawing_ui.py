@@ -260,6 +260,7 @@ def enable():
     if STATE["observer"] is None:
         STATE["observer"] = _Observer()
         App.addDocumentObserver(STATE["observer"])
+    _DocWatch.ensure()  # (a design closing with a drawing tab open: _leave_sheets)
     if STATE["input"] is None:
         STATE["input"] = PageInput()
     _later(sync_mode, ms=0)
@@ -695,6 +696,7 @@ class _DocWatch:
             warn("drawing close watch unavailable: %s" % exc)
 
     def slotDeletedDocument(self, gdoc):
+        _leave_sheets()
         try:
             name = gdoc.Document.Name
             inp = STATE.get("input")
@@ -709,6 +711,31 @@ class _DocWatch:
                 inp.detach()
         except Exception as exc:
             warn("drawing close watch: %s" % exc)
+
+
+def _leave_sheets():
+    """Tell every drawing tab the mouse has left, while the closing design's view providers
+    still exist. FreeCAD 1.1.4 drops them before it closes the design's tabs, and a tab
+    whose sheet had a view under the mouse then sent that view a hover-leave that reached
+    for its page's dropped view provider: SIGSEGV in ViewProviderPage::getQGSPage from
+    QGIViewPart::hoverLeaveEvent (a design closed from Python or the keyboard with the mouse
+    on a drawing view; scenario drawing2_symbols, every run since 0.1.0-beta). Left now,
+    the sheet has nothing hovered when its tab goes. Other designs' tabs only lose their
+    hover look until the mouse moves."""
+    area = _area()
+    if area is None:
+        return
+    for sub in list(area.subWindowList()):
+        try:
+            widget = sub.widget()
+            if widget is None or widget.metaObject().className() != PAGE_VIEW:
+                continue
+            for gv in sub.findChildren(QtWidgets.QGraphicsView):
+                QtWidgets.QApplication.sendEvent(gv.viewport(), QtCore.QEvent(QtCore.QEvent.Leave))
+        except RuntimeError:
+            continue  # (a tab already on its way out)
+        except Exception as exc:
+            warn("drawing close: %s" % exc)
 
 
 def default_double_click(page, point):

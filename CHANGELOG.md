@@ -64,6 +64,12 @@ only has to replace SciForge's own part: the compiled program has not changed.
   Fillet, Chamfer, Press Pull, Delete and Merge on surface bodies. Its tools for them come
   next.
 
+### Fixed
+
+- **A crash when a design with a drawing closed** while the mouse pointer was on a view of
+  the drawing sheet (closing with the keyboard, or the AI closing the design). It was in
+  0.1.0-beta too.
+
 ### Known problems
 
 The list is in [docs/sciforge/known-issues.md](docs/sciforge/known-issues.md). New in this beta:
