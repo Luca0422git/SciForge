@@ -571,13 +571,15 @@ class SnapGrooveFollower(modify_bodies._Follower):
         if problems:
             raise SnapError(problems[0])
         if not options["groove"]:
+            modify_bodies._set_note(obj, "")
             return base_shape
         body = bodies.body_of(obj)
         place = body.getGlobalPlacement() if body is not None else App.Placement()
         shape = bodies.baked(base_shape)
         if not place.isIdentity():
             shape.transformShape(place.toMatrix(), True)
-        result, _note = other_side(lead, options, shape)
+        result, note = other_side(lead, options, shape)
+        modify_bodies._set_note(obj, note)
         if not place.isIdentity():
             result = result.copy()
             result.transformShape(place.inverse().toMatrix(), True)

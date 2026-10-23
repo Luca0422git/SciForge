@@ -1,0 +1,243 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+"""PLASTIC > Snap Fit: its other types and options, a refusal, Cancel, components and an empty
+design, like a Fusion user, real input.
+
+The base (60 x 40 x 20, 2 mm walls) under a 2 mm lid; a sketch of three points on the
+parting plane: against the right wall (58, 20), the left wall (2, 20) and the middle (30,
+20). The lid hidden with its eye; Snap Fit; Selection Mode Manual; a click on the middle
+point: 1 point. Hook and Loop: the loop stands on the base's floor (+186.76, worked out in
+the golden model plastic2_snap_loop). Perpendicular Hook and Groove: there is no wall across
+the beam there, so no other body (said in the dialog), the hook alone. Parallel, Automatic,
+a click on the sketch's browser row: 3 points; Aligned: the catches face away from the
+middle, two grooves in the side walls (2 x 21.824) and a note that one snap fit found no
+wall. Independent with the angles 0, 180, 90: the same two grooves. Catch Length 1 (shorter
+than the lead-in ramp): refused with the reason, OK keeps the dialog. Esc: nothing left.
+Then the base and the lid as components, the lid's component moved up 20 (its lid drawn at
+0 .. 2 in it): a Snap Fit across the components cuts the same groove. An empty design: Snap
+Fit and Lip say what they need, no dialog.
+"""
+
+import FreeCAD as App
+import FreeCADGui as Gui
+from PySide6 import QtTest
+
+from SciForgeTests.gui import harness as h
+from SciForgeTests.gui import plastic2_steps as ps
+
+V = App.Vector
+s = {}
+LOOP = 186.76
+
+
+def base_change():
+    return ps.volume(s["base"]) - ps.BASE
+
+
+def setup():
+    base, lid = ps.enclosure("SnapOptions", lid="plate")
+    ps.points_sketch(base, [(58, 20), (2, 20), (30, 20)])
+    s["base"], s["lid"] = base, lid
+    h.fit()
+    ps.click_eye("Lid")
+
+
+def open_snap():
+    h.check("the lid is hidden", not s["lid"].ViewObject.Visibility)
+    ps.plastic_tab()
+    h.ribbon("Snap Fit")
+
+
+def manual():
+    p = ps.snap_panel()
+    if not h.check("the dialog", p is not None):
+        return
+    ps.choose(p.selection, "Manual")
+
+
+def click_middle_point():
+    ps.settle(ps.snap_panel)
+    sk = ps.by_label("SnapPoints")
+    h.check("the sketch is shown to pick its points", sk.ViewObject.Visibility)
+    h.fit()
+    h.click(V(30, 20, 20))
+
+
+def one_point():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    text = p.field.button.text()
+    h.check("Manual: the clicked point only", text.startswith("1 point"), (text, ps.message(p)))
+    h.check("its index", p.indices == [2], p.indices)
+    ps.choose(p.type, "Hook and Loop")
+
+
+def loop():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("the Loop section", p.other_box.title() == "Loop", p.other_box.title())
+    h.check("Loop Thickness shown", p.fields["loop_thickness"].widget.isVisible())
+    h.check("the loop on the floor: +186.76", ps.near(base_change(), LOOP, 1e-6), base_change())
+    h.check("the loop's body is the base", p.other_label.text() == "Base", p.other_label.text())
+    ps.choose(p.type, "Perpendicular Hook and Groove")
+
+
+def perpendicular():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("the Hook Undercut section", p.other_box.title() == "Hook Undercut")
+    h.check("no wall across the beam: no other body", p.other_label.text() == "(none found)")
+    h.check("the base unchanged", ps.near(base_change(), 0.0, 1e-9), base_change())
+    h.check("the hook is made", ps.volume(s["lid"]) > 4800 + 150, ps.volume(s["lid"]))
+    ps.choose(p.type, "Parallel Hook and Groove")
+
+
+def automatic():
+    ps.settle(ps.snap_panel)
+    ps.choose(ps.snap_panel().selection, "Automatic")
+
+
+def pick_sketch_row():
+    ps.settle(ps.snap_panel)
+    ps.click_row("SnapPoints")
+
+
+def three_points():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    text = p.field.button.text()
+    h.check("Automatic: the sketch's 3 points", text.startswith("3 points"), text)
+    ps.choose(p.rotation, "Aligned")
+
+
+def aligned():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    cut = -base_change()
+    h.check("Aligned: two grooves in the side walls", ps.near(cut, 2 * ps.GROOVE, 1e-6), cut)
+    h.check("the note: one snap fit found no wall", "1 of 3" in ps.message(p), ps.message(p))
+    h.check("Face In shown for Aligned", p.inward.isVisible())
+    ps.choose(p.rotation, "Independent")
+
+
+def independent():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("Angles shown for Independent", p.angles.isVisible() and not p.angle.widget.isVisible())
+    ps.ui.type_into(p.angles, "0, 180, 90")
+
+
+def independent_angles():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("the angles taken", p.options["angles"] == [0.0, 180.0, 90.0], p.options["angles"])
+    cut = -base_change()
+    h.check("Independent 0 / 180: the same two grooves", ps.near(cut, 2 * ps.GROOVE, 1e-6), cut)
+    ps.type_field(p, "catch_length", "1")
+
+
+def refused():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    text = ps.message(p)
+    h.check("Catch Length 1 refused: shorter than the lead-in", "lead-in" in text, text)
+    ps.ok()
+
+
+def ok_refused():
+    p = ps.snap_panel()
+    h.check("OK keeps the dialog open", p is not None)
+    ps.esc()
+
+
+def esc_leaves_nothing():
+    h.check("Esc closed it", ps.snap_panel() is None)
+    h.check("nothing left: no snap fit", not ps.snap_steps())
+    h.check("the base as it was", ps.near(base_change(), 0.0, 1e-9), base_change())
+    h.check("the lid as it was", ps.near(ps.volume(s["lid"]), 4800.0))
+
+
+def components_design():
+    from sciforge import components
+
+    base, lid = ps.enclosure("SnapComponents", lid=None)
+    top = ps.doc().addObject("PartDesign::Body", "Lid")
+    top.Label = "Lid"
+    ps._box(top, "Additive", "LidBox", (60, 40, 2), (0, 0, 0))
+    ps.doc().recompute()
+    parts = components.from_bodies(ps.doc(), [base, top])
+    parts[1].Placement = App.Placement(V(0, 0, 20), App.Rotation())
+    ps.points_sketch(base, [(58, 20)])
+    s["base"], s["lid"] = base, top
+    h.check("two components", len(parts) == 2)
+    h.fit()
+    ps.plastic_tab()
+    h.ribbon("Snap Fit")
+
+
+def pick_in_components():
+    ps.settle(ps.snap_panel)
+    ps.click_row("SnapPoints")
+
+
+def across_components():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    if not h.check("the dialog", p is not None):
+        return
+    cut = -base_change()
+    h.check("the groove in the base component: 21.824", ps.near(cut, ps.GROOVE, 1e-6), cut)
+    added = ps.volume(s["lid"]) - 4800.0
+    h.check("the hook on the lid component", 150 < added < 165, added)
+    from sciforge import bodies
+
+    box = bodies.global_shape(s["lid"]).BoundBox
+    h.check("the hook hangs from the moved lid (z 8)", ps.near(box.ZMin, 8.0, 1e-6), box)
+    ps.ok()
+
+
+def empty_design():
+    h.check("OK closed it", ps.snap_panel() is None)
+    h.check("one Snap Fit", len(ps.snap_steps()) == 1)
+    App.newDocument("Empty")
+    ps.plastic_tab()
+    h.ribbon("Snap Fit")
+
+
+def no_snap_dialog():
+    QtTest.QTest.qWait(300)
+    h.check("an empty design: no Snap Fit dialog", not Gui.Control.activeDialog())
+    h.ribbon("Lip")
+
+
+def no_lip_dialog():
+    QtTest.QTest.qWait(300)
+    h.check("an empty design: no Lip dialog", not Gui.Control.activeDialog())
+
+
+h.run(
+    "plastic2_snap_options",
+    [
+        setup,
+        open_snap,
+        manual,
+        click_middle_point,
+        one_point,
+        loop,
+        perpendicular,
+        automatic,
+        pick_sketch_row,
+        three_points,
+        aligned,
+        independent,
+        independent_angles,
+        refused,
+        ok_refused,
+        esc_leaves_nothing,
+        components_design,
+        pick_in_components,
+        across_components,
+        empty_design,
+        no_snap_dialog,
+        no_lip_dialog,
+    ],
+)
