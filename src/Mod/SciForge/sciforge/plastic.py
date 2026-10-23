@@ -29,6 +29,7 @@ The contract of the PLASTIC builders (wave 6; extend it, never rename or remove)
 Added by plastic-1 (wave 6):
 
     library_rules(), library_rule(name)  the built-in library plus the user's own rules
+    usable(field, value)                 whether a rule value can drive a SOLID step's field
     save_library_rule(rule), delete_library_rule(name)
     default_rule_name(), set_default_rule(name)   Fusion's "Set As Default" (library only)
     is_used(doc, name)                   a design rule assigned to a component
@@ -334,6 +335,13 @@ TOOL_DEFAULTS = {
 }
 
 
+def usable(field, value):
+    """Whether a rule value can drive a SOLID step's field. A rule without draft (0 deg, the
+    3D-print rules FDM PLA / PETG) gives no draft angle: Draft refuses 0 deg, and a linked
+    Draft set to 0 would silently stop drafting, so Draft keeps its own angle then."""
+    return not (field == "draft_angle" and abs(float(value)) < 1e-9)
+
+
 def apply_defaults(options, body, tool):
     """Put the body's component's rule values into a new dialog's options (in place) for the
     fields of TOOL_DEFAULTS[tool]; nothing for a body whose component has no rule. Returns
@@ -346,7 +354,10 @@ def apply_defaults(options, body, tool):
             value = default_for(body, field)
             if value is None or key not in options:
                 continue
-            options[key] = round(float(value) * factor, 4)
+            value = round(float(value) * factor, 4)
+            if not usable(field, value):
+                continue  # e.g. a 3D-print rule's 0 deg: Draft keeps its own angle
+            options[key] = value
             done.append(key)
         if done:
             log("plastic rule defaults for %s: %s" % (tool, ", ".join(done)))
@@ -435,6 +446,12 @@ def follow(doc, component, rule):
                     if _has_formula(feature, prop) or field not in rule:
                         continue
                     want = round(float(rule[field]) * float(factor), 4)
+                    if not usable(field, want):
+                        log(
+                            "plastic rule '%s' has no draft (0 deg): %s keeps its %s"
+                            % (rule.get("name", "?"), feature.Label, prop)
+                        )
+                        continue
                     if abs(_value(feature, prop) - want) > 1e-9:
                         setattr(feature, prop, want)
                         changed += 1
