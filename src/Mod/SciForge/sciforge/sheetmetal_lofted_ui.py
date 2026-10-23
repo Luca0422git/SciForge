@@ -103,12 +103,41 @@ class LoftedPanel(smp.SmPanel):
                 ),
             ],
         )
+        self.add_combo(
+            "rule",
+            "Rule",
+            self._rule_items(),
+            "The sheet metal rule of the new body (thickness, bend radius)",
+        )
         self.fields_changed("forming")
+
+    def _rule_items(self):
+        """The design's rules, then the library's (Fusion's Rule box of a new flange body);
+        the component's active rule first."""
+        from . import components, sheetmetal_core
+
+        doc = self.doc
+        try:
+            component = components.active_component(doc)
+        except Exception:
+            component = None
+        active = sheetmetal.active_rule_name(doc, component)
+        names = [r["name"] for r in sheetmetal.design_rules(doc)]
+        names += [r["name"] for r in sheetmetal_core.LIBRARY if r["name"] not in names]
+        names.sort(key=lambda n: n != active)
+        if self.options.get("rule") is None:
+            self.options["rule"] = active
+        return [(n, n) for n in names]
 
     def fields_changed(self, key):
         brake = self.value("forming") == "brake"
         self.show_row("control", brake)
         self.show_row("value", brake)
+        self.show_row("rule", self.value("operation") == "new_body" and not self.editing)
+        if key == "rule" and self.target is not None and not self.editing:
+            target, self.target = self.target, None
+            self.drop_preview(target)
+            self.quiet_recompute()
         if key == "control":
             control = self.value("control")
             self.set_value("value", core.FACET_DEFAULTS.get(control, 1.0))
@@ -160,7 +189,9 @@ class LoftedPanel(smp.SmPanel):
                 raise sb.SheetMetalError(str(exc))
 
     def make_feature(self, options):
-        body = sl.target_body(self.doc, options.get("operation"), self.join_body)
+        body = sl.target_body(
+            self.doc, options.get("operation"), self.join_body, options.get("rule")
+        )
         if body is not self.join_body:
             self.made_body = body
         self.body = body

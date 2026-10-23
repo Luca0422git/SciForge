@@ -87,6 +87,10 @@ class BendPanel(smp.SmPanel):
             values = {k: self.value(k) for k in sb.LINE_KEYS}
             if chosen:
                 self.line_settings[chosen] = values
+                box = self.fields["line"]
+                text = box.currentText()
+                if not text.endswith(" *"):
+                    box.setItemText(box.currentIndex(), text + " *")  # has its own values
             else:
                 self.common.update(values)
         if key in ("angle", "flip", "position", "line"):

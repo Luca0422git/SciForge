@@ -143,7 +143,13 @@ def line_two_at_45():
 def all_lines_back():
     p = panel()
     h.check("All lines shows the common 90", p is not None and abs(p.value("angle") - 90) < 1e-9)
-    st.choose(p, "line", "Line 2")
+    box = p.fields["line"] if p else None
+    h.check(
+        "Line 2 is marked as having its own values",
+        box is not None and box.itemText(2) == "Line 2 *",
+        box and box.itemText(2),
+    )
+    st.choose(p, "line", "Line 2 *")
 
 
 def line_two_kept():

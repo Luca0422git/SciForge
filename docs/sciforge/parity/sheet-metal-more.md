@@ -90,7 +90,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Forming Type Brake Form / Die Form | Brake Form: arcs become straight facets; each corner of one profile fans out to the stretch of the other in the same direction round its centre, one flat facet along each side (a square-to-round transition), each facet moved T along its normal; Die Form: a smooth loft of the profiles thickened in their own planes (open profiles: very fine facets) | A[R16], A[R38], G (geometry) |
 | Facet Control Chord Tolerance / Facet Angle / Facet Distance / Face Number | Same four, with SciForge's defaults 0.1 mm / 10° / 5 mm / 6 | A[R15], A[R38], A[R44], G (values) |
 | Orientation Side 1 / Side 2 / Center | Same | A[R15] |
-| Operation New Body / Join | New Body (a new sheet metal body with the active rule) or Join (into the active sheet metal body) | G |
+| Operation New Body / Join, Rule | New Body (a new sheet metal body; its Rule box lists the design's rules then the library's, the active rule first) or Join (into the active sheet metal body, its own rule) | A[R44], CP2 item 3, G |
 | Die Form flat pattern | The step says `Developable = False`; the flat pattern can refuse it with that reason | CP2 item 7 |
 
 ### Sheet metal Fillet / Chamfer (SHEET METAL > MODIFY > Fillet / Chamfer; Sep 2026)
