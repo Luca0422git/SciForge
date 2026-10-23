@@ -161,6 +161,30 @@ def reopened():
             found,
         )
     h.check("the flat plate is still used up (hidden)", not bodies.is_shown(s["flat"]))
+    # Change Parameters lists only the values each step's choices use (like its dialog)
+    from sciforge import parameters
+
+    rows = parameters.model_parameters(doc)
+
+    def labels(kind):
+        names = [o.Name for o in st.steps(kind)]
+        return sorted(r["label"] for r in rows if r["object"] in names)
+
+    h.check(
+        "Change Parameters: an Open hem shows Length and Gap, no Radius",
+        labels("SheetMetalHem") == ["Gap", "Length"],
+        labels("SheetMetalHem"),
+    )
+    h.check(
+        "Change Parameters: a corner closure on the rule's gap shows no Gap / Overlap",
+        labels("SheetMetalCornerClosure") == [],
+        labels("SheetMetalCornerClosure"),
+    )
+    h.check(
+        "Change Parameters: a join on the rule's radius shows no Bend Radius",
+        labels("SheetMetalJoinBend") == [],
+        labels("SheetMetalJoinBend"),
+    )
 
 
 # -- edit from the timeline, change a value, Cancel / Esc ------------------------------------

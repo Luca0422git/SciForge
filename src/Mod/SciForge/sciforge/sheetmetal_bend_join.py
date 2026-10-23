@@ -178,6 +178,11 @@ class JoinBendFeature:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        show_used(obj)
+
+    def onChanged(self, obj, prop):
+        if prop == "UseRuleRadius":
+            show_used(obj)
 
     def execute(self, obj):
         try:
@@ -194,6 +199,14 @@ class JoinBendFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def show_used(obj):
+    """Bend Radius is shown (property editor, Change Parameters) only when it is used."""
+    try:
+        obj.setEditorMode("BendRadius", 2 if obj.UseRuleRadius else 0)
+    except Exception:
+        pass
 
 
 def build(obj):

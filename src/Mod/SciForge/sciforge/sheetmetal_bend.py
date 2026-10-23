@@ -764,6 +764,11 @@ class BendFeature:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        show_used(obj)
+
+    def onChanged(self, obj, prop):
+        if prop == "OverrideRadius":
+            show_used(obj)
 
     def execute(self, obj):
         try:
@@ -780,6 +785,15 @@ class BendFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def show_used(obj):
+    """Bend Radius is shown (property editor, Change Parameters) only when it overrides the
+    rule's."""
+    try:
+        obj.setEditorMode("BendRadius", 0 if obj.OverrideRadius else 2)
+    except Exception:
+        pass
 
 
 def options_of(obj):

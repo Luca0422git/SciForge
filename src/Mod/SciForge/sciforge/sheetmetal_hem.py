@@ -156,6 +156,11 @@ class HemFeature:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        show_used(obj)
+
+    def onChanged(self, obj, prop):
+        if prop in ("HemType", "OverrideRadius"):
+            show_used(obj)
 
     def execute(self, obj):
         try:
@@ -172,6 +177,27 @@ class HemFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+HEM_PROPS = {
+    "length": "Length",
+    "gap": "Gap",
+    "radius": "Radius",
+    "angle": "RollAngle",
+    "setback": "Setback",
+}
+
+
+def show_used(obj):
+    """Only the values the hem's type uses are shown (property editor, the timeline's Change
+    Parameters), like the dialog's rows: a Gap typed there for a Rolled hem changed nothing."""
+    try:
+        used = core.HEM_VALUES.get(_key(str(obj.HemType), core.HEM_LABELS), ())
+        for key, prop in HEM_PROPS.items():
+            obj.setEditorMode(prop, 0 if key in used else 2)
+        obj.setEditorMode("BendRadius", 0 if obj.OverrideRadius else 2)
+    except Exception:
+        pass
 
 
 def _key(label, table):

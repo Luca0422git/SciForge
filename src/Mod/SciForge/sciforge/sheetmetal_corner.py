@@ -562,6 +562,11 @@ class CornerClosureFeature:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        show_used(obj)
+
+    def onChanged(self, obj, prop):
+        if prop in ("Alignment", "UseRuleGap", "Relief", "UseRuleRelief"):
+            show_used(obj)
 
     def execute(self, obj):
         try:
@@ -578,6 +583,23 @@ class CornerClosureFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def show_used(obj):
+    """Only the values the step's choices use are shown (property editor, the timeline's
+    Change Parameters), like the dialog's rows: a Gap typed there while the rule's gap is
+    used changed nothing."""
+    try:
+        overlap = str(obj.Alignment) == core.CLOSURE_LABELS["overlap"]
+        cut = _key(str(obj.Relief), core.CLOSURE_RELIEF_LABELS) in CUT_RELIEFS
+        obj.setEditorMode("Gap", 2 if obj.UseRuleGap else 0)
+        obj.setEditorMode("Overlap", 0 if overlap else 2)
+        obj.setEditorMode("FlipOverlap", 0 if overlap else 2)
+        obj.setEditorMode("ReliefPlacement", 0 if cut else 2)
+        obj.setEditorMode("UseRuleRelief", 0 if cut else 2)
+        obj.setEditorMode("ReliefSize", 0 if cut and not obj.UseRuleRelief else 2)
+    except Exception:
+        pass
 
 
 def _key(label, table):
