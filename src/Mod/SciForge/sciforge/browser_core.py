@@ -273,6 +273,8 @@ def _folders(objects, active_body, component):
             # Fusion's Flat Pattern node under its component (sheet metal, flatpattern.py)
             node = _item("flat_pattern:", obj, "flat_pattern", "flat_pattern")
             node["visible"] = None  # it opens in its own environment (FLAT PATTERN tab)
+            if obj.get("describe"):
+                node["tip"] = node["tip"] or obj["describe"]
             flat_patterns.append(node)
         elif type_id in SKETCH_TYPES:
             sketches.append(_item("sketch:", obj, "sk_rectangle", "sketch"))

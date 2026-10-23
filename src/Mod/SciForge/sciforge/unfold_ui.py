@@ -89,7 +89,13 @@ def _edit_later(obj):
     try:
         from .compat import QtCore
 
-        QtCore.QTimer.singleShot(0, lambda: taskui.edit_object(obj))
+        def run():
+            try:
+                taskui.edit_object(obj)
+            except Exception as exc:
+                warn("edit %s: %s" % (getattr(obj, "Label", "?"), exc))
+
+        QtCore.QTimer.singleShot(0, run)
     except Exception as exc:
         warn("edit %s: %s" % (getattr(obj, "Label", "?"), exc))
 

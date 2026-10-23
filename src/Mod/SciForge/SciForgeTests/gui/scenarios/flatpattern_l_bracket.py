@@ -106,6 +106,8 @@ def back_folded():
     h.check("flat hidden", fp is not None and not fp.ViewObject.Visibility)
     node = fs.browser_node("flat_pattern")
     h.check("Flat Pattern row in the browser", node is not None and node["label"] == "Flat Pattern")
+    tip = (node or {}).get("tip") or ""
+    h.check("its tooltip gives the flat size", "98.26 x 20.00 mm, 1 bend" in tip, tip)
     h.check(
         "no timeline step for the flat pattern",
         "Flat Pattern" not in " ".join(fs.timeline_titles()),

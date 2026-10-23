@@ -60,37 +60,33 @@ def is_cylinder(face):
 
 
 def inner_point(face):
-    """A point inside the face (not in a hole, well away from the boundary)."""
+    """A point inside the face (not in a hole), as far from its boundary as a 9 x 9 grid of
+    its parameters tells (no distance computations: this runs for every face)."""
     u0, u1, v0, v1 = face.ParameterRange
-    steps = 8
-    inside = []
+    steps = 10
+    inside = {}
     for i in range(1, steps):
         for j in range(1, steps):
             u = u0 + (u1 - u0) * i / float(steps)
             v = v0 + (v1 - v0) * j / float(steps)
             try:
-                ok = face.isPartOfDomain(u, v)
+                inside[(i, j)] = face.isPartOfDomain(u, v)
             except Exception:
-                ok = False
-            if ok:
-                inside.append(face.Surface.value(u, v))
-    if not inside:
-        return face.CenterOfMass
-    if len(inside) == 1:
-        return inside[0]
-    wire = face.OuterWire
+                inside[(i, j)] = False
     best = None
-    for p in inside:
-        try:
-            d = wire.distToShape(Part.Vertex(p))[0]
-            for w in face.Wires:
-                if not w.isSame(wire):
-                    d = min(d, w.distToShape(Part.Vertex(p))[0])
-        except Exception:
-            d = 0.0
-        if best is None or d > best[0]:
-            best = (d, p)
-    return best[1]
+    outside = [k for k, ok in inside.items() if not ok]
+    for (i, j), ok in inside.items():
+        if not ok:
+            continue
+        reach = min(i, steps - i, j, steps - j)
+        for oi, oj in outside:
+            reach = min(reach, max(abs(oi - i), abs(oj - j)))
+        if best is None or reach > best[0]:
+            best = (reach, i, j)
+    if best is None:
+        return face.CenterOfMass
+    _r, i, j = best
+    return face.Surface.value(u0 + (u1 - u0) * i / float(steps), v0 + (v1 - v0) * j / float(steps))
 
 
 def normal_at(face, point):

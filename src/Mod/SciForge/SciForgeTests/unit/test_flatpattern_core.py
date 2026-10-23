@@ -12,6 +12,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 sys.path.insert(0, ROOT)
 
 from sciforge import browser_core, flatpattern_dxf as fdxf, ribbon_config as cfg  # noqa: E402
+from sciforge import flatpattern_core as fcore  # noqa: E402
 from sciforge import sheetmetal_core as core  # noqa: E402
 
 
@@ -78,6 +79,40 @@ class DxfTest(unittest.TestCase):
         self.assertTrue(fdxf.note(_bend(False)).startswith("DOWN"))
 
 
+class CornerTest(unittest.TestCase):
+    """Corner reliefs go where two bends' centre lines cross near their ends."""
+
+    def _bend(self, a, b):
+        return {"centre": [a, b]}
+
+    def test_tray_corner(self):
+        # a tray's right and top bends: lines x = 49.13 (y 2..28) and y = 29.13 (x 2..48)
+        bends = [self._bend((49.13, 2), (49.13, 28)), self._bend((2, 29.13), (48, 29.13))]
+        found = fcore.corner_points(bends, reach=8.0)
+        self.assertEqual(len(found), 1)
+        x, y, i, j = found[0]
+        self.assertAlmostEqual(x, 49.13)
+        self.assertAlmostEqual(y, 29.13)
+        self.assertEqual((i, j), (0, 1))
+
+    def test_parallel_and_far(self):
+        u = [self._bend((29, 0), (29, 20)), self._bend((87, 0), (87, 20))]
+        self.assertEqual(fcore.corner_points(u, reach=8.0), [])
+        # crossing in the middle of a long line is no corner
+        t = [self._bend((0, 10), (100, 10)), self._bend((50, 12), (50, 40))]
+        self.assertEqual(fcore.corner_points(t, reach=5.0), [])
+
+    def test_relief_size(self):
+        rule = core.evaluated(core.library_rule(core.DEFAULT_RULE))
+        self.assertEqual(fcore.relief_size(rule), ("round", 4.0))
+        rule["corner_relief_2bend_shape"] = "tear"
+        self.assertEqual(fcore.relief_size(rule)[1], 0.0)
+
+    def test_line_crossing(self):
+        self.assertIsNone(fcore.line_crossing((0, 0), (1, 0), (0, 1), (1, 1)))
+        self.assertEqual(fcore.line_crossing((0, 0), (2, 0), (1, -1), (1, 1)), (1.0, 0.0))
+
+
 class BendMathsTest(unittest.TestCase):
     """The flat sizes the golden models expect (T 1, R 1, K 0.44)."""
 
@@ -129,6 +164,7 @@ class BrowserTest(unittest.TestCase):
                 "type_id": "Part::FeaturePython",
                 "visible": False,
                 "sciforge_type": "FlatPattern",
+                "describe": "Flat 98.26 x 20.00 mm, 1 bend(s)",
             },
         ]
         for obj in objects:
@@ -139,6 +175,7 @@ class BrowserTest(unittest.TestCase):
         self.assertIn("flat_pattern", kinds)
         node = next(n for n in folders if n["kind"] == "flat_pattern")
         self.assertEqual(node["icon"], "flat_pattern")
+        self.assertIn("98.26 x 20.00", node["tip"])
         self.assertIn("Export DXF", browser_core.MENUS["flat_pattern"])
 
 
