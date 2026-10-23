@@ -68,19 +68,31 @@ def end_frame(shape, edge_name, thickness):
             "Pick an edge at the end of a flange, where its face meets its end."
         )
     wall, end = walls[0], ends[0]
-    if abs(sb.plane_normal(wall).dot(sb.plane_normal(end))) > 1e-4:
-        raise sb.SheetMetalError("The flange's end must be square to the flange.")
+    n_wall, n_end = sb.plane_normal(wall), sb.plane_normal(end)
+    if abs(n_wall.dot(n_end)) > 0.99:
+        raise sb.SheetMetalError(
+            "Pick an edge at the end of a flange, where its face meets its end."
+        )
     start, stop = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
+    direction = sb.unit(stop - start)
+    # "out": along the flange, away from it at this end (a mitred end's face is slanted;
+    # the flange still runs square to the picked edge)
+    out = n_wall.cross(direction)
+    if out.Length < 1e-9:
+        raise sb.SheetMetalError("Pick an edge running across the flange's end.")
+    out = sb.unit(out)
+    if out.dot(n_end) < 0:
+        out = out * -1.0
     return {
         "edge": edge,
         "start": start,
         "end": stop,
-        "dir": sb.unit(stop - start),
+        "dir": direction,
         "length": (stop - start).Length,
         "top": wall,
-        "normal": sb.plane_normal(wall),
+        "normal": n_wall,
         "side": end,
-        "out": sb.plane_normal(end),
+        "out": out,
     }
 
 
@@ -170,24 +182,30 @@ def closure_shape(
             pieces.append(prism.common(keep))
     elif alignment == "overlap":
         overlap = float(options.get("overlap", 1.0))
-        end_d = fd["side"].CenterOfMass
-        planes = [
-            (fs["start"] - end_d).dot(fd["out"]),
-            (fs["start"] - fs["normal"] * thickness - end_d).dot(fd["out"]),
-        ]
-        far = max(planes) - core.closure_reach("overlap", gap, thickness, overlap, True)
-        end_s = fs["side"].CenterOfMass
-        planes = [
-            (fd["start"] - end_s).dot(fs["out"]),
-            (fd["start"] - fd["normal"] * thickness - end_s).dot(fs["out"]),
-        ]
-        near = min(planes) - gap
-        if far > 1e-6:
-            step = way[id(fd)]
-            pieces.append(fd["side"].extrude(step * (far / max(step.dot(fd["out"]), 1e-6))))
-        if near > 1e-6:
-            step = way[id(fs)]
-            pieces.append(fs["side"].extrude(step * (near / max(step.dot(fs["out"]), 1e-6))))
+        # the dominant runs to the other's outside face (less (1 - overlap) T), the
+        # submissive stops the gap short of the dominant's inside face: planes across each
+        # flange's way, measured along its "out"
+        far = max(
+            fs["start"].dot(fd["out"]), (fs["start"] - fs["normal"] * thickness).dot(fd["out"])
+        ) - core.closure_reach("overlap", gap, thickness, overlap, True)
+        near = (
+            min(
+                fd["start"].dot(fs["out"]),
+                (fd["start"] - fd["normal"] * thickness).dot(fs["out"]),
+            )
+            - gap
+        )
+        for fr, limit in ((fd, far), (fs, near)):
+            prism = fr["side"].extrude(way[id(fr)] * big)
+            ydir = sb.unit(fr["normal"]) if abs(fr["normal"].dot(fr["out"])) < 0.99 else None
+            if ydir is None:
+                continue
+            zdir = fr["out"].cross(ydir)
+            origin = fr["out"] * limit
+            keep = sb.frame_box(
+                origin, fr["out"], ydir, sb.unit(zdir), -big, 0.0, -big, big, -big, big
+            )
+            pieces.append(prism.common(keep))
     else:
         raise sb.SheetMetalError("Alignment must be Symmetric Gap or Overlap.")
     pieces = [p for p in pieces if not p.isNull() and p.Volume > 1e-9]

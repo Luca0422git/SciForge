@@ -1,0 +1,86 @@
+{
+  "id": "sheetmetal_smm_corner_closure_mitred",
+  "title": "Corner Closure on two edge flanges made together (already mitred with the rule's gap): closed down to a 0.2 mm gap",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            60
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          100,
+          30,
+          1
+        ],
+        [
+          50,
+          60,
+          1
+        ]
+      ],
+      "options": {
+        "height": 20
+      }
+    },
+    {
+      "op": "sf_sm_corner_closure",
+      "id": "c1",
+      "dominant": [
+        99.2928932,
+        60,
+        11.5
+      ],
+      "submissive": [
+        100,
+        59.2928932,
+        11.5
+      ],
+      "options": {
+        "alignment": "symmetric",
+        "gap": 0.2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 9071.1926,
+    "bbox": [
+      0.0,
+      0.0,
+      -0.0,
+      100.0,
+      60.0,
+      21.0
+    ],
+    "solids": 1,
+    "faces": 22,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4: the slanted (mitred) ends are taken along their flanges to 0.1 mm either side of the bisector",
+    "rel_tol": 1e-05,
+    "abs_tol": 0.001
+  }
+}

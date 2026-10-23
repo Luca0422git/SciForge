@@ -24,8 +24,8 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 - **Sheet metal Fillet / Chamfer** (MODIFY > Fillet / Chamfer of the SHEET METAL tab): only the
   edges through the thickness; Fillet radius sets ("+ New Set"), a radius arrow with its value
   box; on a solid body they open the SOLID commands.
-- Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 25 golden models,
-  24 unit tests, 7 scenarios (204 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
+- Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 26 golden models,
+  24 unit tests, 7 scenarios (208 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
 
 ## FreeCAD / OpenCASCADE facts found
 
@@ -60,9 +60,9 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 
 ## Tests run (FreeCAD 1.1.4, this sandbox)
 
-- `--only unit`: all pass. Golden models: the 25 `sheetmetal_smm_*` pass (with sm-forming's).
+- `--only unit`: all pass. Golden models: the 26 `sheetmetal_smm_*` pass (with sm-forming's).
 - Scenarios: smmore_bend 44, smmore_bend_two 17, smmore_hem 40, smmore_join 25,
-  smmore_corner 29, smmore_round 26, smmore_lofted 23 checks: all PASS.
+  smmore_corner 29, smmore_round 26, smmore_lofted 27 checks: all PASS.
 
 - sm-flat's unfolder (`sheetmetal_unfold.unfold`, a read-only copy of `sf/sm-flat`'s file in
   the scratchpad) lays this branch's bends flat to exactly the plate they were bent from

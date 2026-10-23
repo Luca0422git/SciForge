@@ -72,7 +72,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 
 | Fusion | SciForge | Src |
 |---|---|---|
-| Dominant Edge, Submissive Edge (the two flanges at a corner) | Same boxes; an edge at each flange's end (where its face meets its end) | A[R39] |
+| Dominant Edge, Submissive Edge (the two flanges at a corner) | Same boxes; an edge at each flange's end (where its face meets its end), square or already mitred (two flanges made together by Flange: the corner can be closed further, to a smaller gap) | A[R39] |
 | Alignment Symmetric Gap / Overlap | Same. Symmetric Gap: each flange end (wall, and its bend where it ends in the same plane) is taken in line until half the Gap short of the corner's bisector (a mitred corner). Overlap: the dominant runs over the other's end to its outside face (less (1 - Overlap) T), the submissive stops the Gap short of the dominant's inside face | A[R39], G (geometry) |
 | Gap (rule's Miter/Rip/Seam gap by default) | Rule Gap on by default, or your own Gap | A[R39] |
 | Overlap 0..1, Flip Overlap | Same | A[R39] |
@@ -108,7 +108,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Kind | What | Result (2026-10-23) |
 |---|---|---|
 | Unit | `SciForgeTests/unit/test_sheetmetal_bend_core.py`: bend zones (research 4.2 worked example), strips, every hem type and its refusals, the open / teardrop / rope geometry, the join fillet, closure reaches, facet counts, the transition triangulation (corner fans), the thickness-edge test | 24 tests pass |
-| Golden | 25 models `sheetmetal_smm_*.json`: a bend on a plate that has an edge flange; a hem on a bent wall; save + reopen of a hemmed, filleted, bent plate then an edit; a hem on an edge flange; bend centre / two lines / flip-start-45 edited to 60 / hole in the zone; the six hem types, two mitred hems, a hem edited to Rolled; join by bend; corner closure symmetric, overlap, Extend Aligned off and with a Round relief; lofted brake, die (edited to Face Number 4) and joined to a plate; fillet + chamfer. Analytic volumes where the shape allows (bends, hems, join, fillet); FreeCAD 1.1.4 baselines for the rest | all pass |
+| Golden | 26 models `sheetmetal_smm_*.json`: a bend on a plate that has an edge flange; a hem on a bent wall; save + reopen of a hemmed, filleted, bent plate then an edit; a hem on an edge flange; bend centre / two lines / flip-start-45 edited to 60 / hole in the zone; the six hem types, two mitred hems, a hem edited to Rolled; join by bend; corner closure symmetric, overlap, Extend Aligned off, on an already mitred corner and with a Round relief; lofted brake, die (edited to Face Number 4) and joined to a plate; fillet + chamfer. Analytic volumes where the shape allows (bends, hems, join, fillet); FreeCAD 1.1.4 baselines for the rest | all pass |
 | Cross-check with sm-flat's unfolder | `sheetmetal_unfold.unfold` (branch `sf/sm-flat`, read-only copy) run on this branch's shapes: a 90° bend, a 45° flipped Start bend, the U (two lines) and a bend with a hole in its zone all lay flat to exactly the 100 x 40 plate they were bent from (volume 4000.0000, holed 3999.2148 = less the hole); the six hems, the join and a filleted plate unfold too (flat lengths = cut-back sheet + neutral-layer length of the strip) | all unfold |
 | Scenario `smmore_bend` | ribbon Bend, waits; stationary face; line; 90° preview (hand-worked volume); type 45; Start; Flip; OK; Bend 1; Ctrl+Z / Ctrl+Y; edit from the timeline back to 90 Center; a line past the sheet refused (OK waits); Esc; save, close, reopen | PASS, 44 checks |
 | Scenario `smmore_bend_two` | Bend in an empty design (no dialog, no error); a plate in a moved component; the face, then two lines: a U; Values For Line 2 at 45 (Line 1 keeps 90; All lines shows the common value); Bend Radius override 2; OK | PASS, 17 checks |
@@ -116,7 +116,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Scenario `smmore_join` | CREATE menu Join by Bend; parallel plate refused, Esc; joined (hand-worked volume); the other body hidden; Ctrl+Z / Ctrl+Y; edit to a 3 mm Bend Radius | PASS, 25 checks |
 | Scenario `smmore_corner` | two edge flanges (Flange code) on a notched plate; MODIFY menu Corner Closure; Symmetric Gap (points inside / in the gap); Round relief (rule size), Square; Overlap with a relief refused, Trim To Bend, a 0 gap; OK; Ctrl+Z / Ctrl+Y; edit back; Cancel | PASS, 29 checks |
 | Scenario `smmore_round` | MODIFY Fillet; a top edge not taken; 5 mm; the radius arrow dragged (value box); + New Set, 10 mm (hand-worked volumes); OK; Fillet 1; Ctrl+Z / Ctrl+Y; Chamfer 4 mm; edit (sets back) | PASS, 26 checks |
-| Scenario `smmore_lofted` | CREATE menu Lofted Flange; square + circle: Brake Form in a new sheet metal body; chord 0.5; Die Form (not developable); Face Number 4; OK; Ctrl+Z / Ctrl+Y; an open line with a closed square refused; Esc | PASS, 23 checks |
+| Scenario `smmore_lofted` | CREATE menu Lofted Flange; square + circle: Brake Form in a new sheet metal body; chord 0.5; Die Form (not developable); Face Number 4; OK; Ctrl+Z / Ctrl+Y; edit from the timeline to Die Form; an open line with a closed square refused; Esc | PASS, 27 checks |
 
 ## Known gaps
 
