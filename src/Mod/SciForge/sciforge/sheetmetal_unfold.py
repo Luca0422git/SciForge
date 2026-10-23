@@ -310,7 +310,7 @@ def develop_face(fmap):
     inner = [_map_wire(w, fn) for w in fmap.face.Wires if not w.isSame(fmap.face.OuterWire)]
     face = Part.makeFace([outer] + inner, "Part::FaceMakerBullseye")
     if face.isNull() or face.Area < 1e-9:
-        raise UnfoldError("bend %d could not be developed" % (fmap.index + 1))
+        raise UnfoldError("the bend at Face%d could not be developed" % (fmap.index + 1))
     return face
 
 
@@ -338,7 +338,7 @@ def _bend_slab_folded(fmap, thickness):
             return slab
     except Exception:
         pass
-    raise UnfoldError("bend %d could not be kept folded" % (fmap.index + 1))
+    raise UnfoldError("the bend at Face%d could not be kept folded" % (fmap.index + 1))
 
 
 # -- the unfolder -----------------------------------------------------------------------------
@@ -502,7 +502,7 @@ def _new_map(index, face, parent, edge, T, k, all_bends, picks):
     mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
     rho0 = _radial(mid, center, axis)
     if rho0.Length < 1e-9:
-        raise UnfoldError("bend %d has no radius" % (index + 1))
+        raise UnfoldError("the bend at Face%d has no radius" % (index + 1))
     fmap.rho0 = App.Vector(rho0).normalize()
     n = normal_at(face, mid)
     fmap.concave = n.dot(fmap.rho0) < 0  # normal toward the axis: the inside of the bend
@@ -510,7 +510,7 @@ def _new_map(index, face, parent, edge, T, k, all_bends, picks):
     fmap.inner_radius = fmap.radius if fmap.concave else fmap.radius - T
     if fmap.inner_radius < -LIN_TOL:
         raise UnfoldError(
-            "bend %d is tighter than the sheet is thick (radius %.3f < %.3f)"
+            "the bend at Face%d is tighter than the sheet is thick (radius %.3f < %.3f)"
             % (index + 1, fmap.radius, T)
         )
     fmap.inner_radius = max(0.0, fmap.inner_radius)
@@ -735,21 +735,17 @@ def refold(folded, result, flat_after, gap=0.02):
     adds = []
     if added.Volume > 1e-6:
         for fmap, slab in result.slabs:
-            near = added.common(_grown(slab, result.thickness))
-            if near.Volume <= 1e-6:
+            part = added.common(_column(fmap, slab, result))
+            if part.Volume <= 1e-6:
                 continue
             if fmap.kind == "bend":
                 raise UnfoldError(
-                    "material added across bend %d in the unfolded state cannot be folded "
-                    "back: add it after the Refold" % (fmap.index + 1)
+                    "material added across the bend at Face%d in the unfolded state cannot be "
+                    "folded back: add it after the Refold" % (fmap.index + 1)
                 )
-        piece = added
-        for fmap, _slab in result.slabs:
-            if fmap.kind != "bend":
-                back = piece.copy()
-                back.transformShape(fmap.rigid.inverse())
-                adds.append(back)
-                break
+            back = part.copy()
+            back.transformShape(fmap.rigid.inverse())
+            adds.append(back)
     if adds:
         out = out.fuse(adds)
     try:
@@ -757,6 +753,21 @@ def refold(folded, result, flat_after, gap=0.02):
     except Exception:
         pass
     return out
+
+
+def _column(fmap, slab, result):
+    """Everything above and below a face's region of the flat (what was added on it)."""
+    reach = result.shape.BoundBox.DiagonalLength + 10.0
+    if fmap.kind == "wall":
+        face = fmap.face.copy()
+        face.transformShape(fmap.rigid)
+    elif fmap.kind == "bend":
+        face = develop_face(fmap)
+        face.transformShape(fmap.parent)
+    else:
+        return _grown(slab, result.thickness)
+    n = normal_at(face, inner_point(face))
+    return face.translated(n * -reach).extrude(n * (2 * reach))
 
 
 def _grown(slab, T):
@@ -795,7 +806,7 @@ def _fold_piece(fmap, piece, T, gap):
             tools.append(_fold_polygon(fmap, wire, base, lo_r, hi_r))
         except Exception as exc:
             raise UnfoldError(
-                "the cut across bend %d could not be folded: %s" % (fmap.index + 1, exc)
+                "the cut across the bend at Face%d could not be folded: %s" % (fmap.index + 1, exc)
             )
     return tools
 
