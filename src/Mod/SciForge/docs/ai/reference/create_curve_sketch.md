@@ -60,5 +60,5 @@ Done: AI: Sketch of curves on XZ. Its id is 'Sketch1'. No solid body yet.
 
 - Recipe: [sheet-like U bracket (thin extrude with bends)](sciforge://docs/recipes/sheet-like-part.md)
 - Recipe: [curved panel from a surface patch](sciforge://docs/recipes/surface-patch.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `extrude_thin_arc_center`, `extrude_thin_open_l`, `sf_loft_centerline_ends`, `sf_loft_centerline_torus`, `sf_loft_cone_point`, `sf_loft_cut_cone`, `sf_loft_ends_dome`, `sf_loft_one_rail`, `sf_loft_rails_ends`, `sf_loft_rails_turning`, `sf_loft_two_rails`, `sf_rib_arc` and 48 more
+- Golden models built with its steps (read one with docs_read golden/<id>): `extrude_thin_arc_center`, `extrude_thin_open_l`, `sf_loft_centerline_ends`, `sf_loft_centerline_torus`, `sf_loft_cone_point`, `sf_loft_cut_cone`, `sf_loft_ends_dome`, `sf_loft_one_rail`, `sf_loft_rails_ends`, `sf_loft_rails_turning`, `sf_loft_two_rails`, `sf_rib_arc` and 85 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

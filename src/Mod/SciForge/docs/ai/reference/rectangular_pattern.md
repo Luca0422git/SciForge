@@ -74,5 +74,5 @@ Done: AI: Rectangular pattern. Its id is 'Pattern1'. Bodies now: Body1: 25178.1 
 ## See also
 
 - Recipe: [parametric mounting plate](sciforge://docs/recipes/parametric-plate.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `mirror_hole_and_its_pattern`, `modify2_pattern_adjust_to_slope`, `modify2_pattern_identical_to_slope`, `modify2_pattern_multibody_cut`, `pattern_bodies_in_moved_component`, `pattern_bodies_move_original_after`, `pattern_bodies_rect_new`, `pattern_edit_keeps_later_fillet`, `pattern_edit_quantity_fusion`, `pattern_quantity_parameter`, `pattern_rect_features_any_order`, `pattern_rect_hole_grid_fusion` and 4 more
+- Golden models built with its steps (read one with docs_read golden/<id>): `mirror_hole_and_its_pattern`, `modify2_pattern_adjust_to_slope`, `modify2_pattern_identical_to_slope`, `modify2_pattern_multibody_cut`, `pattern_bodies_in_moved_component`, `pattern_bodies_move_original_after`, `pattern_bodies_rect_new`, `pattern_edit_keeps_later_fillet`, `pattern_edit_quantity_fusion`, `pattern_quantity_parameter`, `pattern_rect_features_any_order`, `pattern_rect_hole_grid_fusion` and 5 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

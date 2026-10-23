@@ -208,12 +208,21 @@ class Reach(unittest.TestCase):
         for t in catalog.TOOLS:
             listed |= set(t["ops"])
         self.assertLessEqual(listed, builder, "a tool lists an op the builder lacks")
-        missing = builder - listed - set(catalog.TEST_ONLY_OPS)
+        missing = builder - listed - set(catalog.TEST_ONLY_OPS) - set(catalog.AI_TOOLS_TO_COME)
         self.assertEqual(missing, set(), "ops no tool builds")
 
     def test_test_only_ops_are_real(self):
         known = _builder_ops() | set(golden.STEP_KEYS)
         self.assertLessEqual(set(catalog.TEST_ONLY_OPS), known)
+
+    def test_ai_tools_to_come_are_real_and_still_to_come(self):
+        self.assertLessEqual(set(catalog.AI_TOOLS_TO_COME), _builder_ops())
+        listed = set()
+        for t in catalog.TOOLS:
+            listed |= set(t["ops"])
+        self.assertEqual(
+            listed & set(catalog.AI_TOOLS_TO_COME), set(), "a tool builds it: drop it from the list"
+        )
 
     def test_every_action_has_its_handler(self):
         handlers = _action_names()

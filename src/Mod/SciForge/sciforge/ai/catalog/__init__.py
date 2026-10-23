@@ -85,6 +85,38 @@ TEST_ONLY_OPS = (
     "revolve",  # PartDesign's plain revolve (revolve builds SciForge's, sf_revolve)
     "mirror",  # PartDesign's plain mirror (mirror builds Fusion's dialog, fusion_mirror)
 )
+# Ops a person can do that no tool builds YET (Luca, 2026-10-23, 0.1.0-beta.2: release the
+# SHEET METAL / PLASTIC / SURFACE part 4 steps from develop now, their AI tools next). Named
+# in docs/sciforge/known-issues.md. Remove an op here when its tool lands (a unit test fails
+# while a tool lists an op that is still here).
+AI_TOOLS_TO_COME = (
+    "sf_sheet_rule",
+    "sf_flange",
+    "sf_flange_edit",
+    "sf_sm_bend",
+    "sf_sm_hem",
+    "sf_sm_join_bend",
+    "sf_sm_corner_closure",
+    "sf_sm_lofted_flange",
+    "sf_sm_fillet",
+    "sf_sm_chamfer",
+    "sf_sm_more_edit",
+    "sf_sm_convert",
+    "sf_flat_pattern",
+    "sf_unfold",
+    "sf_refold",
+    "sf_rip",
+    "sf_plastic_rule",
+    "sf_boss",
+    "sf_boss_fastener",
+    "sf_rest",
+    "sf_snap_fit",
+    "sf_snap_fit_edit",
+    "sf_lip",
+    "sf_lip_edit",
+    "sf_surface_modify",
+    "sf_surface_modify_edit",
+)
 
 
 def tool(name):

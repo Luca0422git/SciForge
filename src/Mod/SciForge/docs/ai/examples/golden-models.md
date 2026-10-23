@@ -2,11 +2,95 @@
 
 <!-- Generated from the tool catalogue (src/Mod/SciForge/sciforge/ai/catalog) by tools/sciforge/make_ai_docs.py: do not edit by hand. The unit test test_ai_docs_contract.py fails when this file and the catalogue differ. -->
 
-SciForge's golden models are 469 small designs, each a list of design steps with the measurements the finished part must have (volume, area, faces, bounding box), worked out by hand where possible (`expect.source: analytic`, the formula in `expect.note`). The tests rebuild every one in real FreeCAD. They prove what each feature does and show which options exist. Their steps are SciForge's design-step language (what the AI tools build), not tool calls: the table at the end gives the tools that build each op. Read one with docs_read `golden/<id>` (or the resource sciforge://examples/golden/<id>); examples_search finds them by words, op, tool or tag. Models marked (known gap) document something SciForge does not do yet.
+SciForge's golden models are 616 small designs, each a list of design steps with the measurements the finished part must have (volume, area, faces, bounding box), worked out by hand where possible (`expect.source: analytic`, the formula in `expect.note`). The tests rebuild every one in real FreeCAD. They prove what each feature does and show which options exist. Their steps are SciForge's design-step language (what the AI tools build), not tool calls: the table at the end gives the tools that build each op. Read one with docs_read `golden/<id>` (or the resource sciforge://examples/golden/<id>); examples_search finds them by words, op, tool or tag. Models marked (known gap) document something SciForge does not do yet.
 
 ## By feature
 
 Each model is listed under its first tag; its other tags follow it.
+
+### sheetmetal (81)
+
+- `sheetmetal_base_flange_join`: A second base flange joined to the first plate (Operation Join) [flange]
+- `sheetmetal_base_flange_new_component`: Base flange as New Component: a Sheet Metal component with its own body [flange]
+- `sheetmetal_base_flange_rect`: Base flange: a 50 x 30 rectangle becomes a 1 mm plate (Steel (mm)) [flange]
+- `sheetmetal_base_flange_side2_rule`: Base flange with a 0.5 mm rule, Side 2 then Centered [flange]
+- `sheetmetal_contour_flange_l`: Contour flange from an L line: the corner becomes a bend of the rule's radius [flange]
+- `sheetmetal_contour_flange_on_edge`: Contour flange drawn from the end of a sheet edge: it runs along the edge, bent out of the sheet [flange]
+- `sheetmetal_contour_flange_two_sides`: Contour flange Direction Two Sides (20 one way, 5 the other) and Side 2 [flange]
+- `sheetmetal_edge_flange_adjacent_later`: A second Flange on the plate edge next to an earlier edge flange (its side face runs on into the first flange's end face) [flange]
+- `sheetmetal_edge_flange_angle_edit`: Edge flange edited from 90 to 45 degrees [flange]
+- `sheetmetal_edge_flange_bend_positions`: Edge flange Bend Position and Height Datum edits [flange]
+- `sheetmetal_edge_flange_inner_corner`: Edge flanges on the two edges of an L-shaped plate's inside corner, mitred [flange]
+- `sheetmetal_edge_flange_l_bracket`: Edge flange: an L bracket (90 degrees, Inside, Inner Faces, height 10) [flange]
+- `sheetmetal_edge_flange_miter`: Edge flanges on two edges that meet: mitred corner with the rule's gap [flange]
+- `sheetmetal_edge_flange_miter_outside`: Edge flanges on two edges that meet, Bend Position Outside: the flanges stand 1 mm out past the plate, run on past the corner and close the mitre up to the gap [flange]
+- `sheetmetal_edge_flange_partial_relief`: Edge flange 10 mm wide (Symmetric) with Straight bend reliefs [flange]
+- `sheetmetal_edge_flange_to_object`: Edge flange To Object: up to a plane 25 mm above [flange]
+- `sheetmetal_edge_flange_tray`: Edge flanges on all four edges of a plate: a tray with four mitred corners [flange]
+- `sheetmetal_edge_flange_two_offsets`: Edge flange Width Two Offsets between two planes across the edge (y 5 and y 25), offsets 2 [flange]
+- `sheetmetal_extrude_cut_then_edit`: A SOLID Extrude cut through a sheet metal plate, then the flange edited: the cut stays [flange, extrude]
+- `sheetmetal_flange_on_flange`: An edge flange on the top edge of an edge flange's wall (a Z) [flange]
+- `sheetmetal_rule_edit_recomputes`: Editing the rule (thickness 1 -> 2) recomputes the plate and its flange [flange]
+- `sheetmetal_smm_bend_after_flange`: Bend a plate that already has an edge flange: the flange swings with the moving side [sm-more]
+- `sheetmetal_smm_bend_box`: Bend a plus-shaped blank into an open box: four lines round the middle square in one Bend (Bend Line Start, so the four zones lie in the arms and never overlap) [sm-more]
+- `sheetmetal_smm_bend_center`: Bend: a 100 x 40 plate bent 90 degrees up on a centre line (Bend Line position Center) [sm-more]
+- `sheetmetal_smm_bend_diagonal`: Bend a 100 x 40 plate along a diagonal line: 90 degrees Center, then edited to 45 degrees Start (once refused: the slanted zone was taken for a tab) [sm-more]
+- `sheetmetal_smm_bend_flip_start_45`: Bend: 45 degrees down (Flip), Bend Line position Start, then edited to 60 degrees End [sm-more]
+- `sheetmetal_smm_bend_hole_in_zone`: Bend: a hole in the bend zone comes through, bent [sm-more]
+- `sheetmetal_smm_bend_slanted_end`: Bend (Start) across the slanted end of a plate: the sheet narrows gradually, so all of it bends and no relief is cut (once taken for a tab) [sm-more]
+- `sheetmetal_smm_bend_tab`: Bend a 20 mm tab up on a line across its root (Center): only the tab bends, the rule's round bend reliefs are cut into the plate beside it [sm-more]
+- `sheetmetal_smm_bend_tab_end`: Bend a tab on a short line at its root with Bend Line End (the zone in the plate): the reliefs run the whole zone into the plate [sm-more]
+- `sheetmetal_smm_bend_two_lines`: Bend: two bend lines on one plate (a U), bent farthest first [sm-more]
+- `sheetmetal_smm_corner_closure`: Corner Closure: two edge flanges on a notched plate closed with a symmetric gap [sm-more]
+- `sheetmetal_smm_corner_closure_60`: Corner Closure (Symmetric Gap, rule gap, Trim To Bend) of two edge flanges bent 60 degrees at a notched corner [sm-more]
+- `sheetmetal_smm_corner_closure_mitred`: Corner Closure on two edge flanges made together (already mitred with the rule's gap): closed down to a 0.2 mm gap [sm-more]
+- `sheetmetal_smm_corner_closure_mitred_square`: Corner Closure with Extend Aligned off on two flanges mitred by Flange, rule gap, Trim To Bend (once refused as 'already closed'; on a 90 degree corner it matches Extend Aligned on) [sm-more]
+- `sheetmetal_smm_corner_closure_not_aligned`: Corner Closure with Extend Aligned off: on a square corner it closes the same as aligned [sm-more]
+- `sheetmetal_smm_corner_closure_overlap`: Corner Closure: Overlap (the dominant flange runs over the other's end) [sm-more]
+- `sheetmetal_smm_corner_closure_round`: Corner Closure: Symmetric Gap with a Round corner relief (the rule's size, 4 mm across) [sm-more]
+- `sheetmetal_smm_corner_closure_tangent`: Corner Closure: Symmetric Gap with a Round relief at the Tangent placement (it touches the far side of both bends) [sm-more]
+- `sheetmetal_smm_corner_closure_tear`: Corner Closure: Symmetric Gap with the Tear relief (no cut: the bends meet at the mitre) [sm-more]
+- `sheetmetal_smm_corner_closure_vertex`: Corner Closure on two edge flanges made together (mitred), 0.2 mm gap, a Square relief at the Vertex placement [sm-more]
+- `sheetmetal_smm_fillet_chamfer`: Sheet metal Fillet (two radius sets) and Chamfer on a plate's corners [sm-more]
+- `sheetmetal_smm_hem_after_bend`: Hem the top edge of a wall made by Bend [sm-more]
+- `sheetmetal_smm_hem_beside_flange`: Open hem on a plate edge whose side runs on into an edge flange's side (once refused: 'not on a side as thick as the sheet') [sm-more]
+- `sheetmetal_smm_hem_double`: Hem: Double hem on the 40 mm edge of a 100 x 40 plate (default values) [sm-more]
+- `sheetmetal_smm_hem_edit_type`: Hem: made Open, then edited to Rolled from the timeline (flipped under the sheet) [sm-more]
+- `sheetmetal_smm_hem_flat`: Hem: Flat hem on the 40 mm edge of a 100 x 40 plate (default values) [sm-more]
+- `sheetmetal_smm_hem_miter_two_edges`: Hem: Open hems on two edges that meet at a corner, mitred [sm-more]
+- `sheetmetal_smm_hem_on_flange`: Hem on the top edge of an edge flange (the hem curls outward) [sm-more]
+- `sheetmetal_smm_hem_open`: Hem: Open hem on the 40 mm edge of a 100 x 40 plate (default values) [sm-more]
+- `sheetmetal_smm_hem_rolled`: Hem: Rolled hem on the 40 mm edge of a 100 x 40 plate (default values) [sm-more]
+- `sheetmetal_smm_hem_rope`: Hem: Rope hem on the 40 mm edge of a 100 x 40 plate (default values) [sm-more]
+- `sheetmetal_smm_hem_teardrop`: Hem: Teardrop hem on the 40 mm edge of a 100 x 40 plate (default values) [sm-more]
+- `sheetmetal_smm_join_bend`: Join by Bend: a vertical plate joined to a flat one by one 90 degree bend [sm-more]
+- `sheetmetal_smm_join_bend_below`: Join by Bend: an upright plate below a flat one (their edges run opposite ways; the extensions were once put 40 mm off) [sm-more]
+- `sheetmetal_smm_join_bend_overlap`: Join by Bend of plates whose edges overlap only in part (y 20..40): the bend and the extensions run where they overlap [sm-more]
+- `sheetmetal_smm_lofted_brake`: Lofted Flange, Brake Form: a 40 mm square to a 30 mm circle 30 mm above (chord tolerance 0.5) [sm-more]
+- `sheetmetal_smm_lofted_die`: Lofted Flange, Die Form: the same square to circle, smooth (then Face Number Brake Form by an edit) [sm-more]
+- `sheetmetal_smm_lofted_join`: Lofted Flange joined to a plate: a 40 mm square on the plate to a 30 mm circle above it [sm-more]
+- `sheetmetal_smm_lofted_lines`: Lofted Flange between two parallel lines on separate planes: a flat, slanted plate (once refused as 'in one plane') [sm-more]
+- `sheetmetal_smm_reopen_all`: Save and reopen: a plate with a hem, a filleted corner and a bend rebuilds, then the hem is edited [sm-more]
+- `sm_flat_bend_box`: Flat pattern of a box folded by Bend lines from a plus-shaped blank: the blank again [flat-pattern, bend]
+- `sm_flat_bend_roundtrip`: A plate bent 90 degrees on a line (Bend) lays flat to the plate it was [flat-pattern, bend]
+- `sm_flat_contour_flange`: Flat pattern of an L contour flange (sm-forming's Flange) [flat-pattern, flange]
+- `sm_flat_corner_closure`: Flat pattern of a corner closed by Corner Closure (Tear): no rule corner relief there [flat-pattern, corner-closure]
+- `sm_flat_corner_closure_tangent`: Flat pattern of a corner closed by Corner Closure with a Round Tangent relief [flat-pattern, corner-closure]
+- `sm_flat_edge_flange`: Flat pattern of a base flange with an edge flange (sm-forming's Flange) [flat-pattern, flange]
+- `sm_flat_hem_flat`: Flat pattern of a plate with a flat hem (a 180 degree bend with almost no radius) [flat-pattern, hem]
+- `sm_flat_hem_open`: Flat pattern of a plate with an open hem (Hem) [flat-pattern, hem]
+- `sm_flat_k_factor`: Flat pattern follows the rule's K-factor (0.33 instead of 0.44) [flat-pattern, rules]
+- `sm_flat_l_bracket`: Flat pattern of an L bracket (T 1, R 1, K 0.44, 50 x 50 x 20) [flat-pattern]
+- `sm_flat_partial_relief`: Flat pattern of a narrow edge flange with straight bend reliefs [flat-pattern, flange, relief]
+- `sm_flat_rip_points`: Rip a converted tube between two points, flat pattern from another wall [rip, convert, flat-pattern]
+- `sm_flat_rip_tube`: Convert a shelled tube, rip one bend away, flat pattern [rip, convert, flat-pattern]
+- `sm_flat_thickness_change`: Flat pattern follows a new rule thickness (its stationary face moves up) [flat-pattern, rules]
+- `sm_flat_thickness_follow`: Flat pattern of an L bracket follows the rule's Thickness (1 mm, then 2 mm: the stationary top face moves up) [flat-pattern, journey]
+- `sm_flat_tray`: Flat pattern of a tray: a base flange with four mitred edge flanges [flat-pattern, flange, miter]
+- `sm_flat_tray_square_relief`: Flat pattern of a tray whose edge Flange overrides the corner relief: 3 mm Square [flat-pattern, flange, corner-relief]
+- `sm_flat_u_channel_hole`: Flat pattern of a U channel with a hole in a side wall [flat-pattern]
+- `sm_flat_unfold_cut_refold`: Unfold an L bracket, cut a slot across the bend, refold [unfold, refold]
+- `sm_flat_unfold_one_bend`: Unfold one bend of a U channel (the other stays folded) [unfold]
 
 ### extrude (55)
 
@@ -65,6 +149,62 @@ Each model is listed under its first tag; its other tags follow it.
 - `hex_prism`: Hexagon (circumradius 10) extruded 10 [polygon]
 - `l_bracket_profile`: L profile on XZ extruded 20 [bracket, polyline]
 - `slot_extrude`: Slot 30 long, 10 wide, extruded 5 [slot]
+
+### surface (53)
+
+- `surface2_extrude_all`: Surface Extrude Extent All: through two boxes above and below, Flip, Two Sides [extrude, all]
+- `surface2_extrude_from_curved_face`: Surface Extrude From Object: a line extruded 10 up from a cylinder below it [extrude, from-object]
+- `surface2_extrude_from_face`: Surface Extrude From Object: a line extruded 15 from a box's top face, then Offset 5 [extrude, from-object]
+- `surface2_extrude_to_body`: Surface Extrude To Object: a line extruded up to a cylinder body, and to its face [extrude, to-object]
+- `surface2_extrude_to_chain_faces`: Surface Extrude To Object with Chain Faces: up to a box's filleted underside (fillet + bottom) [extrude, to-object]
+- `surface2_loft_centerline`: Surface Loft of two circles r 5 along a quarter-circle centerline r 30, then Direction [loft, centerline, end-conditions]
+- `surface2_loft_tangent_end`: Surface Loft from a wall's top edge to a line, Tangent (G1) at the edge [loft, end-conditions]
+- `surface2_loft_two_rails`: Surface Loft: two 20 long lines 30 apart between two bulging arc rails (flat) [loft, rails]
+- `surface2_revolve_to_plane`: Surface Revolve Type To: a line 10 from the Z axis turned to the YZ plane, then to XZ [revolve, to-object]
+- `surface2_sweep_rail`: Surface Sweep Path + Guide Rail: a 10 high line along 40, its top on a rising rail [sweep, rail]
+- `surface2_sweep_taper`: Surface Sweep Taper Angle 10: a circle r 5 swept 20 up a straight path opens out [sweep, taper]
+- `surface3_extend_align_edges`: Surface Extend Natural, Edge Alignment: a trapezoid's top edge carried on 5, its sides aligned, then free [extend, surface3]
+- `surface3_extend_natural_sphere`: Surface Extend Natural on a revolved quarter arc (a sphere piece): the face's own surface carried on 5 past its meridian edge [extend, surface3]
+- `surface3_extend_natural_strip`: Surface Extend Natural on a lofted (free-form) strip: carried on 5 past its upper edge [extend, surface3]
+- `surface3_loft_corner_matching`: Surface Loft of two squares drawn from different corners: corner meets corner [loft, surface3]
+- `surface3_offset_sharp_rounded`: Surface Offset Type: a 20 x 20 x 10 box's six faces offset 2, Sharp then Rounded [offset, surface3]
+- `surface3_revolve_project_axis`: Surface Revolve Project Axis: a profile 5 in front of the Z axis turned 90 about the axis laid into its plane [revolve, surface3]
+- `surface3_revolve_to_two_sides`: Surface Revolve To with Two Sides: a line 10 from Z turned one way to YZ, the other way to XZ [revolve, surface3]
+- `surface3_stitch_join`: Stitch Operation Join: four walls and two patches stitched shut, joined to the box they overlap [stitch, surface3]
+- `surface3_sweep_guide_surface`: Surface Sweep Path + Guide Surface: a 10 wide line swept 40 along a path on the top face of a block [sweep, surface3]
+- `surface3_sweep_rail_perpendicular`: Surface Sweep Path + Guide Rail, Extent Perpendicular to Path, with a rail shorter than the path that runs away from it [sweep, surface3]
+- `surface3_untrim_manual`: Untrim Type Manual: a 30 x 30 patch with a round hole and the outer loop picked, extended 5 [untrim, surface3]
+- `surface4_chamfer_delete`: Chamfer (two distances 2 and 4) of a corner of an open box of surfaces, then SURFACE Delete of its floor (no healing) [surface-modify, chamfer, delete]
+- `surface4_fillet_box`: SURFACE > MODIFY > Fillet of the four corner edges of an open box of surfaces, radius 3, then edited to 2 [surface-modify, fillet]
+- `surface4_fillet_chord`: Chord Length Fillet (chord 2 sqrt 2) of a corner edge of an open box of surfaces: the walls meet at 90 degrees, so the radius is 2 [surface-modify, fillet]
+- `surface4_fillet_variable`: Variable radius Fillet (1 at the edge's start, 3 at its end) of a corner edge of an open box of surfaces [surface-modify, fillet]
+- `surface4_merge`: Merge two faces in one plane of an extruded surface (a polyline 0-10-20 then a turn): 3 faces become 2 [surface-modify, merge]
+- `surface4_merge_smooth`: Merge of a flat face and the round face it runs into smoothly (an extruded line and tangent arc): refitted as one face [surface-modify, merge]
+- `surface4_mirror_join_scale`: Mirror (Join) of half an open box of surfaces about the YZ plane: the copy is stitched on; then Scale x 2 [surface-modify, mirror, stitch, scale]
+- `surface4_move_faces`: Move Object Faces on an open box of surfaces: the floor moved 5 down (the walls grow), then turned 10 degrees about its front edge (the walls follow it) [surface-modify, move]
+- `surface4_pattern_bodies`: Rectangular Pattern (Bodies) of an open box of surfaces: 3 along X, spacing 50: two new surface bodies [surface-modify, pattern]
+- `surface4_pattern_path`: Pattern on Path (Bodies) of an open box of surfaces along a sketch line: 3, 40 apart [surface-modify, pattern]
+- `surface4_press_pull`: Press Pull of the floor of an open box of surfaces: -5 (the walls grow), edited to +3 (the walls are cut back) [surface-modify, press-pull]
+- `surface4_press_pull_cup`: Press Pull of the round wall of a cup of surfaces (a tube on a disc): the wall is offset 3 outward, the floor grows with it [surface-modify, press-pull]
+- `surface4_press_pull_shade`: Press Pull of the flat lid of a lampshade of surfaces (a cone frustum, radius 10 to 6, 10 high): the cone wall is carried on to the moved lid, the lid shrinks with it [surface-modify, press-pull]
+- `surface4_press_pull_tray`: Press Pull of the floor of a tray of surfaces with walls slanted 45 degrees: the corners slide down the slanted edges [surface-modify, press-pull]
+- `surface4_press_pull_two_walls`: Press Pull of two slanted walls of a tray of surfaces at once (they face different ways): each moves along its own normal, the floor and the other walls follow, the rim stays flat [surface-modify, press-pull]
+- `surface4_replace_face`: Replace Face of an open box of surfaces: its floor replaced by a block's top 4 up (the walls cut back to it), still a surface body [surface-modify, replace-face]
+- `surface4_replace_face_curved`: Replace Face of an open box of surfaces onto a curved target: its floor replaced by a cylinder's side (radius 42, axis along x): an arched floor, the walls cut back to it [surface-modify, replace-face]
+- `surface4_replace_face_two`: Replace Face of two touching faces of a surface box (its floor and the fillet round its front edge) onto a block's top 4 up: one floor takes their place [surface-modify, replace-face, fillet]
+- `surface4_split_by_loft`: Split Body of a 40 x 30 x 20 box with a lofted surface body (a twisted loft between two lines that cross the box) [surface-modify, split-body, hybrid, loft]
+- `surface4_split_by_surface`: Split Body of a 40 x 30 x 20 box with a curved surface body (an arc extruded, half as deep as the box: Extend Splitting Tool carries it on) [surface-modify, split-body, hybrid]
+- `surface4_split_face_merge`: Split Face of a surface body's floor by the YZ plane (two floor faces, still one surface body), then Merge of the two halves: one floor again [surface-modify, split-face, merge]
+- `surface4_split_surface`: Split Body of an open box of surfaces by the YZ plane: two surface bodies (Fusion's Body to Split takes open bodies) [surface-modify, split-body]
+- `surface_boundary_fill_cone`: Boundary Fill: tube, cone and XY plane close a cell; fill the one inside [boundary_fill, revolve]
+- `surface_extrude_line`: SURFACE Extrude of an open sketch line, 10 each way (Symmetric) [extrude]
+- `surface_offset_thicken_join`: Offset a box's top face 5, thicken the offset back down onto the box (Join) [offset, thicken]
+- `surface_patch_trim_untrim`: Patch a square, Trim a hole with a sketch circle, Untrim the hole (Internal) [patch, trim, untrim]
+- `surface_stitch_cylinder`: A tube and two patched ends stitched into a solid cylinder [stitch, patch]
+- `surface_suppress_patch_trim`: Patch a square, Trim a hole; suppress the Trim (also across a reopen) and unsuppress it, then the Patch [patch, trim, suppress, timeline]
+- `surface_sweep_loft_ruled_extend`: Sweep a V along a line, Loft two lines, Ruled from an edge, Extend an edge [sweep, loft, ruled, extend]
+- `surface_thicken_corner`: Thicken an L of walls: sharp, rounded, then symmetric rounded [thicken]
+- `surface_trim_plane`: A wall trimmed by the XY plane, the lower piece removed [trim]
 
 ### primitive (37)
 
@@ -139,6 +279,40 @@ Each model is listed under its first tag; its other tags follow it.
 - `live_fillet2_two_sets`: Live picture on the exact result: Fillet dialog: two selection sets in one step (r 1 on the front top edge, r 3 on the back top edge), saved and reopened [blend, fillet-2, live-blend]
 - `live_fillet2_variable_points`: Live picture on the exact result: Fillet dialog: Variable radius on the front top edge, start 1, point 0.5 at 3, end 1.5 [blend, fillet-2, live-blend]
 - `live_fillet_top_edges`: Live picture on the exact result: Box 40x20x10, the 4 top edges filleted r2 [corner, live-blend]
+
+### plastic (31)
+
+- `plastic2_groove_only`: Groove alone in the base's rim: width Thickness / 2 + clearance, depth Reveal Height + clearance [lip]
+- `plastic2_lip_and_groove`: Lip And Groove: a lip on the base's rim and the matching groove in the lid [lip]
+- `plastic2_lip_drafted`: Lip And Groove with the rule's 1 degree draft on both sides [lip]
+- `plastic2_lip_face_guide`: Lip with Face Guide on a tapered round rim: the ring leans in with the side wall [lip]
+- `plastic2_lip_open_chain`: Lip And Groove along an open chain of three rim edges (front, back, left) [lip]
+- `plastic2_lip_root_radius`: Lip And Groove with a 0.3 mm Root Radius: the lip's root blended, the groove's mouth rounded to keep the clearance [lip]
+- `plastic2_lip_round_rim`: Lip alone on the round top edge of a cylinder (a ring inside the rim) [lip]
+- `plastic2_lip_suppress`: Lip And Groove suppressed from the timeline (both bodies as before), then back [lip, timeline]
+- `plastic2_lip_swap`: Lip And Groove edited: Swap puts the lip on the lid and the groove in the base [lip, edit]
+- `plastic2_lip_tip_radius`: Lip on a round rim with a 0.3 mm Tip Radius on both top edges [lip]
+- `plastic2_snap_distance`: Snap Fit with a Distance extent: the hook's base 5 mm from the parting plane (through the lid) [snap_fit]
+- `plastic2_snap_edit_taper`: Snap Fit edited from the timeline: the beam tapers to 1 mm and its sides get 1 degree of draft [snap_fit, edit]
+- `plastic2_snap_loop`: Snap Fit, Hook and Loop: the loop stands on the base floor in front of the catch [snap_fit]
+- `plastic2_snap_parallel`: Snap Fit, Parallel Hook and Groove: a hook under a lid and its groove in the base wall [snap_fit]
+- `plastic2_snap_perpendicular`: Snap Fit, Perpendicular Hook and Groove: the hook passes through a slot in a 2 mm panel and its catch hooks under it [snap_fit]
+- `plastic2_snap_rolled_back`: Snap Fit with the history marker rolled back before it (both bodies as before), then to the end [snap_fit, timeline]
+- `plastic2_snap_skip_point`: Snap Fit with a third sketch point off the part: that point is left out, the two others as before [snap_fit]
+- `plastic2_snap_two_points`: Snap Fit at two sketch points on opposite walls, Aligned so both catches face out [snap_fit]
+- `plastic2_split_enclosure`: Fusion's usual way: a closed hollow box split in two, Lip And Groove on the parting line, then a Hook and Loop snap fit between the halves [lip, snap_fit]
+- `plastic_boss_alignment_roots`: Boss alignment root radius: the recess's floor corner and a narrow spigot's foot [boss]
+- `plastic_boss_blends`: Boss blends: counterbore tip and root radius, alignment recess and spigot tip radius [boss]
+- `plastic_boss_enclosure`: Boss: screw bosses joining an enclosure and its lid (M3, counterbore, alignment step) [boss]
+- `plastic_boss_fastener`: Boss with its fastener: a pan-head M3 screw at each boss, in its own component [boss, fastener]
+- `plastic_boss_hole_radii`: Boss hole start and end radius: the pilot hole's mouth and bottom rounded [boss]
+- `plastic_boss_major_draft`: Boss: the head side's counterbore drafted 5 deg (Major Draft Angle), widening to the outside [boss]
+- `plastic_boss_ribs_each`: Boss ribs one by one: four square ribs, the second suppressed [boss]
+- `plastic_rest_closed_box`: Rest: a pad under the floor of a closed hollow box (the profile's shadow also crosses the top) [rest]
+- `plastic_rest_cut`: Rest: a flat landing cut into a round bar (the bar bulges past the sketch plane) [rest]
+- `plastic_rest_cylinder`: Rest: a flat 20 x 12 landing 2 mm above the crown of a round bar [rest]
+- `plastic_rule_boss_wall`: A plastic rule's wall drives a Constant Thickness boss (rule edited to 2.5 mm) [boss, rules]
+- `plastic_rule_edit_moves_boss`: Editing the plastic rule moves the boss that follows it (2 mm -> 2.5 mm) [boss, rules]
 
 ### bodies (28)
 
@@ -296,28 +470,6 @@ Each model is listed under its first tag; its other tags follow it.
 - `hole_tapped_m6`: Tapped hole M6x1 through, cosmetic thread [tapped]
 - `hole_to_face`: Hole d6 from the top face To the bottom face [single, to]
 - `hole_to_face_follows`: Hole d6 from the top face To the bottom face; the plate made thicker afterwards [single, to, edit]
-
-### surface (19)
-
-- `surface2_extrude_all`: Surface Extrude Extent All: through two boxes above and below, Flip, Two Sides [extrude, all]
-- `surface2_extrude_from_curved_face`: Surface Extrude From Object: a line extruded 10 up from a cylinder below it [extrude, from-object]
-- `surface2_extrude_from_face`: Surface Extrude From Object: a line extruded 15 from a box's top face, then Offset 5 [extrude, from-object]
-- `surface2_extrude_to_body`: Surface Extrude To Object: a line extruded up to a cylinder body, and to its face [extrude, to-object]
-- `surface2_extrude_to_chain_faces`: Surface Extrude To Object with Chain Faces: up to a box's filleted underside (fillet + bottom) [extrude, to-object]
-- `surface2_loft_centerline`: Surface Loft of two circles r 5 along a quarter-circle centerline r 30, then Direction [loft, centerline, end-conditions]
-- `surface2_loft_tangent_end`: Surface Loft from a wall's top edge to a line, Tangent (G1) at the edge [loft, end-conditions]
-- `surface2_loft_two_rails`: Surface Loft: two 20 long lines 30 apart between two bulging arc rails (flat) [loft, rails]
-- `surface2_revolve_to_plane`: Surface Revolve Type To: a line 10 from the Z axis turned to the YZ plane, then to XZ [revolve, to-object]
-- `surface2_sweep_rail`: Surface Sweep Path + Guide Rail: a 10 high line along 40, its top on a rising rail [sweep, rail]
-- `surface2_sweep_taper`: Surface Sweep Taper Angle 10: a circle r 5 swept 20 up a straight path opens out [sweep, taper]
-- `surface_boundary_fill_cone`: Boundary Fill: tube, cone and XY plane close a cell; fill the one inside [boundary_fill, revolve]
-- `surface_extrude_line`: SURFACE Extrude of an open sketch line, 10 each way (Symmetric) [extrude]
-- `surface_offset_thicken_join`: Offset a box's top face 5, thicken the offset back down onto the box (Join) [offset, thicken]
-- `surface_patch_trim_untrim`: Patch a square, Trim a hole with a sketch circle, Untrim the hole (Internal) [patch, trim, untrim]
-- `surface_stitch_cylinder`: A tube and two patched ends stitched into a solid cylinder [stitch, patch]
-- `surface_sweep_loft_ruled_extend`: Sweep a V along a line, Loft two lines, Ruled from an edge, Extend an edge [sweep, loft, ruled, extend]
-- `surface_thicken_corner`: Thicken an L of walls: sharp, rounded, then symmetric rounded [thicken]
-- `surface_trim_plane`: A wall trimmed by the XY plane, the lower piece removed [trim]
 
 ### draft (18)
 
@@ -577,6 +729,10 @@ Each model is listed under its first tag; its other tags follow it.
 
 - `sf_coil_old_narrow_upgraded`: A narrowing coil saved by SciForge before the 2026-10-11 fixes (its mirror image) is rebuilt right when the file is opened [reopen, upgrade]
 
+### flat-pattern (1)
+
+- `sm_flat_moved_body`: Flat pattern follows its body turned by a Move step (90 degrees about X, then shifted) [move, sheetmetal]
+
 ### import (1)
 
 - `export_report_imports`: Import report: what Insert Mesh, Insert DXF / SVG and Open / Insert STEP say did not come in [export-report]
@@ -611,7 +767,7 @@ Each model is listed under its first tag; its other tags follow it.
 | `body_material` | `physical_material` | 2 | `export_report_design`, `inspect_com_materials` |
 | `body_tool_edit` | `edit_step` | 4 | `bodies_combine_edit_operation`, `bodies_move_edit`, `bodies_move_two_bodies`, `bodies_split_edit_tool` |
 | `chamfer` | (a test helper) | 2 | `chamfer_one_edge`, `chamfer_top_edges` |
-| `check` | (a test helper) | 59 | `blend_edit_keeps_later_chamfer`, `blend_fillet_edit_radius`, `blend_insert_chamfer_before_fillet`, `bodies_combine_edit_operation`, `bodies_combine_follows_tool` |
+| `check` | (a test helper) | 88 | `blend_edit_keeps_later_chamfer`, `blend_fillet_edit_radius`, `blend_insert_chamfer_before_fillet`, `bodies_combine_edit_operation`, `bodies_combine_follows_tool` |
 | `circular_pattern` | `circular_pattern` | 3 | `pattern_circ_faces_bolt_circle`, `pattern_circ_suppressed_bodies`, `pattern_circ_symmetric_holes` |
 | `com_expect` | (a test helper) | 2 | `inspect_com_interference`, `inspect_com_materials` |
 | `combine` | `combine` | 10 | `bodies_combine_cut`, `bodies_combine_cut_cylinder`, `bodies_combine_edit_operation`, `bodies_combine_follows_tool`, `bodies_combine_intersect` |
@@ -627,90 +783,116 @@ Each model is listed under its first tag; its other tags follow it.
 | `delete_face` | `delete_face` | 2 | `bodies_delete_face_fillet`, `bodies_delete_face_hole` |
 | `edit` | `set_sketch_dimension`, `edit_step` | 32 | `blend_fillet_edit_radius`, `bodies_combine_follows_tool`, `comp_paste_instance_follows`, `comp_paste_new_independent`, `edit_extrude_then_shell` |
 | `emboss` | `emboss` | 4 | `emboss_cylinder_deboss`, `emboss_cylinder_rect`, `emboss_flat_deboss`, `emboss_flat_rect` |
-| `expect_bodies` | (a test helper) | 38 | `extrude_multi_cut`, `extrude_multi_cut_all`, `extrude_multi_cut_all_far`, `extrude_multi_cut_edit`, `extrude_multi_cut_excluded` |
+| `expect_bodies` | (a test helper) | 60 | `extrude_multi_cut`, `extrude_multi_cut_all`, `extrude_multi_cut_all_far`, `extrude_multi_cut_edit`, `extrude_multi_cut_excluded` |
 | `expect_component` | (a test helper) | 1 | `sf_cylinder_new_component` |
 | `expect_move_refused` | (a test helper) | 1 | `extrude_multi_move` |
 | `expect_radius` | (a test helper) | 1 | `sf_sweep_guide_surface` |
 | `export_report_expect` | (a test helper) | 2 | `export_report_design`, `export_report_sketch_dxf` |
-| `extrude` | `extrude` | 367 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
-| `fillet` | (a test helper) | 16 | `bodies_delete_face_fillet`, `bracket_inner_fillet`, `edit_fillet_radius`, `edit_width_after_fillet_and_hole`, `fillet_all_edges` |
+| `extrude` | `extrude` | 412 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
+| `fillet` | (a test helper) | 23 | `bodies_delete_face_fillet`, `bracket_inner_fillet`, `edit_fillet_radius`, `edit_width_after_fillet_and_hole`, `fillet_all_edges` |
 | `fillet_sets` | `fillet_sets` | 14 | `fillet2_chamfer_sets_angle_flip`, `fillet2_chord_90_120`, `fillet2_face_and_its_edge_in_two_sets`, `fillet2_presspull_set_radius`, `fillet2_sets_tangent_chain_each` |
 | `full_round` | `full_round_fillet` | 1 | `fillet2_full_round_rib` |
-| `fusion_mirror` | `mirror` | 8 | `mirror_body_join_face`, `mirror_body_new_body`, `mirror_body_new_body_move_after`, `mirror_faces_hole`, `mirror_features_yz_fusion` |
+| `fusion_mirror` | `mirror` | 9 | `mirror_body_join_face`, `mirror_body_new_body`, `mirror_body_new_body_move_after`, `mirror_faces_hole`, `mirror_features_yz_fusion` |
 | `hide_bodies` | (a test helper) | 1 | `export_report_design` |
 | `history_off` | `capture_design_history` | 1 | `direct_history_off_on` |
 | `history_on` | `capture_design_history` | 1 | `direct_history_off_on` |
 | `hole` | `hole` | 3 | `hole_blind`, `hole_counterbore`, `hole_countersink` |
-| `hole_at` | `hole` | 17 | `hardware_countersunk_m4_on_rim`, `hole_clearance_countersunk`, `hole_clearance_m6`, `hole_clearance_socket_cbore`, `hole_curved_follows` |
+| `hole_at` | `hole` | 19 | `hardware_countersunk_m4_on_rim`, `hole_clearance_countersunk`, `hole_clearance_m6`, `hole_clearance_socket_cbore`, `hole_curved_follows` |
 | `hole_points` | `hole` | 1 | `hole_points_flipped` |
 | `import_report_expect` | (a test helper) | 1 | `export_report_imports` |
 | `interference_expect` | (a test helper) | 1 | `inspect_com_interference` |
 | `live_blend_expect` | (a test helper) | 16 | `live_blend_chamfer_angle`, `live_blend_chamfer_top_face`, `live_blend_chamfer_two_flip`, `live_blend_fillet_boss_feature`, `live_blend_fillet_slot_chain` |
-| `measure_bodies` | (a test helper) | 28 | `bodies_combine_tool_deleted`, `extrude_multi_cut`, `extrude_multi_cut_all`, `extrude_multi_cut_all_far`, `extrude_multi_cut_edit` |
+| `measure_bodies` | (a test helper) | 30 | `bodies_combine_tool_deleted`, `extrude_multi_cut`, `extrude_multi_cut_all`, `extrude_multi_cut_all_far`, `extrude_multi_cut_edit` |
 | `measure_components` | (a test helper) | 3 | `comp_paste_instance_follows`, `comp_paste_new_independent`, `pattern_bodies_in_moved_component` |
 | `measure_expect` | (a test helper) | 2 | `inspect_measure_section`, `inspect_three_points_oblique_hole` |
 | `mirror` | (a test helper) | 1 | `mirror_boss` |
 | `modify_edit` | `edit_step` | 2 | `direct_replace_face_edit_down`, `direct_silhouette_edit_to_faces` |
 | `move` | `move_step` | 2 | `extrude_multi_move`, `tl_move_fillet_earlier` |
-| `move_bodies` | `move_copy` | 12 | `bodies_move_copy`, `bodies_move_edit`, `bodies_move_free`, `bodies_move_point_to_point`, `bodies_move_point_to_position` |
-| `move_face` | `move_copy` | 5 | `modify2_move_face_boss_down`, `modify2_move_face_edit`, `modify2_move_face_hole`, `modify2_move_face_tilt`, `modify2_move_face_top` |
+| `move_bodies` | `move_copy` | 13 | `bodies_move_copy`, `bodies_move_edit`, `bodies_move_free`, `bodies_move_point_to_point`, `bodies_move_point_to_position` |
+| `move_face` | `move_copy` | 6 | `modify2_move_face_boss_down`, `modify2_move_face_edit`, `modify2_move_face_hole`, `modify2_move_face_tilt`, `modify2_move_face_top` |
 | `move_face_edit` | `edit_step` | 1 | `modify2_move_face_edit` |
 | `parameter` | `set_parameter` | 13 | `export_report_design`, `param_driven_box`, `pattern_quantity_parameter`, `pattern_symmetric_parameter`, `sf_box_param_driven` |
-| `path_pattern` | `pattern_on_path` | 4 | `modify2_pattern_path_auto_start`, `modify2_pattern_path_start_point`, `pattern_path_bosses`, `pattern_path_circle_turned` |
+| `path_pattern` | `pattern_on_path` | 5 | `modify2_pattern_path_auto_start`, `modify2_pattern_path_start_point`, `pattern_path_bosses`, `pattern_path_circle_turned`, `surface4_pattern_path` |
 | `pattern_circ` | `pattern` | 1 | `flange_polar_holes` |
 | `pattern_edit` | `edit_step` | 2 | `pattern_edit_keeps_later_fillet`, `pattern_edit_quantity_fusion` |
 | `pattern_rect` | `pattern` | 2 | `edit_pattern_count`, `plate_hole_grid` |
 | `press_pull` | `press_pull` | 25 | `blend_fillet_presspull_radius`, `direct_history_off_on`, `direct_split_face_then_press_pull`, `fillet2_presspull_set_radius`, `pp_boss_grow` |
 | `press_pull_type` | `press_pull` | 4 | `modify2_presspull_modify_extrude`, `modify2_presspull_modify_offset`, `modify2_presspull_modify_pocket`, `modify2_presspull_new_offset` |
-| `rectangular_pattern` | `rectangular_pattern` | 16 | `mirror_hole_and_its_pattern`, `modify2_pattern_adjust_to_slope`, `modify2_pattern_identical_to_slope`, `modify2_pattern_multibody_cut`, `pattern_bodies_in_moved_component` |
+| `rectangular_pattern` | `rectangular_pattern` | 17 | `mirror_hole_and_its_pattern`, `modify2_pattern_adjust_to_slope`, `modify2_pattern_identical_to_slope`, `modify2_pattern_multibody_cut`, `pattern_bodies_in_moved_component` |
 | `remove_bodies` | `remove_bodies` | 1 | `direct_remove_body` |
-| `reopen` | (a test helper) | 5 | `fillet2_two_sets`, `live_fillet2_two_sets`, `picks_fillet_chamfer_kept_after_reopen`, `sf_coil_old_narrow_upgraded`, `sf_pipe_old_upgraded` |
-| `reopen_check` | (a test helper) | 1 | `extrude_multi_cut_reopen` |
-| `replace_face` | `replace_face` | 3 | `direct_replace_face_edit_down`, `direct_replace_face_up_to_body`, `modify2_replace_face_cone` |
+| `reopen` | (a test helper) | 9 | `fillet2_two_sets`, `live_fillet2_two_sets`, `picks_fillet_chamfer_kept_after_reopen`, `sf_coil_old_narrow_upgraded`, `sf_pipe_old_upgraded` |
+| `reopen_check` | (a test helper) | 2 | `extrude_multi_cut_reopen`, `surface3_stitch_join` |
+| `replace_face` | `replace_face` | 6 | `direct_replace_face_edit_down`, `direct_replace_face_up_to_body`, `modify2_replace_face_cone`, `surface4_replace_face`, `surface4_replace_face_curved` |
 | `revolve` | (a test helper) | 4 | `groove_ring`, `revolve_cylinder`, `revolve_quarter`, `revolve_washer` |
-| `roll` | `roll_timeline` | 8 | `blend_insert_chamfer_before_fillet`, `comp_move_captured_roll`, `extrude_multi_cut_timeline`, `extrude_multi_move`, `tl_insert_before_fillet` |
+| `roll` | `roll_timeline` | 9 | `blend_insert_chamfer_before_fillet`, `comp_move_captured_roll`, `extrude_multi_cut_timeline`, `extrude_multi_move`, `plastic2_snap_rolled_back` |
 | `rule_fillet` | `rule_fillet` | 3 | `fillet2_rule_all_edges`, `fillet2_rule_between_follows_edit`, `live_fillet2_rule_all_edges` |
 | `section_expect` | (a test helper) | 1 | `inspect_measure_section` |
+| `sf_boss` | (a test helper) | 9 | `plastic_boss_alignment_roots`, `plastic_boss_blends`, `plastic_boss_enclosure`, `plastic_boss_fastener`, `plastic_boss_hole_radii` |
+| `sf_boss_fastener` | (a test helper) | 1 | `plastic_boss_fastener` |
 | `sf_coil` | `coil` | 13 | `sf_coil_basic`, `sf_coil_cut_block`, `sf_coil_edit_turns`, `sf_coil_old_narrow_upgraded`, `sf_coil_param_driven` |
-| `sf_curves` | `create_curve_sketch` | 60 | `extrude_thin_arc_center`, `extrude_thin_open_l`, `sf_loft_centerline_ends`, `sf_loft_centerline_torus`, `sf_loft_cone_point` |
+| `sf_curves` | `create_curve_sketch` | 97 | `extrude_thin_arc_center`, `extrude_thin_open_l`, `sf_loft_centerline_ends`, `sf_loft_centerline_torus`, `sf_loft_cone_point` |
 | `sf_draft` | `draft` | 13 | `sf_draft_cylinder`, `sf_draft_edit_angle`, `sf_draft_ellipse_wall`, `sf_draft_ellipse_wall_edit`, `sf_draft_ellipse_wall_flip` |
 | `sf_draft2` | `draft` | 5 | `modify2_draft_fixed_symmetric`, `modify2_draft_fixed_two_side`, `modify2_draft_parting_plane_two_side`, `modify2_draft_parting_sketch_one_side`, `modify2_draft_two_bodies` |
 | `sf_draft_edit` | `edit_step` | 2 | `sf_draft_edit_angle`, `sf_draft_ellipse_wall_edit` |
+| `sf_flange` | (a test helper) | 72 | `sheetmetal_base_flange_join`, `sheetmetal_base_flange_new_component`, `sheetmetal_base_flange_rect`, `sheetmetal_base_flange_side2_rule`, `sheetmetal_contour_flange_l` |
+| `sf_flange_edit` | (a test helper) | 5 | `sheetmetal_base_flange_side2_rule`, `sheetmetal_contour_flange_two_sides`, `sheetmetal_edge_flange_angle_edit`, `sheetmetal_edge_flange_bend_positions`, `sheetmetal_extrude_cut_then_edit` |
+| `sf_flat_pattern` | (a test helper) | 19 | `sm_flat_bend_box`, `sm_flat_bend_roundtrip`, `sm_flat_contour_flange`, `sm_flat_corner_closure`, `sm_flat_corner_closure_tangent` |
 | `sf_gear` | `gear` | 7 | `sf_gear_cut_block`, `sf_gear_edit_teeth`, `sf_gear_english`, `sf_gear_internal`, `sf_gear_join_block` |
 | `sf_gear_edit` | `edit_step` | 1 | `sf_gear_edit_teeth` |
 | `sf_hardware` | `insert_hardware` | 8 | `hardware_button_head_m4`, `hardware_countersunk_m4_on_rim`, `hardware_edit_length`, `hardware_insert_m3_hole`, `hardware_magnet_6x3_pocket` |
 | `sf_hardware_edit` | `edit_step` | 1 | `hardware_edit_length` |
+| `sf_lip` | (a test helper) | 11 | `plastic2_groove_only`, `plastic2_lip_and_groove`, `plastic2_lip_drafted`, `plastic2_lip_face_guide`, `plastic2_lip_open_chain` |
+| `sf_lip_edit` | (a test helper) | 1 | `plastic2_lip_swap` |
 | `sf_loft` | `loft` | 22 | `sf_loft_centerline_ends`, `sf_loft_centerline_torus`, `sf_loft_closed_direction`, `sf_loft_cone_point`, `sf_loft_cut_cone` |
 | `sf_loft_edit` | `edit_step` | 3 | `sf_loft_edit_intersect`, `sf_loft_ends_direction_weight`, `sf_loft_merge_slot` |
 | `sf_path_sketch` | (a test helper) | 9 | `sf_join_away_new_body`, `sf_pipe_hollow_half`, `sf_pipe_old_upgraded`, `sf_pipe_param_driven`, `sf_pipe_ring_hollow` |
 | `sf_pipe` | `pipe` | 14 | `sf_join_away_new_body`, `sf_pipe_corner_hollow_cut`, `sf_pipe_corner_intersect`, `sf_pipe_corner_mitre_join`, `sf_pipe_edge_auto_join` |
-| `sf_primitive` | `primitive` | 29 | `direct_silhouette_body_sphere`, `direct_silhouette_edit_to_faces`, `direct_silhouette_faces_sphere`, `sf_box_basic`, `sf_box_param_driven` |
+| `sf_plastic_rule` | (a test helper) | 2 | `plastic_rule_boss_wall`, `plastic_rule_edit_moves_boss` |
+| `sf_primitive` | `primitive` | 31 | `direct_silhouette_body_sphere`, `direct_silhouette_edit_to_faces`, `direct_silhouette_faces_sphere`, `plastic2_lip_round_rim`, `plastic2_lip_tip_radius` |
 | `sf_primitive_edit` | `edit_step` | 3 | `sf_box_pocket_edit_join`, `sf_coil_edit_turns`, `sf_pipe_triangle_edit` |
+| `sf_refold` | (a test helper) | 1 | `sm_flat_unfold_cut_refold` |
+| `sf_rest` | (a test helper) | 3 | `plastic_rest_closed_box`, `plastic_rest_cut`, `plastic_rest_cylinder` |
 | `sf_revolve` | `revolve` | 20 | `modify2_replace_face_cone`, `sf_revolve_cone`, `sf_revolve_construction_follows`, `sf_revolve_cut_other_body`, `sf_revolve_cut_two_bodies` |
 | `sf_revolve_edit` | `edit_step` | 3 | `sf_revolve_edit_operation`, `sf_revolve_face_profile_follows`, `sf_revolve_to_then_angle` |
 | `sf_rib` | `rib`, `web` | 14 | `sf_rib_arc`, `sf_rib_depth`, `sf_rib_edit_thickness`, `sf_rib_far_from_origin`, `sf_rib_gusset` |
 | `sf_rib_edit` | `edit_step` | 3 | `sf_rib_edit_thickness`, `sf_web_not_extended`, `sf_web_one_side_flip` |
-| `sf_scale` | `scale` | 6 | `sf_scale_about_corner`, `sf_scale_corner_follows_edit`, `sf_scale_edit_factor`, `sf_scale_non_uniform`, `sf_scale_non_uniform_keeps_faces` |
+| `sf_rip` | (a test helper) | 2 | `sm_flat_rip_points`, `sm_flat_rip_tube` |
+| `sf_scale` | `scale` | 7 | `sf_scale_about_corner`, `sf_scale_corner_follows_edit`, `sf_scale_edit_factor`, `sf_scale_non_uniform`, `sf_scale_non_uniform_keeps_faces` |
 | `sf_scale_bodies` | `scale` | 1 | `modify2_scale_two_bodies` |
 | `sf_scale_edit` | `edit_step` | 2 | `sf_scale_edit_factor`, `sf_scale_non_uniform_keeps_faces` |
 | `sf_scale_sketch` | `scale` | 1 | `modify2_scale_sketch` |
 | `sf_scale_sketch_edit` | `edit_step` | 1 | `modify2_scale_sketch` |
+| `sf_sheet_rule` | (a test helper) | 6 | `sheetmetal_base_flange_side2_rule`, `sheetmetal_rule_edit_recomputes`, `sm_flat_k_factor`, `sm_flat_moved_body`, `sm_flat_thickness_change` |
 | `sf_shell` | `shell` | 13 | `picks_shell_kept_on_taper`, `sf_draft_then_shell`, `sf_shell_both`, `sf_shell_both_edit_presspull`, `sf_shell_both_follows_extrude_edit` |
 | `sf_shell_bodies` | `shell` | 1 | `modify2_shell_two_bodies` |
 | `sf_shell_edit` | `edit_step` | 3 | `sf_shell_both_edit_presspull`, `sf_shell_edit_to_both`, `sf_shell_swap_presspull_follows` |
-| `sf_surface` | `surface` | 19 | `surface2_extrude_all`, `surface2_extrude_from_curved_face`, `surface2_extrude_from_face`, `surface2_extrude_to_body`, `surface2_extrude_to_chain_faces` |
-| `sf_surface_edit` | `edit_step` | 5 | `surface2_extrude_all`, `surface2_extrude_from_face`, `surface2_loft_centerline`, `surface2_sweep_rail`, `surface_thicken_corner` |
+| `sf_sm_bend` | (a test helper) | 14 | `sheetmetal_smm_bend_after_flange`, `sheetmetal_smm_bend_box`, `sheetmetal_smm_bend_center`, `sheetmetal_smm_bend_diagonal`, `sheetmetal_smm_bend_flip_start_45` |
+| `sf_sm_chamfer` | (a test helper) | 1 | `sheetmetal_smm_fillet_chamfer` |
+| `sf_sm_convert` | (a test helper) | 7 | `sm_flat_l_bracket`, `sm_flat_moved_body`, `sm_flat_rip_points`, `sm_flat_rip_tube`, `sm_flat_u_channel_hole` |
+| `sf_sm_corner_closure` | (a test helper) | 12 | `sheetmetal_smm_corner_closure`, `sheetmetal_smm_corner_closure_60`, `sheetmetal_smm_corner_closure_mitred`, `sheetmetal_smm_corner_closure_mitred_square`, `sheetmetal_smm_corner_closure_not_aligned` |
+| `sf_sm_fillet` | (a test helper) | 2 | `sheetmetal_smm_fillet_chamfer`, `sheetmetal_smm_reopen_all` |
+| `sf_sm_hem` | (a test helper) | 14 | `sheetmetal_smm_hem_after_bend`, `sheetmetal_smm_hem_beside_flange`, `sheetmetal_smm_hem_double`, `sheetmetal_smm_hem_edit_type`, `sheetmetal_smm_hem_flat` |
+| `sf_sm_join_bend` | (a test helper) | 3 | `sheetmetal_smm_join_bend`, `sheetmetal_smm_join_bend_below`, `sheetmetal_smm_join_bend_overlap` |
+| `sf_sm_lofted_flange` | (a test helper) | 4 | `sheetmetal_smm_lofted_brake`, `sheetmetal_smm_lofted_die`, `sheetmetal_smm_lofted_join`, `sheetmetal_smm_lofted_lines` |
+| `sf_sm_more_edit` | (a test helper) | 6 | `sheetmetal_smm_bend_diagonal`, `sheetmetal_smm_bend_flip_start_45`, `sheetmetal_smm_corner_closure_mitred_square`, `sheetmetal_smm_hem_edit_type`, `sheetmetal_smm_lofted_die` |
+| `sf_snap_fit` | (a test helper) | 9 | `plastic2_snap_distance`, `plastic2_snap_edit_taper`, `plastic2_snap_loop`, `plastic2_snap_parallel`, `plastic2_snap_perpendicular` |
+| `sf_snap_fit_edit` | (a test helper) | 1 | `plastic2_snap_edit_taper` |
+| `sf_surface` | `surface` | 53 | `surface2_extrude_all`, `surface2_extrude_from_curved_face`, `surface2_extrude_from_face`, `surface2_extrude_to_body`, `surface2_extrude_to_chain_faces` |
+| `sf_surface_edit` | `edit_step` | 8 | `surface2_extrude_all`, `surface2_extrude_from_face`, `surface2_loft_centerline`, `surface2_sweep_rail`, `surface3_extend_align_edges` |
+| `sf_surface_modify` | (a test helper) | 13 | `surface4_chamfer_delete`, `surface4_fillet_box`, `surface4_fillet_chord`, `surface4_fillet_variable`, `surface4_merge` |
+| `sf_surface_modify_edit` | (a test helper) | 2 | `surface4_fillet_box`, `surface4_press_pull` |
 | `sf_sweep` | `sweep` | 18 | `sf_sweep_both_sides`, `sf_sweep_distance_parameter`, `sf_sweep_edit_distance`, `sf_sweep_face_taper`, `sf_sweep_groove_cut` |
 | `sf_sweep_edit` | `edit_step` | 1 | `sf_sweep_edit_distance` |
-| `shell` | `shell` | 3 | `edit_extrude_then_shell`, `shell_filleted_box`, `shell_open_box` |
+| `sf_unfold` | (a test helper) | 2 | `sm_flat_unfold_cut_refold`, `sm_flat_unfold_one_bend` |
+| `shell` | `shell` | 28 | `edit_extrude_then_shell`, `plastic2_groove_only`, `plastic2_lip_and_groove`, `plastic2_lip_drafted`, `plastic2_lip_open_chain` |
 | `silhouette_split` | `silhouette_split` | 3 | `direct_silhouette_body_sphere`, `direct_silhouette_edit_to_faces`, `direct_silhouette_faces_sphere` |
-| `sketch` | `create_sketch` | 405 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
+| `sketch` | `create_sketch` | 522 | `blend_chamfer_angle`, `blend_chamfer_top_face`, `blend_chamfer_two_flip`, `blend_edit_keeps_later_chamfer`, `blend_fillet_boss_feature` |
 | `sketch_extras` | (a test helper) | 1 | `export_report_sketch_dxf` |
 | `sketch_polygon` | `sketch_polygon` | 2 | `sketch_inscribed_pentagon`, `sketch_nut_trap_polygon` |
 | `sketch_trim` | `sketch_trim` | 1 | `sketch_trim_union` |
-| `split_body` | `split_body` | 6 | `bodies_split_by_body`, `bodies_split_edit_tool`, `bodies_split_face_extended`, `bodies_split_sketch_line`, `bodies_split_two_planes` |
-| `split_face` | `split_face` | 4 | `direct_split_face_closest_point`, `direct_split_face_extend`, `direct_split_face_then_press_pull`, `direct_split_face_yz` |
-| `suppress` | `suppress_step` | 7 | `extrude_multi_cut_timeline`, `extrude_multi_join_delete`, `extrude_multi_move`, `hole_second_survives_first`, `tl_suppress_boss` |
+| `split_body` | `split_body` | 10 | `bodies_split_by_body`, `bodies_split_edit_tool`, `bodies_split_face_extended`, `bodies_split_sketch_line`, `bodies_split_two_planes` |
+| `split_face` | `split_face` | 5 | `direct_split_face_closest_point`, `direct_split_face_extend`, `direct_split_face_then_press_pull`, `direct_split_face_yz`, `surface4_split_face_merge` |
+| `suppress` | `suppress_step` | 9 | `extrude_multi_cut_timeline`, `extrude_multi_join_delete`, `extrude_multi_move`, `hole_second_survives_first`, `plastic2_lip_suppress` |
 | `thread` | `thread` | 8 | `thread_edit_length`, `thread_hole_modeled`, `thread_second_after_modeled`, `thread_shaft_cosmetic`, `thread_shaft_modeled` |
-| `unsuppress` | `suppress_step` | 6 | `extrude_multi_cut_timeline`, `extrude_multi_join_delete`, `extrude_multi_move`, `hole_second_survives_first`, `tl_suppress_first_roundtrip` |
+| `unsuppress` | `suppress_step` | 8 | `extrude_multi_cut_timeline`, `extrude_multi_join_delete`, `extrude_multi_move`, `hole_second_survives_first`, `plastic2_lip_suppress` |
 | `use_body` | `activate` | 26 | `extrude_multi_cut`, `extrude_multi_cut_all`, `extrude_multi_cut_all_far`, `extrude_multi_cut_edit`, `extrude_multi_cut_excluded` |

@@ -20,7 +20,8 @@
 #     under it:
 #       [in=SCOPE,SCOPE]  where parity.py looks for the command in SciForge. Scopes:
 #                         tab:<id> (a ribbon tab of ribbon_config.TABS: solid, surface, mesh,
-#                         utilities, sketch, drawing), file (the File menu), quick (the
+#                         utilities, sketch, drawing, sheet_metal, plastic, flat_pattern),
+#                         file (the File menu), quick (the
 #                         application bar), nav (navigation bar), workspace (the workspace
 #                         button's menu), marking (right-click marking menu), sketch-marking
 #                         (the marking menu inside a sketch), browser or browser:<node kind>
@@ -336,7 +337,7 @@ FORM [in=tab:form] [out=sculpting (T-spline) is out of scope]
   FINISH FORM
     Finish Form
 
-SHEET METAL [in=tab:sheetmetal] [out=Luca 2026-10-09: no SHEET METAL tab for now]
+SHEET METAL [in=tab:sheet_metal]
   CREATE
     Flange
     Contour Flange?
@@ -349,11 +350,11 @@ SHEET METAL [in=tab:sheetmetal] [out=Luca 2026-10-09: no SHEET METAL tab for now
     Rip
   MODIFY
     Sheet Metal Rules
-  FLAT PATTERN
+  FLAT PATTERN [in=tab:flat_pattern]
     Export DXF?
     Finish Flat Pattern?
 
-PLASTIC [in=tab:plastic] [out=Luca 2026-10-09: no PLASTIC tab for now]
+PLASTIC [in=tab:plastic]
   CREATE
     Boss
     Snap Fit

@@ -72,5 +72,5 @@ Done: AI: Pattern on path. Its id is 'Pattern1'. Bodies now: Body1: 25178.1 mm3,
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `modify2_pattern_path_auto_start`, `modify2_pattern_path_start_point`, `pattern_path_bosses`, `pattern_path_circle_turned`
+- Golden models built with its steps (read one with docs_read golden/<id>): `modify2_pattern_path_auto_start`, `modify2_pattern_path_start_point`, `pattern_path_bosses`, `pattern_path_circle_turned`, `surface4_pattern_path`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

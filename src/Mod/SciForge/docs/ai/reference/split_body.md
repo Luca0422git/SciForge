@@ -60,5 +60,5 @@ Done: AI: Split body. Its id is 'SplitBody'. Bodies now: Body1: 3141.59 mm3, 10 
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `bodies_split_by_body`, `bodies_split_edit_tool`, `bodies_split_face_extended`, `bodies_split_sketch_line`, `bodies_split_two_planes`, `bodies_split_yz`
+- Golden models built with its steps (read one with docs_read golden/<id>): `bodies_split_by_body`, `bodies_split_edit_tool`, `bodies_split_face_extended`, `bodies_split_sketch_line`, `bodies_split_two_planes`, `bodies_split_yz`, `plastic2_split_enclosure`, `surface4_split_by_loft`, `surface4_split_by_surface`, `surface4_split_surface`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

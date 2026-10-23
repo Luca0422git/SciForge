@@ -62,5 +62,5 @@ Done: AI: Split face. Its id is 'SplitFace'. Bodies now: Body1: 6283.19 mm3, 20 
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `direct_split_face_closest_point`, `direct_split_face_extend`, `direct_split_face_then_press_pull`, `direct_split_face_yz`
+- Golden models built with its steps (read one with docs_read golden/<id>): `direct_split_face_closest_point`, `direct_split_face_extend`, `direct_split_face_then_press_pull`, `direct_split_face_yz`, `surface4_split_face_merge`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

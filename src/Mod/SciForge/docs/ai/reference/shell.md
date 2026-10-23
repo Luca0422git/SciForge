@@ -66,5 +66,5 @@ Done: AI: Shell 2 mm. Its id is 'Shell1'. Bodies now: Body1: 7872 mm3, 60 x 40 x
 ## See also
 
 - Recipe: [enclosure with a lid](sciforge://docs/recipes/enclosure-with-lid.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `edit_extrude_then_shell`, `shell_filleted_box`, `shell_open_box`, `picks_shell_kept_on_taper`, `sf_draft_then_shell`, `sf_shell_both`, `sf_shell_both_edit_presspull`, `sf_shell_both_follows_extrude_edit`, `sf_shell_cup`, `sf_shell_edit_to_both`, `sf_shell_hollow_body`, `sf_shell_hollow_both` and 5 more
+- Golden models built with its steps (read one with docs_read golden/<id>): `edit_extrude_then_shell`, `plastic2_groove_only`, `plastic2_lip_and_groove`, `plastic2_lip_drafted`, `plastic2_lip_open_chain`, `plastic2_lip_root_radius`, `plastic2_lip_suppress`, `plastic2_lip_swap`, `plastic2_snap_distance`, `plastic2_snap_edit_taper`, `plastic2_snap_loop`, `plastic2_snap_parallel` and 30 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

@@ -67,5 +67,5 @@ Done: AI: Surface extrude. Its id is 'Surface1'. No solid body yet.
 ## See also
 
 - Recipe: [curved panel from a surface patch](sciforge://docs/recipes/surface-patch.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `surface2_extrude_all`, `surface2_extrude_from_curved_face`, `surface2_extrude_from_face`, `surface2_extrude_to_body`, `surface2_extrude_to_chain_faces`, `surface2_loft_centerline`, `surface2_loft_tangent_end`, `surface2_loft_two_rails`, `surface2_revolve_to_plane`, `surface2_sweep_rail`, `surface2_sweep_taper`, `surface_boundary_fill_cone` and 7 more
+- Golden models built with its steps (read one with docs_read golden/<id>): `surface2_extrude_all`, `surface2_extrude_from_curved_face`, `surface2_extrude_from_face`, `surface2_extrude_to_body`, `surface2_extrude_to_chain_faces`, `surface2_loft_centerline`, `surface2_loft_tangent_end`, `surface2_loft_two_rails`, `surface2_revolve_to_plane`, `surface2_sweep_rail`, `surface2_sweep_taper`, `surface3_extend_align_edges` and 41 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

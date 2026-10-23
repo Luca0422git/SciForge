@@ -60,5 +60,5 @@ Suppressed Hole1. Bodies now: Body1: 24000 mm3, 60 x 40 x 10 mm.
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `extrude_multi_cut_timeline`, `extrude_multi_join_delete`, `extrude_multi_move`, `hole_second_survives_first`, `tl_suppress_boss`, `tl_suppress_first_roundtrip`, `tl_suppress_sketch`
+- Golden models built with its steps (read one with docs_read golden/<id>): `extrude_multi_cut_timeline`, `extrude_multi_join_delete`, `extrude_multi_move`, `hole_second_survives_first`, `plastic2_lip_suppress`, `surface_suppress_patch_trim`, `tl_suppress_boss`, `tl_suppress_first_roundtrip`, `tl_suppress_sketch`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

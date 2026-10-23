@@ -63,5 +63,5 @@ Done: AI: Scale. Its id is 'Scale1'. Bodies now: Body1: 3000 mm3, 30 x 20 x 5 mm
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `sf_scale_about_corner`, `sf_scale_corner_follows_edit`, `sf_scale_edit_factor`, `sf_scale_non_uniform`, `sf_scale_non_uniform_keeps_faces`, `sf_scale_uniform`, `modify2_scale_two_bodies`, `modify2_scale_sketch`
+- Golden models built with its steps (read one with docs_read golden/<id>): `sf_scale_about_corner`, `sf_scale_corner_follows_edit`, `sf_scale_edit_factor`, `sf_scale_non_uniform`, `sf_scale_non_uniform_keeps_faces`, `sf_scale_uniform`, `surface4_mirror_join_scale`, `modify2_scale_two_bodies`, `modify2_scale_sketch`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

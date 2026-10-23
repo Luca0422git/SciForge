@@ -80,5 +80,5 @@ Done: AI: Move. Its id is 'Move'. Bodies now: Body1: 24000 mm3, 60 x 40 x 10 mm;
 ## See also
 
 - Recipe: [a pair of meshing spur gears](sciforge://docs/recipes/gear-pair.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `bodies_move_copy`, `bodies_move_edit`, `bodies_move_free`, `bodies_move_point_to_point`, `bodies_move_point_to_position`, `bodies_move_rotate_pivot`, `bodies_move_rotate_z`, `bodies_move_then_cut`, `bodies_move_translate`, `bodies_move_two_bodies`, `mirror_body_new_body_move_after`, `pattern_bodies_move_original_after` and 8 more
+- Golden models built with its steps (read one with docs_read golden/<id>): `bodies_move_copy`, `bodies_move_edit`, `bodies_move_free`, `bodies_move_point_to_point`, `bodies_move_point_to_position`, `bodies_move_rotate_pivot`, `bodies_move_rotate_z`, `bodies_move_then_cut`, `bodies_move_translate`, `bodies_move_two_bodies`, `mirror_body_new_body_move_after`, `pattern_bodies_move_original_after` and 10 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

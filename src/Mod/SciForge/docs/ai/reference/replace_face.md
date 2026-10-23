@@ -60,5 +60,5 @@ Done: AI: Replace face. Its id is 'ReplaceFace'. Bodies now: Body1: 6000 mm3, 20
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `direct_replace_face_edit_down`, `direct_replace_face_up_to_body`, `modify2_replace_face_cone`
+- Golden models built with its steps (read one with docs_read golden/<id>): `direct_replace_face_edit_down`, `direct_replace_face_up_to_body`, `modify2_replace_face_cone`, `surface4_replace_face`, `surface4_replace_face_curved`, `surface4_replace_face_two`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

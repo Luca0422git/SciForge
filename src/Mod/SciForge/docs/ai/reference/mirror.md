@@ -66,5 +66,5 @@ Done: AI: Mirror. Its id is 'Mirror1'. Bodies now: Body1: 24785.4 mm3, 60 x 65 x
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `mirror_body_join_face`, `mirror_body_new_body`, `mirror_body_new_body_move_after`, `mirror_faces_hole`, `mirror_features_yz_fusion`, `mirror_fillet_feature`, `mirror_hole_and_its_pattern`, `modify2_mirror_adjust_to_slope`
+- Golden models built with its steps (read one with docs_read golden/<id>): `mirror_body_join_face`, `mirror_body_new_body`, `mirror_body_new_body_move_after`, `mirror_faces_hole`, `mirror_features_yz_fusion`, `mirror_fillet_feature`, `mirror_hole_and_its_pattern`, `modify2_mirror_adjust_to_slope`, `surface4_mirror_join_scale`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

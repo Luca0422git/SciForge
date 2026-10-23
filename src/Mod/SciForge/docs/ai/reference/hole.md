@@ -123,5 +123,5 @@ Done: AI: Hole 5.5 mm. Its id is 'Hole1'. Bodies now: Body1: 23461.1 mm3, 60 x 4
 - Recipe: [flange with a bolt circle](sciforge://docs/recipes/flange-bolt-pattern.md)
 - Recipe: [parametric mounting plate](sciforge://docs/recipes/parametric-plate.md)
 - Recipe: [sheet-like U bracket (thin extrude with bends)](sciforge://docs/recipes/sheet-like-part.md)
-- Golden models built with its steps (read one with docs_read golden/<id>): `hole_blind`, `hole_counterbore`, `hole_countersink`, `hole_points_flipped`, `hardware_countersunk_m4_on_rim`, `hole_clearance_countersunk`, `hole_clearance_m6`, `hole_clearance_socket_cbore`, `hole_curved_follows`, `hole_references_follow_edge`, `hole_second_survives_first`, `hole_single_angled` and 9 more
+- Golden models built with its steps (read one with docs_read golden/<id>): `hole_blind`, `hole_counterbore`, `hole_countersink`, `hole_points_flipped`, `hardware_countersunk_m4_on_rim`, `hole_clearance_countersunk`, `hole_clearance_m6`, `hole_clearance_socket_cbore`, `hole_curved_follows`, `hole_references_follow_edge`, `hole_second_survives_first`, `hole_single_angled` and 11 more
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)

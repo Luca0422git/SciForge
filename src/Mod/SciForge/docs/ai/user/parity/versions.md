@@ -106,6 +106,50 @@ Where the versions live:
 
 The panel hides `.git`, `<Design>.versions`, the trash and FreeCAD's `.FCBak` backups.
 
+## Data Panel, part 2 (Luca's requests, 2026-10-23)
+
+Luca: "I want a more robust data panel. Something similar to how Fusion does it", and "I
+should be able to drag files from the data panel into open files. Make it a copy of the
+file." Built in `sciforge/data_panel_ui.py` (the panel) and `data_panel_core.py` (no Qt,
+unit tested in `test_data_panel_core.py`); the copy is `versions_ui.insert_copy` /
+`design_insert.insert_copy`. Scenario `data_panel_fusion` (59 checks).
+
+Sources (search summaries; the sandbox cannot open autodesk.com, re-check in a browser):
+**Autodesk** help "View design history and related data" (a design's details in the Data
+Panel: a History tab with its versions newest first, **Uses** = the designs it inserts as
+external components, **Used In** = the designs that insert it, Drawings); **Autodesk** blog
+"Fusion data panel guide" (organise by name or by last updated; subfolders); **Autodesk**
+help "Insert tools" / "Insert designs" (Insert into Current Design brings an external,
+linked component; Break Link makes it stand-alone). Whether Fusion takes a card dragged onto
+the canvas was not confirmed by the search (one forum thread reports it failing): the drag is
+built because Luca asked for it, and as a **copy** because he asked for that.
+
+| Fusion | SciForge |
+|---|---|
+| Cards: the design's picture, its name and the version number in a badge. | Cards drawn by SciForge (`_CardDelegate`): the picture with a **V3** badge in its top-right corner (accent blue), the name and "2 h ago" under it. Folders first. The list view puts each in a row: small picture, name, "2 h ago · 1.2 MB", the badge at the right. The list / grid choice is remembered. |
+| Search the project. | **Search this place**: every folder of the place shown (This computer's project folder, a cloud, a NAS), words in any order, any case; results say where they are ("in Parts"); at most 200; Esc or the clear button brings the folder back. |
+| Sort by name or by last updated. | A **Name / Last saved / Size** drop-down (folders stay first, by name); remembered. |
+| Click a design: its details (picture, Open, versions, Uses, Used In, Drawings). | A click on a design shows its **details** under the cards: picture, name, "V2 · 2 h ago · 17.7 KB", **Open**, **Insert** (a copy, or linked), tabs **Versions** (newest first, the newest bold; double-click opens a version, the newest opens the design; right-click: Open, Promote, Version History), **Uses (n)** (designs it inserts or derives from, "(not found)" when missing; double-click opens), **Used In** (designs of this place that insert it; read only when the tab is shown). The X hides them until another card is clicked. No Drawings tab: SciForge keeps drawings inside the design (browser > Drawings). |
+| Drag a design onto the canvas: it is inserted. | Drag a design card into an open design's **3D view**: an **independent copy** comes in (Luca's choice): one component named after the design ("Robot", a second one "Robot (2)") in the active component, holding the design's components, bodies and every step, with no link back to the file; one undo step "Insert Copy"; then the Move dialog places it (Cancel leaves it where it came in). Dropping on the **browser** works too: on a component row it goes into that component. The design need not be saved first (nothing is stored relative to its file). A design open with unsaved changes is copied as it is open (said in words); one not open is read hidden and closed again. Several cards dragged together come in one after another. Also on the right-click menu and the details' Insert: **Insert a Copy into Current Design**. |
+| Drag a card onto a folder: it moves there. | Same (a design moves with its versions, the designs that insert it are pointed at its new place, as Move... does); the folder card is outlined while a card is over it. |
+| Upload (designs and other files). | **Upload** (blue) takes designs (.FCStd, copied in as a separate design, v1 "Copy of ...") and STEP / IGES files; files dropped on the panel from the computer's file manager are uploaded the same way (onto a folder card: into that folder). |
+| The panel follows changes made elsewhere (the cloud). | The folder shown is looked at every 4 s while the panel is shown; a design put there by another program (the file manager, another computer on the NAS) appears by itself. A folder slower than 0.5 s to list (a far NAS) is refreshed on Refresh only. |
+| Keys | **Enter** opens, **F2** renames, **Delete** moves to the trash folder, **Backspace** goes up (while the cards have the keyboard). |
+| Delete a design (right-click > Delete; the project's deleted items can be restored). | **Delete** in three places: right-click, the Delete key, and a **Delete** button in the details a click on a design shows (Luca, 2026-10-23: "clicking on a file should give you the option to delete it ... Same in the data panel"). One shared action with Home (`versions_ui.delete_design`): a question (Move to Trash / Cancel), then the design and its `.versions` copies go to the place's `.sciforge-trash` folder (never deleted for good); an open design is closed first (said in the question), Recent forgets it. A STEP / IGES file keeps its extension in the trash folder (before, it became "robot.step.FCStd"). Scenario `delete_designs`. |
+
+What a drag carries: the files as file URLs (so another program sees files; the drag only
+offers *copy*, so a file manager never moves a design out of the project) and SciForge's own
+`application/x-sciforge-design` paths. While a card is dragged, the panel watches the whole
+application (`data_panel_ui.DropSession`): a 3D view or the browser takes the drop, every
+other place refuses it, so FreeCAD's own handling of dropped files (which would merge the file
+into the design) never runs. The copy is made after the drag has ended, never inside it.
+
+Gaps and guesses: the card size, the badge's place and colour, the 4 s look for changes and
+the sort choices are SciForge's guesses at Fusion's look; Fusion's "People" tab, sharing and
+locking are out of scope (outline 8); a parameter set (`Parameters`) used by the copied steps
+comes along as a second parameter set in this design; joints of the copied design between its
+own components are not copied.
+
 ## Linked designs by relative path (basic)
 
 | Fusion | SciForge |
@@ -120,8 +164,9 @@ The panel hides `.git`, `<Design>.versions`, the trash and FreeCAD's `.FCBak` ba
 - Fusion's version list shows who saved and comments; SciForge shows Version, Date,
   Description, Size (who saved is kept in the index / commit author, not shown).
 - Milestone, Automatic version on close, Move / Copy in the Data Panel and the Out-of-Date
-  icon are built (polish-2). Not built: moving a whole folder, dragging a card onto a
-  folder (use Move...), Fusion's "Get Latest Version" of one reference (Get Latest takes all).
+  icon are built (polish-2); dragging a card onto a folder since 2026-10-23. Not built:
+  moving a whole folder, Fusion's "Get Latest Version" of one reference (Get Latest takes
+  all).
 - Compare is SciForge's own addition (Fusion has none).
 - An inserted design comes in as one component (exchange-2), but its own components come
   in flat (its bodies in that one component); the copies follow the other design when this

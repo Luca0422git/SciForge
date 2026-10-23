@@ -116,6 +116,33 @@ Fusion):
 | a design starts in Steel | FreeCAD starts with a weightless "Default"; such a body counts as Steel for its mass (`material.effective`) |
 | OK / Cancel, undo | same (one undo step for everything done in the dialog) |
 
+### Opacity Control (browser right-click, Luca's request 2026-10-23)
+
+Sources: **Autodesk** support "How to adjust the opacity of a body in Fusion" (right-click
+the body in the browser > Opacity Control > a percentage from the list, or Custom Opacity to
+enter one); **Autodesk** support "Changing the opacity of a body does not work in Fusion" (a
+component's opacity rules over its bodies' with Active Component Visibility on; glass-like
+appearances look see-through anyway); **Autodesk** API `BRepBody.opacity` (1.0 completely
+opaque, 0.0 completely transparent); **Forum** "Opacity control not like in video" (the old
+slider is under Custom Opacity). Search summaries only (autodesk.com is blocked here).
+
+| Fusion | SciForge |
+|---|---|
+| Right-click a body or a component > Opacity Control > a list of percentages, Custom Opacity | Bodies, mesh bodies and components: **Opacity Control** right after Show/Hide, a submenu **100% 80% 60% 40% 20%** (the current value ticked; a custom value shows ticked in its place) and **Custom Opacity...** (a slider and a value box, 0 to 100 %; the part shows each value while the slider moves; OK keeps it, Cancel puts the old look back). Several selected rows change together. |
+| A component's opacity | rules its bodies: a body shows its own opacity times its components' (a component at 40 %: its bodies 40 %; a 50 % body in it: 20 %), new bodies and new steps included. |
+| Saved with the design; undo | stored in the design (`SciForgeOpacity` on the body / component), so it is saved and reopened; each change is one undo step ("Opacity 40%"). |
+| See-through appearances | a glass look stays see-through on top of the opacity (60 % see-through glass at 50 % opacity: 80 % see-through). |
+
+How it shows: FreeCAD's Transparency on the body's view and on each step's view (FreeCAD
+shows a body through its steps), put there by `opacity.apply` after every recompute, undo and
+redo (`bodies_gui.sync`, after the appearances). Code: `opacity_core.py` (numbers, unit
+tested), `opacity.py`, `opacity_ui.py`. Scenario `browser_opacity_hover` P1-P3, P5.
+
+Guesses: the preset list (Fusion's steps were not readable in the sources; 100/80/60/40/20
+assumed); the multiplication of body and component values (Fusion is said to let the
+component win; for a body at 100 % that is the same). Not built: Fusion's Active Component
+Visibility preference (inactive components shown see-through automatically).
+
 ## Known gaps (never faked: listed here)
 
 | Fusion behaviour | Why not (yet) |

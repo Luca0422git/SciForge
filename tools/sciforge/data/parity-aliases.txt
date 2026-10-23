@@ -36,3 +36,9 @@ Two Distance Chamfer = Chamfer
 
 # Marking menus
 MARKING MENU > Overflow list > Show/Hide = Hide
+
+# SHEET METAL / PLASTIC (wave 6, parity/sheet-metal*.md, parity/plastic.md)
+# One Flange command: an open profile makes a contour flange (parity/sheet-metal.md)
+Contour Flange = Flange
+Refold Faces = Refold
+PLASTIC > MODIFY > Plastic Rules = Manage Plastic Rules

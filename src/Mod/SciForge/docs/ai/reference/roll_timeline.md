@@ -63,5 +63,5 @@ History marker moved: after Extrude 1 (Extrude1), 2 step(s) rolled back. Bodies 
 
 ## See also
 
-- Golden models built with its steps (read one with docs_read golden/<id>): `blend_insert_chamfer_before_fillet`, `comp_move_captured_roll`, `extrude_multi_cut_timeline`, `extrude_multi_move`, `tl_insert_before_fillet`, `tl_roll_back`, `tl_roll_back_and_forward`, `tl_roll_to_start`
+- Golden models built with its steps (read one with docs_read golden/<id>): `blend_insert_chamfer_before_fillet`, `comp_move_captured_roll`, `extrude_multi_cut_timeline`, `extrude_multi_move`, `plastic2_snap_rolled_back`, `tl_insert_before_fillet`, `tl_roll_back`, `tl_roll_back_and_forward`, `tl_roll_to_start`
 - [All tools](sciforge://docs/tools.md), [the handbook](sciforge://docs/handbook.md)
