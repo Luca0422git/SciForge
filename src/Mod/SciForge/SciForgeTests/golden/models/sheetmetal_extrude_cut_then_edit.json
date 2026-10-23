@@ -1,0 +1,98 @@
+{
+  "id": "sheetmetal_extrude_cut_then_edit",
+  "title": "A SOLID Extrude cut through a sheet metal plate, then the flange edited: the cut stays",
+  "tags": [
+    "sheetmetal",
+    "flange",
+    "extrude"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": -1,
+      "geometry": [
+        {
+          "circle": [
+            25,
+            15,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "cut",
+      "profile": "s2",
+      "distance": 5,
+      "operation": "cut"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1702.146018,
+        "source": "analytic",
+        "note": "the L bracket less a 10 mm hole through the 1 mm plate"
+      }
+    },
+    {
+      "op": "sf_flange_edit",
+      "target": "f2",
+      "set": {
+        "height": 20
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2002.146018,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      21
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "height 20: the wall 10 mm taller (30 x 10 x 1 more), the later hole recomputed after it"
+  }
+}

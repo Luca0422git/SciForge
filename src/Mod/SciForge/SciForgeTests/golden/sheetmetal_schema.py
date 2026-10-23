@@ -73,7 +73,7 @@ RULE_FIELDS = {
 schema.STEP_KEYS["sf_sheet_rule"] = ({"name"}, {"from", "set", "active", "comment"})
 schema.STEP_KEYS["sf_flange"] = (
     {"id", "kind"},
-    {"profile", "at", "edges", "rule", "operation", "options", "target", "comment"},
+    {"profile", "at", "edges", "rule", "operation", "options", "target", "offset_refs", "comment"},
 )
 schema.STEP_KEYS["sf_flange_edit"] = ({"target", "set"}, {"comment"})
 
@@ -118,11 +118,13 @@ def check_steps(model):
             if step.get("operation", "new_body") not in OPERATIONS:
                 schema._fail(here, "'operation' must be one of %s" % (OPERATIONS,))
             _check_options(here, step.get("options", {}))
-            target = step.get("target")
-            if target is not None and (
-                not isinstance(target, dict) or target.get("plane") not in ("XY", "XZ", "YZ")
-            ):
-                schema._fail(here, "'target' is {'plane': 'XY'|'XZ'|'YZ', 'offset': d}")
+            targets = [step["target"]] if "target" in step else []
+            refs = step.get("offset_refs", [])
+            if not isinstance(refs, list) or len(refs) not in (0, 2):
+                schema._fail(here, "'offset_refs' is two planes")
+            for target in targets + list(refs):
+                if not isinstance(target, dict) or target.get("plane") not in ("XY", "XZ", "YZ"):
+                    schema._fail(here, "a plane is {'plane': 'XY'|'XZ'|'YZ', 'offset': d}")
         if op == "sf_flange_edit":
             if seen.get(step["target"]) != "sf_flange":
                 schema._fail(here, "'target' must name an earlier sf_flange step")

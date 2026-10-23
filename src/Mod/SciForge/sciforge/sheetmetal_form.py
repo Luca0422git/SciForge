@@ -354,6 +354,76 @@ def contour_flange(
     return _clean(face.extrude(n * length))
 
 
+def contour_attachment(shape, edges, plane, thickness):
+    """Where an open sketch chain starts on a sheet edge of `shape` (design coordinates):
+    (edge name, the chain's end point on it) when one end of the chain is at an end of a
+    straight sheet edge that runs square to the sketch plane, else None. Fusion runs such a
+    contour flange along that edge and bends it out of the sheet (G)."""
+    if shape is None or shape.isNull() or not shape.Solids:
+        return None
+    try:
+        segs = chain_segments(edges, plane)
+    except FormError:
+        return None
+    ends = [plane.p(seg_start(segs[0])), plane.p(seg_end(segs[-1]))]
+    for i, edge in enumerate(shape.Edges, 1):
+        if not isinstance(edge.Curve, (Part.Line, Part.LineSegment)):
+            continue
+        a, b = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
+        direction = b - a
+        if direction.Length < TOL or abs(abs(direction.normalize().dot(plane.n)) - 1.0) > 1e-7:
+            continue
+        for end in ends:
+            if (end - a).Length < 1e-5 or (end - b).Length < 1e-5:
+                try:
+                    edge_frame(shape, "Edge%d" % i, thickness)
+                except FormError:
+                    continue
+                return "Edge%d" % i, end
+    return None
+
+
+def contour_on_edge(shape, edges, plane, thickness, radius, edge_name, start):
+    """Fusion's contour flange on a sheet edge: the sketched chain (in a plane square to the
+    edge, starting at the edge's end) carries on from the sheet, the corner between the sheet
+    and its first line bent with the rule's radius, run along the whole edge and joined. The
+    thickness side is the one that continues the sheet. Returns the new solid."""
+    frame = edge_frame(shape, edge_name, thickness)
+    segs = chain_segments(edges, plane)
+    p0 = plane.q(start)
+    if not _close(seg_start(segs[0]), p0):
+        segs = [reversed_seg(s) for s in reversed(segs)]
+    out2 = _unit(_sub(plane.q(start + frame.out), p0))
+    lead = 10.0 * thickness + radius + 10.0
+    first = line(_add(p0, out2, -lead), p0)
+    left3 = plane.n.cross(frame.out)
+    # the sheet lies on the far side of its face from frame.up: the band goes that way
+    s0, s1 = (-thickness, 0.0) if left3.dot(frame.up) > 0 else (0.0, thickness)
+    bent = bend_corners([first] + segs, s0, s1, radius)
+    lead_end = seg_end(bent[0])
+    cut_back = _len(_sub(p0, lead_end))
+    bent = bent[1:]
+    if not bent:
+        raise FormError("The contour runs back along the sheet: draw it out from the edge.")
+    face = section_face(bent, s0, s1, plane)
+    edge = shape.getElement(edge_name)
+    a, b = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
+    other = b if (a - start).Length < 1e-5 else a
+    solid = _clean(face.extrude(other - start))
+    base = shape
+    if cut_back > TOL:
+        base = shape.cut(frame.box(-cut_back, 0.0, 0.0, thickness, 0.0, frame.length))
+    if solid.common(base).Volume > 1e-3:
+        raise FormError(
+            "The contour flange would run into the part: draw it away from the sheet, or flip "
+            "the line's direction."
+        )
+    result = _clean(base.fuse(solid))
+    if len(result.Solids) != len(shape.Solids):
+        raise FormError("The contour flange does not join the sheet at its edge.")
+    return result
+
+
 # -- edge flange --------------------------------------------------------------------------------
 class EdgeFrame:
     """Where a sheet edge is: `origin` on the edge's line, on the sheet's outer face (the
@@ -449,7 +519,9 @@ def edge_frame(shape, edge_name, thickness, flip=False):
         raise FormError("%s: the side face must be square to the sheet." % edge_name)
     up = n_face * (-1.0 if flip else 1.0)
     origin = p0 - up * thickness if not flip else V(p0)
-    return EdgeFrame(origin, p1 - p0, out, up, (p1 - p0).Length, thickness, edge_name)
+    frame = EdgeFrame(origin, p1 - p0, out, up, (p1 - p0).Length, thickness, edge_name)
+    frame.edge_z = 0.0 if flip else thickness  # where the picked edge itself lies
+    return frame
 
 
 class BendWall:
@@ -543,6 +615,7 @@ def flange_options(options=None):
         "distance1": 5.0,
         "distance2": 5.0,
         "target": None,  # To Object: (point, normal) of the plane the flange runs to
+        "offset_planes": None,  # Two Offsets: two (point, normal) references across the edge
         "target_offset": 0.0,
         "bend_radius": None,  # overrides (None: the rule's)
         "relief_shape": None,
@@ -599,6 +672,16 @@ def _wall_length(frame, opts, rule, angle):
         raise FormError("Height: %s." % exc)
 
 
+def _crossing(frame, plane):
+    """Where (mm along the edge from frame.origin) a reference plane (point, normal) crosses
+    the edge's line; ValueError when it runs parallel to the edge."""
+    point, normal = V(plane[0]), V(plane[1]).normalize()
+    along = frame.axis.dot(normal)
+    if abs(along) < 1e-6:
+        raise ValueError("a reference runs along the edge and never crosses it")
+    return (point - frame.point(0.0, getattr(frame, "edge_z", 0.0))).dot(normal) / along
+
+
 def _shared_vertex(fa, fb):
     """(point, ta, tb): the end the two frames share (ta/tb: 0 or the edge length), or None."""
     for ta in (0.0, fa.length):
@@ -631,15 +714,20 @@ def edge_flange(shape, edge_names, rule, options=None):
     frames = [edge_frame(shape, name, T, bool(opts["flip"])) for name in edge_names]
     length = _wall_length(frames[0], opts, eff, angle)
     pieces, cuts, ranges = [], [], []
+    refs = opts.get("offset_planes") if opts["width_type"] == "two_offsets" else None
     for frame in frames:
         try:
-            t0, t1 = core.width_range(
-                opts["width_type"],
-                frame.length,
-                opts["width"],
-                opts["distance1"],
-                opts["distance2"],
-            )
+            if refs:
+                t_a, t_b = (_crossing(frame, plane) for plane in refs)
+                t0, t1 = core.width_between(t_a, t_b, opts["distance1"], opts["distance2"])
+            else:
+                t0, t1 = core.width_range(
+                    opts["width_type"],
+                    frame.length,
+                    opts["width"],
+                    opts["distance1"],
+                    opts["distance2"],
+                )
         except ValueError as exc:
             raise FormError("Width: %s." % exc)
         made = bend_wall(frame, t0, t1, T, eff["bend_radius"], angle, length, opts["position"])
@@ -667,9 +755,14 @@ def edge_flange(shape, edge_names, rule, options=None):
             diff = frames[j].out - frames[i].out
             if diff.Length < 1e-6 or (frames[i].up - frames[j].up).Length > 1e-6:
                 continue
-            n_m = diff.normalize()
-            solids[i] = _clean(solids[i].cut(_half_space(point - n_m * (gap / 2.0), n_m, size)))
-            solids[j] = _clean(solids[j].cut(_half_space(point + n_m * (gap / 2.0), -n_m, size)))
+            # m: across the corner's bisector plane, towards edge i's side (an outside corner
+            # and an inside one of an L-shaped plate put it on opposite sides)
+            m = diff.normalize()
+            mid_i = frames[i].point(0.0, 0.0, frames[i].length / 2.0)
+            if (mid_i - point).dot(m) < 0:
+                m = m * -1.0
+            solids[i] = _clean(solids[i].cut(_half_space(point + m * (gap / 2.0), m * -1.0, size)))
+            solids[j] = _clean(solids[j].cut(_half_space(point - m * (gap / 2.0), m, size)))
     base = shape
     if cuts:
         base = shape.cut(cuts)
@@ -690,6 +783,49 @@ def edge_flange(shape, edge_names, rule, options=None):
     if len(result.Solids) != len(shape.Solids):
         raise FormError("The flange does not join the part (it would make a separate piece).")
     return result
+
+
+def mitred_corners(shape, edge_names, rule, options=None):
+    """The corners an edge flange mitres (for the flat pattern, which cuts the 2-bend corner
+    relief there: SciForge leaves the folded corner open, see parity/sheet-metal.md): one
+    dict per pair of picked edges that meet, with
+
+      point        the corner of the two bends' start (tangent) lines on the sheet's outer
+                   face, design coordinates (square corners; an approximation at others)
+      out_a, out_b the two flanges' outward directions in the sheet's plane
+      up           the side the flanges turn to
+      edges        (edge name a, edge name b)
+
+    Raises FormError like edge_flange for picks it would refuse."""
+    opts = flange_options(options)
+    eff = effective_rule(rule, opts)
+    T = rule["thickness"]
+    angle = float(opts["angle"])
+    frames = [edge_frame(shape, name, T, bool(opts["flip"])) for name in edge_names]
+    try:
+        xc = core.bend_start_x(opts["position"], angle, eff["bend_radius"], T)
+    except ValueError as exc:
+        raise FormError("Bend Position: %s." % exc)
+    found = []
+    for i in range(len(frames)):
+        for j in range(i + 1, len(frames)):
+            shared = _shared_vertex(frames[i], frames[j])
+            if shared is None:
+                continue
+            point = shared[0]
+            if (frames[j].out - frames[i].out).Length < 1e-6:
+                continue
+            corner = point + frames[i].out * xc + frames[j].out * xc
+            found.append(
+                {
+                    "point": corner,
+                    "out_a": V(frames[i].out),
+                    "out_b": V(frames[j].out),
+                    "up": V(frames[i].up),
+                    "edges": (frames[i].name, frames[j].name),
+                }
+            )
+    return found
 
 
 def _clean(shape):

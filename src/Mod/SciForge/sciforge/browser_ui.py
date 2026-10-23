@@ -225,6 +225,8 @@ def _objects(doc):
                 row["surface"] = True  # the surface icon (surface.py)
             if obj.TypeId in core.BODY_TYPES and getattr(obj, "SciForgeSheetMetalRule", ""):
                 row["sheet_metal"] = obj.SciForgeSheetMetalRule  # bent-sheet icon (sheetmetal.py)
+            if getattr(obj, "SciForgeComponentKind", "") == "SheetMetal":
+                row["sheet_metal_component"] = True  # Type Sheet Metal (sheetmetal_component)
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
                 if ops.is_suppressed(obj):
                     row["suppressed"] = True  # off, not broken: greyed, like Fusion

@@ -187,6 +187,8 @@ class FlangeFeature:
         add("App::PropertyLinkSubListGlobal", "Profiles", "Flange", "Sketch profiles or curves")
         add("App::PropertyLinkSubList", "Edges", "Flange", "Edges of the sheet metal body")
         add("App::PropertyLinkSubGlobal", "Target", "Flange", "To Object: face or plane")
+        add("App::PropertyLinkSubGlobal", "OffsetRef1", "Flange", "Two Offsets: first reference")
+        add("App::PropertyLinkSubGlobal", "OffsetRef2", "Flange", "Two Offsets: second reference")
         if add("App::PropertyLinkGlobal", "SciForgeRules", "Base", "The design's rules"):
             obj.setEditorMode("SciForgeRules", 2)
         for key, (prop, group) in ENUMS.items():
@@ -371,7 +373,11 @@ def _links(value):
 
 def _target_plane(obj):
     """(point, normal) in design coordinates of the To Object pick, or None."""
-    target = obj.Target
+    return _plane_of(obj.Target)
+
+
+def _plane_of(target):
+    """(point, normal) in design coordinates of a face / plane link value, or None."""
     if not target:
         return None
     linked, subs = target[0], list(target[1]) if len(target) > 1 else []
@@ -381,7 +387,7 @@ def _target_plane(obj):
         face = curves.to_global(face, linked)
         face = bodies.baked(face)
         if face.ShapeType != "Face":
-            raise FormError("To Object: pick a flat face or a plane.")
+            raise FormError("Pick a flat face or a plane.")
         u0, u1, v0, v1 = face.ParameterRange
         u, v = (u0 + u1) / 2.0, (v0 + v1) / 2.0
         return face.valueAt(u, v), face.normalAt(u, v)
@@ -408,6 +414,12 @@ def compute(obj):
         opts = form_options(options)
         if options["extent"] == "to_object":
             opts["target"] = _target_plane(obj)
+        if options["width_type"] == "two_offsets":
+            planes = [_plane_of(obj.OffsetRef1), _plane_of(obj.OffsetRef2)]
+            if any(planes) and not all(planes):
+                raise FormError("Two Offsets: pick the second face or plane.")
+            if all(planes):
+                opts["offset_planes"] = planes
         result = form.edge_flange(base, names, rule, opts)
     else:
         refs = _links(obj.Profiles)
@@ -422,6 +434,18 @@ def compute(obj):
             radius = rule["bend_radius"]
             if options["override_bend_radius"]:
                 radius = options["bend_radius"]
+            attached = (
+                form.contour_attachment(base, edges, plane, rule["thickness"])
+                if base is not None
+                else None
+            )
+            if attached is not None:
+                # drawn from the end of a sheet edge: it runs along that edge, bent out of
+                # the sheet, and joins it (the Distance options do not apply)
+                result = form.contour_on_edge(
+                    base, edges, plane, rule["thickness"], radius, attached[0], attached[1]
+                )
+                return bodies.to_local(result, body)
             result = form.contour_flange(
                 edges,
                 plane,
@@ -434,8 +458,30 @@ def compute(obj):
                 options["flip"],
             )
         if base is not None:
-            result = base.fuse(result)
-            result = form._clean(result)
+            # Join: the new sheet goes beside the body's sheet, never on top of it (a doubled
+            # thickness is no sheet metal), and it must touch it
+            stacked = base.common(result).Volume > 1e-3
+            if kind == "base" and not stacked:
+                # lying on the sheet's top or bottom face: half a thickness up or down it
+                # would sink into the sheet (beside it, it slides along the sheet's edge)
+                for sign in (1.0, -1.0):
+                    moved = result.copy()
+                    moved.translate(normal * (sign * rule["thickness"] / 2.0))
+                    if base.common(moved).Volume > 1e-3:
+                        stacked = True
+                        break
+            if stacked:
+                raise FormError(
+                    "The new sheet lies on the body's sheet (that would double its thickness): "
+                    "draw the profile beside it, against one of its edges."
+                )
+            joined = form._clean(base.fuse(result))
+            if len(joined.Solids) > len(base.Solids):
+                raise FormError(
+                    "The new sheet does not touch the sheet metal body: draw it against an "
+                    "edge of the body, or make it a New Body."
+                )
+            result = joined
     if result.isNull() or not result.Solids:
         raise FormError("The flange made no solid.")
     return bodies.to_local(result, body)
@@ -506,6 +552,28 @@ def _set_refs(step, kind, refs, target=None):
         step.Target = None
 
 
+def _link(pick):
+    return (pick[0], [pick[1]] if pick[1] else []) if pick else None
+
+
+def set_offset_refs(step, refs):
+    """The two Two Offsets references [(object, sub) or None, (object, sub) or None]."""
+    refs = list(refs or []) + [None, None]
+    step.OffsetRef1 = _link(refs[0])
+    step.OffsetRef2 = _link(refs[1])
+
+
+def offset_refs_of(step):
+    out = []
+    for value in (step.OffsetRef1, step.OffsetRef2):
+        if value:
+            subs = list(value[1]) if len(value) > 1 else []
+            out.append((value[0], subs[0] if subs else ""))
+        else:
+            out.append(None)
+    return out
+
+
 def make(
     doc,
     kind,
@@ -516,6 +584,8 @@ def make(
     body=None,
     name=None,
     target=None,
+    hide=True,
+    offset_refs=None,
 ):
     """Make a flange step. kind: base / contour / edge. refs: [(sketch, "InternalFaceN")]
     (base), [(sketch, "EdgeN")] (contour) or [(feature, "EdgeN")] (edge, the body's last
@@ -562,6 +632,8 @@ def make(
     bodies.save_meta(step, META, {"body": made})
     try:
         _set_refs(step, kind, refs, target)
+        if offset_refs:
+            set_offset_refs(step, offset_refs)
         apply_options(step, opts)
         preview.recompute(doc)
         problem = problem_of(step)
@@ -572,7 +644,8 @@ def make(
         if marked is not None:
             setattr(marked, sheetmetal.RULE_PROP, "")
         raise
-    hide_sketches(refs if kind != "edge" else [])
+    if hide:
+        hide_sketches(refs if kind != "edge" else [])
     log("flange (%s) %s made in %s" % (kind, step.Name, body.Label))
     return step
 
@@ -590,6 +663,12 @@ def discard(step):
     bodies.remove_step(step)
     if made == "marked" and body is not None:
         setattr(body, sheetmetal.RULE_PROP, "")
+
+
+def made_body(step):
+    """True when the step made its body a sheet metal body (a base or contour flange made
+    as New Body / New Component)."""
+    return bodies.load_meta(step, META).get("body") in ("new", "marked")
 
 
 def _empty(body):
@@ -630,8 +709,10 @@ def problem_of(step):
     return ""
 
 
-def update(step, refs=None, options=None, target=None):
+def update(step, refs=None, options=None, target=None, offset_refs=None):
     """Change a flange's picks and/or options (the caller recomputes)."""
+    if offset_refs is not None:
+        set_offset_refs(step, offset_refs)
     opts = options_of(step)
     opts.update(options or {})
     kind = opts["kind"]
@@ -658,6 +739,57 @@ def picks_of(step):
     if options_of(step)["kind"] == "edge":
         return _links(step.Edges)
     return _links(step.Profiles)
+
+
+def corner_reliefs(step):
+    """The 2-bend corner reliefs an edge flange asks for, for the flat pattern to cut
+    (sheetmetal_form.mitred_corners plus the relief: the rule's, or the flange's override):
+    each dict also has shape, placement, size (mm; Round: the diameter), bend_radius,
+    thickness, k_factor and angle. [] for other flanges."""
+    options = options_of(step)
+    if options["kind"] != "edge" or step.BaseFeature is None:
+        return []
+    body = owner_body(step)
+    rule = sheetmetal.rule_for_body(body)
+    base = bodies.baked(curves.to_global(step.BaseFeature.Shape, step.BaseFeature))
+    names = [sub for _o, sub in _links(step.Edges)]
+    opts = form_options(options)
+    corners = form.mitred_corners(base, names, rule, opts)
+    eff = form.effective_rule(rule, opts)
+    override = options["override_corner_relief"]
+    for corner in corners:
+        corner.update(
+            shape=options["corner_shape"] if override else rule["corner_relief_2bend_shape"],
+            placement=(
+                options["corner_placement"] if override else rule["corner_relief_2bend_placement"]
+            ),
+            size=options["corner_size"] if override else rule["corner_relief_2bend_size"],
+            bend_radius=eff["bend_radius"],
+            thickness=rule["thickness"],
+            k_factor=rule["k_factor"],
+            angle=options["angle"],
+        )
+    return corners
+
+
+def attachment(refs, body, base_obj=None):
+    """(edge name, point) when the contour chain `refs` starts at the end of a sheet edge of
+    `body` (a sheet metal body: `base_obj`, else its last solid step), else None: the dialog
+    then joins the flange to that edge (sheetmetal_form.contour_attachment)."""
+    if body is None or not sheetmetal.is_sheet_metal_body(body) or not refs:
+        return None
+    tip = base_obj if base_obj is not None else body.Tip
+    if tip is None or tip.Shape.isNull() or not tip.Shape.Solids:
+        return None
+    try:
+        shape = bodies.baked(curves.to_global(tip.Shape, tip))
+        edges = curves.refs_edges(refs)
+        plane = _sketch_plane(refs[0][0])
+        return form.contour_attachment(
+            shape, edges, plane, sheetmetal.rule_for_body(body)["thickness"]
+        )
+    except Exception:
+        return None
 
 
 def thickness_of(body):

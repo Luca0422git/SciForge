@@ -13,8 +13,9 @@ format is checked by SciForgeTests/golden/sheetmetal_schema.py.
     {"op": "sf_flange", "id": "f2", "kind": "contour", "profile": "s2", "options": {...}}
         contour: every curve of the sketch (or the ones through the "at" points)
     {"op": "sf_flange", "id": "f3", "kind": "edge", "edges": [[50, 15, 1]], "options": {...},
-     "target": {"plane": "XY", "offset": 20}}
-        edge: straight edges of the current body through the given points
+     "target": {"plane": "XY", "offset": 20}, "offset_refs": [{"plane": "XZ", "offset": 5}, ...]}
+        edge: straight edges of the current body through the given points; "target" is the
+        To Object plane, "offset_refs" the two Two Offsets references (planes made for them)
     {"op": "sf_flange_edit", "target": "f3", "set": {"height": 20}}
 """
 
@@ -163,6 +164,7 @@ def op_sf_flange(self, step):
             body=body,
             name=step["id"],
             target=_target(self, step.get("target"), where),
+            offset_refs=[_target(self, spec, where) for spec in step.get("offset_refs") or []],
         )
     except flange.FormError as exc:
         raise BuildError("%s: %s" % (where, exc))

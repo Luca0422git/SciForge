@@ -160,6 +160,42 @@ def drag_arrow(key, to_distance):
     return drag
 
 
+def drag_angle(key, end, step=5.0):
+    """Drag the dialog's angle handle `key` round its arc to `end` degrees, the way a hand
+    follows it (as scenarios/bodies_move.py does)."""
+    from PySide import QtGui
+
+    p = panel()
+    handle = p.arrows.get(key) if p is not None else None
+    if handle is None:
+        h.check("angle handle %s shown" % key, False, list(p.arrows) if p else None)
+        return False
+    widget = h.gl_widget()
+    start = handle.angle()
+    count = max(1, int(abs(end - start) / step))
+    pixels = [
+        h.screen_point(handle.point_at(start + (end - start) * i / count)) for i in range(count + 1)
+    ]
+    h.move(pixels[0])
+    QtTest.QTest.mousePress(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pixels[0])
+    for pixel in pixels[1:]:
+        pos = QtCore.QPointF(pixel)
+        event = QtGui.QMouseEvent(
+            QtCore.QEvent.MouseMove,
+            pos,
+            QtCore.QPointF(widget.mapToGlobal(pixel)),
+            QtCore.Qt.NoButton,
+            QtCore.Qt.LeftButton,
+            QtCore.Qt.NoModifier,
+        )
+        QtWidgets.QApplication.sendEvent(widget, event)
+        QtWidgets.QApplication.processEvents()
+        QtTest.QTest.qWait(30)
+    QtTest.QTest.mouseRelease(widget, QtCore.Qt.LeftButton, QtCore.Qt.NoModifier, pixels[-1])
+    QtWidgets.QApplication.processEvents()
+    return True
+
+
 def rect_sketch(x0, y0, x1, y1):
     """Lines of a rectangle in the open sketch (the sketch was opened with clicks)."""
     sk = h.in_sketch()

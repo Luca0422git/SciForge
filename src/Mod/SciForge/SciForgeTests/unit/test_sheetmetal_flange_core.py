@@ -70,6 +70,12 @@ class FlangeMathsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             core.width_range("two_offsets", 30, distance1=20, distance2=20)
 
+    def test_two_offsets_between_references(self):
+        self.assertEqual(core.width_between(5, 25, 2, 3), (7.0, 22.0))
+        self.assertEqual(core.width_between(25, 5, 2, 3), (8.0, 23.0))  # each offset its own
+        with self.assertRaises(ValueError):
+            core.width_between(5, 10, 3, 3)
+
     def test_contour_corner_radius_keeps_the_inside_radius(self):
         s0, s1 = core.thickness_offsets("side1", T)
         self.assertEqual(core.path_radius(True, s0, s1, R), 2.0)  # line on the outside

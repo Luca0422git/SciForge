@@ -1,0 +1,75 @@
+{
+  "id": "sheetmetal_contour_flange_on_edge",
+  "title": "Contour flange drawn from the end of a sheet edge: it runs along the edge, bent out of the sheet",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_curves",
+      "id": "s2",
+      "plane": "XZ",
+      "curves": [
+        {
+          "polyline": [
+            [
+              50,
+              1
+            ],
+            [
+              50,
+              11
+            ],
+            [
+              60,
+              11
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "contour",
+      "profile": "s2",
+      "operation": "join"
+    }
+  ],
+  "expect": {
+    "volume": 2061.371669,
+    "bbox": [
+      0,
+      0,
+      0,
+      60,
+      30,
+      11
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "the sketch line continues the plate's top face (the sheet below it): the corner at the edge is bent with the line on the bend's inside (radius 1), so the plate is cut back 1 (30); the second corner turns the other way (line outside, radius 2). Mid layer: two quarter arcs of radius 1.5 + 7 up + 8 out, x 1 x the 30 mm edge"
+  }
+}

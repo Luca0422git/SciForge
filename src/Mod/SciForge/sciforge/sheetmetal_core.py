@@ -366,6 +366,19 @@ def width_range(width_type, edge_length, width=0.0, distance1=0.0, distance2=0.0
     return t0, t1
 
 
+def width_between(t_a, t_b, offset_a=0.0, offset_b=0.0):
+    """(t0, t1): Fusion's Two Offsets width between two references that cross the edge at
+    t_a and t_b (mm along it), each offset inwards by its own distance. Raises ValueError for
+    an empty range."""
+    if t_a <= t_b:
+        t0, t1 = t_a + offset_a, t_b - offset_b
+    else:
+        t0, t1 = t_b + offset_b, t_a - offset_a
+    if t1 - t0 <= 1e-6:
+        raise ValueError("the offsets leave no width between the two references")
+    return t0, t1
+
+
 def path_radius(turns_left, s0, s1, inner_radius):
     """Radius a contour flange's sketched line gets at a sharp corner so that the bend's
     inside radius is the rule's: the sheet lies between left offsets s0..s1 of the line; at
