@@ -1,0 +1,198 @@
+{
+  "id": "sm_flat_moved_body",
+  "title": "Flat pattern follows its body turned by a Move step (90 degrees about X, then shifted)",
+  "tags": [
+    "flat-pattern",
+    "move",
+    "sheetmetal"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XZ",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              30
+            ],
+            [
+              0,
+              0
+            ],
+            [
+              60,
+              0
+            ],
+            [
+              60,
+              30
+            ],
+            [
+              59,
+              30
+            ],
+            [
+              59,
+              1
+            ],
+            [
+              1,
+              1
+            ],
+            [
+              1,
+              30
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "fillet",
+      "id": "f1",
+      "radius": 2,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": {
+          "axis": "z",
+          "value": 0
+        },
+        "count": 2
+      }
+    },
+    {
+      "op": "fillet",
+      "id": "f2",
+      "radius": 1,
+      "edges": {
+        "type": "line",
+        "parallel": [
+          0,
+          1,
+          0
+        ],
+        "at": {
+          "axis": "z",
+          "value": 1
+        },
+        "count": 2
+      }
+    },
+    {
+      "op": "hole_at",
+      "id": "h1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          1,
+          0,
+          0
+        ],
+        "at": {
+          "axis": "x",
+          "value": "max"
+        },
+        "count": 1
+      },
+      "at": [
+        60,
+        -10,
+        15
+      ],
+      "diameter": 6,
+      "depth": 3
+    },
+    {
+      "op": "sf_sm_convert",
+      "id": "c1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "rule": "template"
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    },
+    {
+      "op": "move_bodies",
+      "id": "m1",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "rotate",
+      "axis": "X",
+      "angle": 90
+    },
+    {
+      "op": "move_bodies",
+      "id": "m2",
+      "bodies": [
+        "e1"
+      ],
+      "move_type": "translate",
+      "dx": 40,
+      "dy": -25,
+      "dz": 12
+    },
+    {
+      "op": "sf_sheet_rule",
+      "name": "Converted 1 mm",
+      "set": {
+        "k_factor": "0.33"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2295.2921,
+    "bbox": [
+      0,
+      0,
+      -1,
+      116.17832,
+      20,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "sm_flat_u_channel_hole, then the body turned 90 degrees about X and moved by Move steps: the same flat; then its rule's K-factor made 0.33 (the flat must recompute): 56 + 28 + 28 + 2 BA (BA = pi/2 (1 + 0.33) = 2.08916) = 116.17832 long, 20 wide, T 1, minus the hole pi 3^2. QA: a stationary face that moved other than along its normal turned the flat pattern Invalid"
+  }
+}

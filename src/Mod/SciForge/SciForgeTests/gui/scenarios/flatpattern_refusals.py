@@ -2,7 +2,7 @@
 """What the SHEET METAL flat tools refuse, and why, real input only. An empty design: Create
 Flat Pattern, Unfold, Refold and Rip say why next to the mouse and open nothing; Convert to
 Sheet Metal says there is no solid. A shelled box with sharp corners: Convert names the sharp
-edge and says to fillet it or rip it; OK waits; Esc closes, nothing changed. A stepped block
+edge and says to fillet it, then convert; OK waits; Esc closes, nothing changed. A stepped block
 (two thicknesses): "not one sheet of even thickness"; Cancel. Never a pop-up or a Report
 error."""
 
@@ -117,7 +117,12 @@ def sharp_refused():
     fs.settle()
     text = fs.message()
     h.check("sharp corner named", "sharp corner" in text and "Edge" in text, text)
-    h.check("says fillet or Rip", "fillet" in text and "Rip" in text, text)
+    # Rip works on sheet metal only: the advice is to fillet the corner, then convert (QA)
+    h.check(
+        "says fillet it, then convert (not Rip)",
+        "fillet" in text and "then convert" in text and "Rip" not in text,
+        text,
+    )
     p = fs.sheet_panel()
     h.check("no thickness shown", p is not None and p.thickness.text() == "-")
 

@@ -50,10 +50,10 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | Pick a stationary face on the top or bottom of the part (not an edge face) | Same; an edge face is refused ("pick a wide top or bottom face"); the dialog says the flat size ("Flat: 98.26 x 20.00 mm, 1 bend(s), thickness 1.00 mm") before OK | A[R35], A[R49] |
 | One flat pattern per component; a second fails | Refused in the dialog ("this component already has a flat pattern ... delete it first"), OK waits | A[R35] |
 | A Flat Pattern node under the component; double-click / Activate opens it | A "Flat Pattern" row under its component (or the design); double-click or right-click > Edit Flat Pattern opens it | G, A[R48] |
-| The flat pattern is modal; the FLAT PATTERN contextual tab; Finish Flat Pattern (green check, Export DXF left of it) | The design's tabs hide, FLAT PATTERN (INSPECT, SELECT, EXPORT > Export DXF, FINISH FLAT PATTERN) is the only tab; the folded part is hidden and the flat shown from the top; Finish goes back to the tab and the camera you had | A[R48], F[F13], F[F14] |
+| The flat pattern is modal; the FLAT PATTERN contextual tab; Finish Flat Pattern (green check, Export DXF left of it) | The design's tabs hide, FLAT PATTERN (INSPECT, SELECT, EXPORT > Export DXF, FINISH FLAT PATTERN) is the only tab; the folded part is hidden and the flat shown from the top (its component too while it is open, when the user had hidden it: QA); Finish goes back to the tab and the camera you had | A[R48], F[F13], F[F14] |
 | 2-bend corner relief on the flat (Round / Square) where two bends meet, at the Relief Placement; the flange's own Corner Relief override wins over the rule; a Corner Closure decides its own corner | Same on the flat pattern (and so in the DXF): Round = a hole of the Size's diameter (sm-forming's reading of Size), Square = a square of that side along the first bend; Intersection = centred where the two bend centre lines cross, Tangent = moved so the relief reaches the far side of both bend zones (sm-more's Corner Closure reading); a relief goes at the corners an edge Flange mitres (sm-forming's `corner_reliefs(step)`), the Flange's own (Override Corner Relief: shape, size, placement) else the rule's; a corner a Corner Closure step closed gets none (its Tear / Trim To Bend / Round / Square is already in the folded part), nor do corners made by sm-more's Bend lines or Hems or by Convert (the flat keeps what the folded part has); "Corner Reliefs" property to switch it off; Tear / Trim To Bend / weld shapes add nothing. The folded part keeps its corner as the Flange made it | A[R1], A[R24], research 4.6, G |
 | Bend lines (centre) and bend extents (tangent lines); up / down; up bends red in drawings | Shown on the flat: centre lines red (up) / blue (down), extent lines grey; right-click > Show/Hide Bend Lines / Bend Extents | A[R36], A[R37], F[F9] |
-| The flat pattern follows edits of the folded model | Same: it recomputes when the body changes; the stationary face is found again by where it was when face names change | G |
+| The flat pattern follows edits of the folded model | Same: it recomputes when the body changes; the stationary face is found again by where it was when face names change, and when it only moved along its normal (a new rule thickness moves the plate's top face: QA), else by its name while it is still flat (a Move step that turns the part: QA); the flat is laid out from the body's own frame, so a moved body keeps it; while an Unfold has no Refold yet the flat pattern shows the body as it was before that Unfold (all its bend lines; cuts made while unfolded come with the Refold) and Create Flat Pattern says to Refold first (QA) | G |
 | Timeline "FlatPattern1" | Not a timeline step (the browser row only) | F[F10], G |
 | Flat placed on XY | The stationary face at z = 0 facing +Z, the sheet below, its longest straight edge along +X, the outline's corner at the origin | G |
 
@@ -70,15 +70,15 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 
 | Fusion | SciForge | Src |
 |---|---|---|
-| Export bend center lines (on), Export bend extent lines (on), Convert Splines to Polylines (off), Tolerance 0.01 cm | Same options and defaults, in the dialog with the file name | A[R36], F[F4] |
+| Export bend center lines (on), Export bend extent lines (on), Convert Splines to Polylines (off), Tolerance 0.01 cm | Same options and defaults, in the dialog with the file name; a name typed for a file that exists asks first ("exists: OK again replaces it", QA) | A[R36], F[F4] |
 | Outer profiles, interior profiles, bend centre lines, bend extent lines, text on their own layers; bend lines in another line type | Layers OUTER_PROFILES, INTERIOR_PROFILES, BEND_CENTER_LINES_UP (red, CENTER), BEND_CENTER_LINES_DOWN (blue, CENTER), BEND_EXTENT_LINES (HIDDEN), TEXT (a note per bend: "UP 90.0%%d R1", which CAD shows as UP 90.0° R1) | F[F4], F[F9], G (names, notes) |
-| 1:1 in document units | AutoCAD R12 in mm: LINE, CIRCLE, ARC; a spline as SPLINE (POLYLINE when converting) | G |
+| 1:1 in document units | AutoCAD R12 in mm: LINE, CIRCLE, ARC; a spline as SPLINE (POLYLINE when converting); an ellipse (a slanted hole meeting a wall) as a SPLINE within 0.001 mm (QA: it became a polyline at the greyed-out 0.1 mm Tolerance) | G |
 
 ## Unfold / Refold (SHEET METAL > MODIFY)
 
 | Fusion | SciForge | Src |
 |---|---|---|
-| Stationary Entity, Bends (inner or outer faces), Unfold All Bends (off) | Same, with the preview being the step itself; a cylinder face picked is a bend, a flat face the stationary entity | A[R32], A[R48] |
+| Stationary Entity, Bends (inner or outer faces), Unfold All Bends (off) | Same, with the preview being the step itself; a cylinder face picked is a bend, a flat face the stationary entity; OK keeps what the dialog shows (a bend cleared or Unfold All Bends unticked after the preview is refused, QA); a body with no bend is refused ("There is no bend to unfold"); a click on another sheet metal body moves the dialog there and drops the preview from the first | A[R32], A[R48] |
 | Features after it act on the flat body until a Refold | Same: sketch on XY, Extrude cut through the flat sheet across a bend | A[R12] |
 | Refold bends the part back; features between act on the folded walls | Refold folds every bend its Unfold laid flat; material cut away in the flat state is cut from the folded part (walls rigidly, bends through the development: the cut's outline folded onto the bend, straight through the sheet); material added on a wall is added back | A[R12], A[R46] |
 | Unfold and Refold a pair; everything between grouped in the timeline | Same: one timeline folder named after the Unfold | A[R46] |
@@ -95,6 +95,7 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | Between Points with a gap and offsets; point 2 on point 1's face | A vertex, or an edge with an offset from its start; a slot of the gap's width through the sheet; point 2 off point 1's face is refused | A[R33] |
 | Gap defaults to the rule's Miter/Rip/Seam Gap | Same | A[R6], G |
 | (a rip that cuts the part in two) | Refused: "the rip would cut the body in 2 pieces: a rip only opens a closed shape" | G |
+| (a pick or value refused after a good preview) | OK is refused with the reason (QA: it used to keep the last good rip) | G |
 | Timeline Rip<n> | "Rip 1"; double-click edits; Gap in Change Parameters | G |
 
 ## Convert to Sheet Metal (SHEET METAL > MODIFY)
@@ -106,7 +107,7 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | Show rules with matching thickness only | Same (on by default, G) | A[R8] |
 | The Standard parent component becomes Sheet Metal (one way); in a Sheet Metal component its active rule is used | Same (sm-forming's `sheetmetal_component`); a component rule of another thickness is refused | A[R34], A[R9] |
 | Cylindrical faces of constant thickness become bends, planar pairs flanges | Same (the unfolder's walk) | G |
-| Sharp corners cannot be converted; add fillets | Refused naming the edge: "edge EdgeN is a sharp corner between two walls, not a bend: fillet it (inside with the bend radius, outside with radius + thickness) or Rip it"; nothing is inserted silently (CP2 item 6) | F (forum 12566467), CP2 item 6 |
+| Sharp corners cannot be converted; add fillets | Refused naming the edge: "edge EdgeN is a sharp corner between two walls, not a bend: fillet it (inside with the bend radius, outside with radius + thickness), then convert it" (QA: it said "or Rip it", but Rip needs a sheet metal body); nothing is inserted silently (CP2 item 6) | F (forum 12566467), CP2 item 6 |
 | Non-uniform thickness refused | Refused with the reason | F[F5] |
 | A timeline step | "Convert to Sheet Metal 1" (the shape passes through; red if the body later stops being one even sheet); a double-click says the conversion is one way | G |
 
@@ -140,6 +141,26 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 - Unit tests: `SciForgeTests/unit/test_flatpattern_core.py` (DXF writer and read-back, the
   bend maths of the flat sizes, corner crossings and relief placements, the FLAT PATTERN
   tab, the browser node, the golden format).
+- QA pass (branch `sf/sm-flat-qa`): golden `sm_flat_thickness_change` (the edge flange's
+  rule made 2 mm thick after its flat pattern exists: 58.52389 x 30 x 2) and
+  `sm_flat_moved_body` (the U channel turned 90 degrees about X and shifted by Move steps,
+  then K 0.33: the flat follows, 116.17832 long); scenarios
+  `flatpattern_qa_paths` (Convert undo / redo; a Rip pick refused after a good preview, OK
+  refused, Esc; Unfold All Bends unticked after the preview, OK refused; Convert, Rip,
+  Unfold and Refold saved and reopened, their classes and view providers back, a forced
+  recompute changing nothing, the Unfold ... Refold folder kept, the Rip edited from the
+  timeline and cancelled; Export DXF cancelled writes nothing; an existing file asked about
+  before it is replaced), `flatpattern_qa_partial`
+  (one bend of a U unfolded; Create Flat Pattern before the Refold refused; the Unfold edited
+  from the timeline to all bends with its Refold after it, undone; the Flat Pattern deleted from the browser, undo / redo),
+  `flatpattern_qa_two_bodies` (Unfold moved from one sheet metal body to another; a flat
+  plate has no bend to unfold), `flatpattern_qa_hidden_component` (a flat pattern opened
+  from a hidden component).
+- Checked by hand in real FreeCAD (QA probes): flat lengths and up / down of single bends
+  of 30, 45, 90 and 135 degrees with T 1 to 2, R 0.5 to 2, K 0.3 to 0.5 (L1 + angle (R +
+  K T) + L2, both sides as the stationary face); a hole on the far wall refolds to the
+  same place; holes and a window across a bend's tangent lines refold with the bend's
+  share grown by (R + T/2) / (R + K T) (the sheet's middle is longer than its neutral line).
 
 ## Known gaps
 
@@ -181,7 +202,14 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   CAM tools but not by strict R12 readers; tick Convert Splines to Polylines for those
   (Fusion recommends it for laser shops too, F[F4]).
 - **Up / down**: a bend is "up" when it folds toward the stationary face's side (Fusion's
-  isBendUp, A[R35]); the DXF and the canvas colour them, drawings do not exist yet.
-- The ribbon sweep (`SWEEP_TABS=sheet_metal,flat_pattern`) flags sm-forming's Sheet Metal
-  Rules window as a pop-up; that window is the command (it needs an INTENDED entry in
-  `ribbon_sweep.py`, sm-forming's to add).
+  isBendUp, A[R35]); the DXF and the canvas colour them; drawings draw both alike.
+- The ribbon sweep (`SWEEP_TABS=sheet_metal,flat_pattern`) passes (sm-forming added the
+  INTENDED entry for its Sheet Metal Rules window).
+- **Left open by the QA pass** (G, not fixed): the Unfold step keeps its stationary face and
+  bends by face name only (the Flat Pattern also remembers where its face is), so an edit
+  before it that renumbers faces can make it take another face; Tangent placement is
+  also applied to Square corner reliefs (the research has it for Round only); a second
+  converted body with the same thickness but another bend radius replaces the first one's
+  "Converted <T> mm" template rule; a bend added to the part after its Bend Table was made
+  gets a table row but no identifier balloon, and a bend removed keeps its old balloon (the
+  refresh runs from a timer outside an undo step, so it only moves what exists).

@@ -12,7 +12,7 @@ the body's history: its shape is the flat solid plus the bend lines (centre and 
 lines). BendsJson keeps every bend (up/down, angle, inner radius, allowance, lines in the
 flat's XY coordinates) for the DXF and the browser.
 
-    create(body, face)           -> the flat pattern (face: 'FaceN' of body.Shape)
+    create(body, face)           -> the flat pattern (face: 'FaceN' of the body's Tip)
     of_body(body), of_component(doc, component), all_of(doc)
     bends(fp)                    the bend dicts
     dxf_entities(fp, options)    (outer, interior, bends) for flatpattern_dxf.write
@@ -31,6 +31,7 @@ from . import sheetmetal, sheetmetal_flat
 from . import sheetmetal_unfold as unfolder
 
 FP_KIND = "FlatPattern"
+FINE = 1e-3  # mm: how close a DXF curve stays when no conversion to polylines is asked for
 
 
 class FlatPatternError(ValueError):
@@ -80,10 +81,46 @@ def refind(shape, name, memo):
         if d is not None and (best is None or d < best[0]):
             best = (d, "Face%d" % (i + 1))
     if best is None:
+        best = _moved(shape, p, n)
+    if best is None:
+        # moved some other way (a Move step that turned the part): the face of that name
+        # while it is still a flat face (the unfolder refuses it if it became an edge face)
+        try:
+            if unfolder.is_planar(shape.getElement(name)):
+                return name
+        except Exception:
+            pass
+    if best is None:
+        # (Edit Flat Pattern only opens the flat pattern: it cannot pick another face)
         raise FlatPatternError(
-            "the stationary face is gone after an edit: pick it again (Edit Flat Pattern)"
+            "the stationary face is gone after an edit: delete the Flat Pattern and create it "
+            "again from another top or bottom face"
         )
     return best[1]
+
+
+def _moved(shape, p, n):
+    """(offset, 'FaceN') of the face that is the remembered stationary face moved along its
+    normal (QA: a new rule thickness moved the plate's top face up and the flat pattern said
+    the face was gone; Fusion's follows): a flat face facing the same way that holds the
+    remembered point seen along the normal, the nearest one first. None when there is none."""
+    moved = None
+    for i, face in enumerate(shape.Faces):
+        try:
+            if not unfolder.is_planar(face):
+                continue
+            if unfolder.normal_at(face, unfolder.inner_point(face)).dot(n) < 1 - 1e-6:
+                continue
+            axis = App.Vector(face.Surface.Axis).normalize()
+            off = (p - face.Surface.Position).dot(axis)
+            seen = p - axis * off  # the remembered point moved onto this face's plane
+            if face.distToShape(Part.Vertex(seen))[0] > 1e-3:
+                continue
+        except Exception:
+            continue
+        if moved is None or abs(off) < moved[0]:
+            moved = (abs(off), "Face%d" % (i + 1))
+    return moved
 
 
 def _xy(v):
@@ -136,7 +173,7 @@ class FlatPatternFeature:
         body = obj.Body
         if body is None or not bodies.alive(body):
             raise FlatPatternError("the flat pattern's body is gone")
-        shape = body.Shape
+        shape = folded_shape(body)
         if shape.isNull() or not shape.Solids:
             raise FlatPatternError("%s has no solid to lay flat" % body.Label)
         memo = json.loads(obj.FaceMemo or "{}")
@@ -349,20 +386,49 @@ def of_component(doc, component):
     return None
 
 
+def folded_shape(body):
+    """The body's shape to lay flat, in the body's own frame (QA: a body moved after its flat
+    pattern was made lost its stationary face, remembered where the body was; the flat lies on
+    XY wherever the body is). While an Unfold has no Refold yet, the body as it was before that
+    Unfold (QA: the flat pattern followed the half-unfolded body and lost the bend lines of the
+    bends already laid flat, so its DXF had none there); cuts made in the unfolded state come
+    into the flat pattern with the Refold."""
+    unfold = sheetmetal_flat.open_unfold(body)
+    base = getattr(unfold, "BaseFeature", None) if unfold is not None else None
+    tip = body.Tip
+    source = base if base is not None and not base.Shape.isNull() else tip
+    if source is None:
+        return body.Shape
+    return source.Shape.copy()  # a step's shape is in its body's frame (body.Shape is moved)
+
+
+def check_folded(body):
+    """Raise FlatPatternError while the body has an Unfold with no Refold yet (QA: the flat
+    pattern of a body left unfolded lost the bend lines of the bends already laid flat, so
+    the DXF had no bend lines there and nothing said so)."""
+    unfold = sheetmetal_flat.open_unfold(body)
+    if unfold is not None:
+        raise FlatPatternError(
+            "%s is unfolded (%s): Refold it first, a flat pattern is made of the folded part"
+            % (body.Label, unfold.Label)
+        )
+
+
 def check_face(body, face):
     """Raise FlatPatternError when face cannot be the stationary face of body's flat."""
     if body is None or not sheetmetal.is_sheet_metal_body(body):
         raise FlatPatternError(
             "a flat pattern is made of a sheet metal body: use Convert to Sheet Metal first"
         )
+    check_folded(body)
     try:
-        unfolder.unfold(body.Shape, face, sheetmetal_flat.k_factor(body))
+        unfolder.unfold(folded_shape(body), face, sheetmetal_flat.k_factor(body))
     except unfolder.UnfoldError as exc:
         raise FlatPatternError(sheetmetal_flat.why_not_flat(body, str(exc)))
 
 
 def create(body, face, name="FlatPattern"):
-    """A flat pattern of body from its face 'FaceN' (of body.Shape), in the body's component.
+    """A flat pattern of body from its face 'FaceN' (of its Tip), in the body's component.
     Raises FlatPatternError (nothing made) when it cannot be laid flat."""
     doc = body.Document
     component = components.container_of(body)
@@ -378,7 +444,7 @@ def create(body, face, name="FlatPattern"):
     obj.Label = "Flat Pattern"
     obj.Body = body
     obj.Face = face
-    obj.FaceMemo = json.dumps(face_memo(body.Shape.getElement(face)))
+    obj.FaceMemo = json.dumps(face_memo(folded_shape(body).getElement(face)))
     if component is not None:
         try:
             component.addObject(obj)
@@ -444,8 +510,17 @@ def _edge_entity(edge, opts):
             if isinstance(nurbs, Part.BSplineCurve) and not nurbs.isRational():
                 poles = [(p.x, p.y) for p in nurbs.getPoles()]
                 return ("spline", nurbs.Degree, list(nurbs.KnotSequence), poles)
+            # a rational curve (an ellipse where a slanted hole meets a wall): a plain spline
+            # within FINE of it (QA: it became a polyline at the greyed-out Tolerance, 0.1 mm,
+            # a hole's curved side cut in two or three straight pieces)
+            fit = Part.BSplineCurve()
+            fit.approximate(Points=edge.discretize(Deflection=FINE), DegMax=3, Tolerance=FINE)
+            poles = [(p.x, p.y) for p in fit.getPoles()]
+            return ("spline", fit.Degree, list(fit.KnotSequence), poles)
         except Exception:
             pass
+        pts = edge.discretize(Deflection=FINE)  # no conversion was asked for: stay close
+        return ("polyline", [(p.x, p.y) for p in pts], False)
     pts = edge.discretize(Deflection=max(float(opts["tolerance"]), 1e-4))
     return ("polyline", [(p.x, p.y) for p in pts], False)
 
