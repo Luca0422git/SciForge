@@ -327,6 +327,16 @@ class PressPullPanel(Panel):
         """Use clicked faces/edges: the first pick decides what Press Pull does."""
         from . import text as sketch_text
 
+        if self.mode is None and not self.editing and not self.faces_only:
+            from . import surfmod_ui
+
+            surface = surfmod_ui.surface_picks(picks)
+            if surface:
+                # A face (edge) of a surface body: SURFACE > MODIFY's Press Pull of a surface
+                # face (Fillet of its edge) is a step of its own (surfmod.py; surface-4).
+                QtCore.QTimer.singleShot(0, lambda: self._to_surface(surface))
+                return
+
         if self.mode is None and not self.faces_only:
             areas = [
                 (obj, short)
@@ -347,6 +357,19 @@ class PressPullPanel(Panel):
                 self._face_picked(obj, short, point)
             elif short.startswith("Edge"):
                 self._edge_picked(obj, short)
+
+    def _to_surface(self, picks):
+        """Close Press Pull and start the surface body's own Press Pull (or Fillet)."""
+        if self._closed:
+            return
+        try:
+            from . import surfmod_ui
+
+            doc = self.doc
+            self.reject()
+            surfmod_ui.take_press_pull(doc, picks)
+        except Exception as exc:
+            warn("press pull on a surface: %s" % exc)
 
     def _to_extrude(self, profiles):
         """Close Press Pull and start Extrude on the sketch areas [(sketch, "InternalFaceN")]

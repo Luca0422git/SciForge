@@ -21,6 +21,7 @@ copied or split from can be deleted: its copies keep their shape.
 
 Everything is one undo step.
 """
+
 import FreeCAD as App
 
 from . import bodies
@@ -382,8 +383,10 @@ def delete_bodies(doc, targets):
         base = body.BaseFeature
         bodies.remove_body(body)
         # The hidden first step of a copied or split-off body goes with it.
-        if base is not None and bodies.alive(base) and (
-            move.is_copy(base) or split.is_piece(base) or bodies.kind(base) == "DerivedSolid"
+        if (
+            base is not None
+            and bodies.alive(base)
+            and (move.is_copy(base) or split.is_piece(base) or bodies.kind(base) == "DerivedSolid")
         ):
             try:
                 doc.removeObject(base.Name)
@@ -435,9 +438,12 @@ def delete_curves(sketch, indices):
     sketch.delGeometries(indices)
 
 
-def run(doc, found, title="Delete"):
+def run(doc, found, title="Delete", heal=True):
     """Do what plan() found, as one undo step, then recompute without FreeCAD's error
-    output (failures are shown in the timeline). Returns the Delete Face steps made."""
+    output (failures are shown in the timeline). Returns the Delete Face steps made.
+    heal: Fusion's SOLID Delete (the faces around grow to close the gap); False is the
+    SURFACE tab's Delete (the faces go, the hole stays: surfmod, surface-4). Faces of a
+    surface body are never healed: there is no solid to close."""
     from . import timeline_ops
 
     if is_empty(found):
@@ -455,7 +461,10 @@ def run(doc, found, title="Delete"):
 
                 body = direct.adopt(feature)  # its base feature holds the solid
                 feature = body.Tip
-            made.append(delete_faces(feature, names))
+            if heal and not _open_body(feature):
+                made.append(delete_faces(feature, names))
+            else:
+                made.append(delete_faces_open(feature, names))
         if found["steps"]:
             delete_steps(doc, found["steps"])
         if found["bodies"]:
@@ -623,6 +632,24 @@ def delete_faces(feature, names):
         except Exception:
             pass
     return obj
+
+
+def _open_body(feature):
+    from . import surfmod
+
+    return surfmod.is_open_shape(getattr(feature, "Shape", None))
+
+
+def delete_faces_open(feature, names):
+    """Fusion's SURFACE Delete: a "Delete Face" step that removes the faces without healing
+    (a solid becomes a surface body). No transaction of its own (surface-4)."""
+    from . import surfmod
+
+    body = bodies.body_of(feature)
+    try:
+        return surfmod.make("surface_delete_face", body, feature, list(names), {})
+    except surfmod.SurfaceModifyError as exc:
+        raise DeleteError(str(exc))
 
 
 def _face_failure(step):

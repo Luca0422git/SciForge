@@ -2258,8 +2258,11 @@ def start(panel_class):
         # pressed inside a Fillet finishes it and starts a new one with nothing picked)
         selection = [(s.Object, list(s.SubElementNames)) for s in Gui.Selection.getSelectionEx()]
         picked_body = _selected_body()
+    surface_picks = _surface_handover_picks()
     if not commands.finish_open_dialog():
         return None
+    if _to_surface(panel_class, surface_picks):
+        return None  # edges of a surface body: SURFACE > MODIFY's Fillet / Chamfer (surfmod)
     doc = App.ActiveDocument
     if picked_body is not None and picked_body is not commands.active_body():
         try:  # Fusion rounds the edges you picked, whichever body they are on
@@ -2290,6 +2293,35 @@ def start(panel_class):
         raise
     log("%s started with %d pick(s)" % (panel_class.title.lower(), len(refs)))
     return panel
+
+
+def _surface_handover_picks():
+    """The selection as [(object, element, point)] (read before a dialog closes), for the
+    surface hand-over below."""
+    try:
+        from . import pickpanel
+
+        if Gui.Control.activeDialog():
+            return []
+        return pickpanel.selection_entries(App.ActiveDocument)
+    except Exception:
+        return []
+
+
+def _to_surface(panel_class, picks):
+    """Fillet / Chamfer of edges of a surface body (Fusion's SURFACE > MODIFY > Fillet,
+    Chamfer) is a step of its own (surfmod.py; FreeCAD's PartDesign::Fillet needs a solid):
+    hand over when the edges picked are on a surface body, or nothing is picked while the
+    SURFACE tab shows one (or there is no solid to round). surface-4."""
+    try:
+        from . import surfmod_ui
+
+        kind = "surface_chamfer" if panel_class.title == "Chamfer" else "surface_fillet"
+        solid_ready = solid_base(commands.find_body()) is not None
+        return surfmod_ui.take_blend(kind, picks, solid_ready)
+    except Exception as exc:
+        warn("surface fillet: %s" % exc)
+        return False
 
 
 def _reselect(selection):

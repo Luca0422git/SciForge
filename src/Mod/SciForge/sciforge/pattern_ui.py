@@ -665,7 +665,7 @@ class PatternPanel(Panel):
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         else:
-            self.body = commands.find_body()
+            self.body = _surface_body(preselection or []) or commands.find_body()
             self.base = self.body.Tip if self.body is not None else None
         self.active = "objects"
         self.escape = preview.EscapeCancels(self)
@@ -1104,6 +1104,11 @@ class PatternPanel(Panel):
                     bodies.append((obj, ""))
                     continue
                 obj = obj.Tip
+            surface = _surface_body([(obj, sub)])
+            if surface is not None:  # a surface body is patterned as a body (surface-4)
+                if (surface, "") not in bodies:
+                    bodies.append((surface, ""))
+                continue
             if sub.startswith("Face"):
                 ref = self._base_face(obj, sub)
                 if ref is not None and ref not in faces:
@@ -1244,6 +1249,13 @@ class PatternPanel(Panel):
             return
         if obj.TypeId == "PartDesign::Body" and short:
             obj = obj.Tip
+        if ptype in ("features", "faces") and _surface_body([(obj, short)]) is not None:
+            # a surface body is patterned as a body (Fusion; surface-4): the type follows
+            self.options["pattern_type"] = ptype = "bodies"
+            self._quiet = True
+            common.set_combo(self.pattern_type, ptype)
+            self._quiet = False
+            self._update_visibility()
         if ptype == "bodies":
             body = pattern.owner_body(obj)
             if body is None:
@@ -2261,6 +2273,21 @@ def _selected_body(selection):
     return None
 
 
+def _surface_body(selection):
+    """The surface body picked before the command (Fusion patterns and mirrors surface bodies
+    as bodies: SURFACE > CREATE > Pattern, Mirror; surface-4), or None."""
+    try:
+        from . import surfmod
+
+        for obj, _sub in selection:
+            body = obj if obj.TypeId == "PartDesign::Body" else pattern.owner_body(obj)
+            if body is not None and surfmod.is_surface_body(body):
+                return body
+    except Exception:
+        pass
+    return None
+
+
 def start(kind, panel_class=None):
     """Run a pattern command; things selected before it starts are its objects."""
     panel_class = panel_class or PatternPanel
@@ -2277,9 +2304,10 @@ def start(kind, panel_class=None):
             Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
         except Exception as exc:
             warn("could not activate %s: %s" % (body.Label, exc))
-    body = commands.find_body()
+    surface = _surface_body(selection)
+    body = surface or commands.find_body()  # a surface body is patterned as a body (surface-4)
     tip = body.Tip if body is not None else None
-    if tip is None or tip.Shape.isNull() or not tip.Shape.Solids:
+    if surface is None and (tip is None or tip.Shape.isNull() or not tip.Shape.Solids):
         commands.tell(
             "%s needs a solid to repeat: make one first (Create Sketch, then Extrude)."
             % pattern.TITLES[kind]

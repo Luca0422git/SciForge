@@ -561,7 +561,7 @@ SURFACE_MODIFY = group(
         item("Stitch", "SciForge_Stitch", "stitch"),
         item("Unstitch", "SciForge_Unstitch", "unstitch"),
         item("Reverse Normal", "SciForge_ReverseNormal", "reverse_normal"),
-        item("Merge", None, None),  # owner: surface-4
+        item("Merge", "SciForge_SurfaceMerge", "surfmod_merge"),  # owner: surface-4
         SEP,
         item("Replace Face", "SciForge_ReplaceFace", "replace_face"),
         item("Split Face", "SciForge_SplitFace", "split_face"),

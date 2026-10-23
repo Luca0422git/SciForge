@@ -18,6 +18,7 @@ A uniform scale keeps the exact geometry (planes stay planes, circles circles). 
 uniform one turns every face into a NURBS surface: the shape is still exact, but FreeCAD
 then measures the volume of curved NURBS faces only approximately (to about 1 %).
 """
+
 import FreeCAD as App
 
 TYPE = "PartDesign::FeaturePython"
@@ -114,7 +115,11 @@ def scaled(shape, point, factors):
         _keep_names(shape, result)
     except Exception as exc:
         raise ScaleError("The part could not be scaled: %s" % exc)
-    if result.isNull() or not result.isValid() or not (result.Faces if open_body else result.Solids):
+    if (
+        result.isNull()
+        or not result.isValid()
+        or not (result.Faces if open_body else result.Solids)
+    ):
         raise ScaleError("Scaling made an invalid part. Try other factors.")
     return result
 

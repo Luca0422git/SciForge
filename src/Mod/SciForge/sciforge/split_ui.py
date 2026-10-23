@@ -154,6 +154,10 @@ class SplitPanel(BodyPanel):
             self._take_tool((obj, short))  # a sketch line or arc cuts straight through
             return
         if short.startswith("Face"):
+            surface = self._surface_tool(obj)
+            if surface is not None:
+                self._take_tool((surface, ""))  # the whole surface body cuts (surface-4)
+                return
             ref = self._face_ref(obj, short)
             if ref is not None:
                 self._take_tool(ref)
@@ -168,6 +172,16 @@ class SplitPanel(BodyPanel):
             self._take_tool((body, ""))
             return
         self.message.setText("Split with a plane, a face, a body or a sketch curve.")
+
+    def _surface_tool(self, obj):
+        """A face of a surface body (not the one to split) picks that whole body as the
+        Splitting Tool, as Fusion does: the classic cut of a solid with a sculpted surface."""
+        from . import surfmod
+
+        body = bodies.body_of(obj)
+        if body is None or body is self.options["body"] or self._made_by_preview(body):
+            return None
+        return body if surfmod.is_surface_body(body) else None
 
     def _face_ref(self, obj, short):
         """A face clicked on the preview (the split's own result) is the same face of the

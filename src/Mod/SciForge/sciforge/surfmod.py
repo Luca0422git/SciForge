@@ -394,9 +394,7 @@ def press_pull(shape, names, distance):
     result = sew(faces)
     from . import surface_geom
 
-    if len(surface_geom.free_edges(result)) > len(surface_geom.free_edges(shape)) + 4 * len(
-        picked
-    ):
+    if len(surface_geom.free_edges(result)) > len(surface_geom.free_edges(shape)) + 4 * len(picked):
         raise SurfaceModifyError(
             "The moved face no longer meets the faces around it. Try a smaller distance."
         )
