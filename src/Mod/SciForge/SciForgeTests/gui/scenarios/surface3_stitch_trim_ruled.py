@@ -216,7 +216,7 @@ def refusal_join():
 def refused():
     st.settle()
     text = st.message()
-    h.check("the dialog says they do not close", "close" in text.lower(), text)
+    h.check("the dialog says they do not close", "do not close" in text, text)
     st.ok()
 
 

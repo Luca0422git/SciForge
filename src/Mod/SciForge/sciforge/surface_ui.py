@@ -2348,8 +2348,19 @@ class StitchPanel(SurfacePanel):
                 if surface.created_body(self.step) is None:
                     return own
         self.closes = False
+        host = None
+        if self.step is not None and _alive(self.step):
+            host = bodies.body_of(self.step)
         try:
-            shapes = [surface.whole_shape(b) for b in picked if _alive(b)]
+            shapes = []
+            for body in picked:
+                if not _alive(body):
+                    continue
+                base = getattr(self.step, "BaseFeature", None) if body is host else None
+                # the body this preview sits in, as it was before it (not the preview)
+                shapes.append(
+                    bodies.global_shape(base) if base is not None else surface.whole_shape(body)
+                )
             stitched, _open = g.stitch(shapes, float(self.options["tolerance"]))
         except Exception:
             return None

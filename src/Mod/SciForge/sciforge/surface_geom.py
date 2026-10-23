@@ -2403,8 +2403,9 @@ def stitch(shapes, tolerance=core.STITCH_TOLERANCE):
                     fixed = solid.copy()
                     fixed.fix(1e-7, 1e-7, float(tolerance))
                     solid = fixed
-                pieces.append(solid)
-                continue
+                if abs(solid.Volume) > 1e-9:  # a face sewn onto a copy of itself is no solid
+                    pieces.append(solid)
+                    continue
             except Exception:
                 pass
         pieces.append(piece)
