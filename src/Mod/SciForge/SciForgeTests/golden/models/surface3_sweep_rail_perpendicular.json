@@ -1,0 +1,108 @@
+{
+  "id": "surface3_sweep_rail_perpendicular",
+  "title": "Surface Sweep Path + Guide Rail, Extent Perpendicular to Path, with a rail shorter than the path that runs away from it",
+  "tags": [
+    "surface",
+    "sweep",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "p",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            0,
+            0,
+            0,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "r",
+      "plane": "XY",
+      "offset": 5,
+      "curves": [
+        {
+          "line": [
+            15,
+            0,
+            25,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "s",
+      "plane": "XZ",
+      "curves": [
+        {
+          "line": [
+            -5,
+            5,
+            15,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "sweep",
+      "refs": [
+        {
+          "sketch": "s",
+          "at": [
+            0,
+            5
+          ]
+        }
+      ],
+      "refs2": [
+        {
+          "sketch": "p",
+          "at": [
+            0,
+            20
+          ]
+        }
+      ],
+      "refs3": [
+        {
+          "sketch": "r",
+          "at": [
+            20,
+            15
+          ]
+        }
+      ],
+      "options": {
+        "type": "rail",
+        "rail_extent": "perpendicular",
+        "scaling": "scale"
+      }
+    }
+  ],
+  "expect": {
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      -7,
+      0,
+      5,
+      25,
+      30,
+      9
+    ],
+    "source": "analytic",
+    "note": "The rail (15, 0, 5) - (25, 30, 5) ends before the path (0, 0, 0) - (0, 40, 0): Perpendicular to Path stops where the path's own square section passes through the rail's end, y 30 (a section square to the rail would stop at y 38.33 and tilt the end). Profile Scaling Scale turns and scales the profile (x, z) about the path so that its rail point (15, 5) lands on the rail's (25, 5): the similarity (25 + 5i) / (15 + 5i) = 1.6 - 0.2i takes the profile's other end (-5, 5) to (-7, 9). Box: x -7 .. 25, y 0 .. 30, z 5 .. 9."
+  }
+}

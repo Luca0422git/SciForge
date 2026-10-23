@@ -32,25 +32,25 @@ closed-loft corners, Environmental Map Analysis). **G** = SciForge's guess.
 
 | Fusion | SciForge | Src |
 |---|---|---|
-| Offset: Offset Type **Sharp Offset** / **Rounded Offset**, Sharp by default (May 2025) [3] | Same: Sharp carries the offset faces on until they meet (OpenCASCADE's intersection join), Rounded fills each outside corner with an arc of the distance. A design saved before part 3 keeps Rounded (its result does not change on reopen). Sharp that cannot close (OpenCASCADE fails): refused, "try Rounded Offset" | A |
+| Offset: Offset Type **Sharp Offset** / **Rounded Offset**, Sharp by default (May 2025) [3] | Same: Sharp carries the offset faces on until they meet (OpenCASCADE's intersection join), Rounded fills each outside corner with an arc of the distance. A design saved before part 3 keeps Rounded (its result does not change on reopen). Sharp that cannot close (OpenCASCADE fails, or comes back "valid" with faces carried on without end: QA measured 2e7 mm across on the top of a box whose top edges are rounded) is refused, "try Rounded Offset" (see the gaps) | A |
 | Patch: **Group Edges** off gives a Continuity per boundary edge [8] | Same: Group Edges off lists one row per edge (Edge 1, Edge 2...), each Connected / Tangent / Curvature; a Tangent edge OpenCASCADE cannot meet is refused with the reason | A |
 | Patch: **Reverse Normal** check box + **Flip** (January 2026) [8] | Same: the patch faces the other way; Flip turns it over again | A |
 | Patch: Tangency Weight, 0.5 by default [8] | Shown 0.5, greyed: OpenCASCADE's plate surface takes the faces' direction but no strength (see the gaps) | A |
 | Untrim: Type **Manual** (pick the loops) and **Keep Copy** [11] | Same: Manual swaps the Faces box for a Loops box (a click on an edge takes its loop: a hole or the outer boundary); Extend works on an outer loop. Keep Copy puts the surface as it was in a body of its own (it goes with the step: undo, delete, clearing Keep Copy) | A |
-| Revolve: **Project Axis** (on), the extent word **Partial**, **To** with **Two Sides** [12] | Same: Project Axis lays the axis into the profile's sketch plane (off: the axis where it is; an axis square to that plane is refused with the reason); Type Partial / To / Full (saved files keep the key "angle"); To offers One Side / Two Sides (no Symmetric), Two Sides asks for Object Two and turns the first side the right-handed way to the first object, the second side the other way to the second (overlapping sides refused). A revolve saved before part 3 keeps its axis unprojected | A, G (Project Axis on) |
+| Revolve: **Project Axis** (on), the extent word **Partial**, **To** with **Two Sides** [12] | Same: Project Axis lays the axis into the profile's sketch plane (off: the axis where it is; an axis square to that plane is refused with the reason); Type Partial / To / Full (saved files keep the key "angle"); To offers One Side / Two Sides (no Symmetric), Two Sides asks for Object Two and turns the first side the right-handed way to the first object, the second side the other way to the second (overlapping sides refused). A revolve saved before part 3 keeps its axis unprojected | A, G (Project Axis on in the dialog; Fusion's API starts `RevolveFeatureInput.isProjectAxis` at false, [API](https://help.autodesk.com/cloudhelp/ENU/Fusion-360-API/files/RevolveFeatureInput_isProjectAxis.htm), and a [forum answer](https://forums.autodesk.com/t5/fusion-support-forum/bug-revolve-feature-ignores-the-selected-axis/td-p/10934400) shows the dialog projecting an axis from another sketch) |
 | Extrude: flat faces as Profiles; To Object **Chain Faces / Extend Faces** [13] | Same: a click on a flat face takes the curves round it (holes too); the Faces row offers Chain Faces (the face and the faces joined smoothly to it) / Extend Faces (the face alone, carried on past its edges) | A |
 | Sweep: Type **Path + Guide Surface** [7] | Same: a Guide Surface box (faces; Chain Selection adds tangent faces); the profile keeps the angle it has to the surface along the path (the solid Sweep's rule, `sweep.py`); Orientation, Taper and Twist are not offered | A |
-| Sweep Path + Guide Rail: Extent **Perpendicular to Path** (default) / **Full Extents**; Path Distance and **Guide Rail Distance** [14] | Same: Perpendicular to Path stops square to the path where the shorter of path and rail ends; Full Extents runs both to their ends (the rail spread over the whole path); Guide Rail Distance takes that share of the rail. A rail sweep saved before part 3 keeps Full Extents (what it did then) | A, G (Full Extents' mapping) |
+| Sweep Path + Guide Rail: Extent **Perpendicular to Path** (default) / **Full Extents**; Path Distance and **Guide Rail Distance** [14] | Same: Perpendicular to Path stops square to the path where the shorter of path and rail ends (a shorter rail: the path's own square section through the rail's end, since QA; it used the section square to the rail, which ran a rail that leaves the path 8 mm too far and tilted the end); Full Extents runs both to their ends (the rail spread over the whole path); Guide Rail Distance takes that share of the rail. A rail sweep saved before part 3 keeps Full Extents (what it did then) | A, G (Full Extents' mapping) |
 | Loft: closed profiles with the same number of clearly defined corners are matched corner to corner (September 2026) [15] | Same: when every profile is a closed curve with the same number (3 or more) of sharp corners, each profile is restarted (and turned round when drawn the other way) so that corner meets corner with the least twist; other profiles loft as before | A |
 | Loft: Edge Alignment Free Edges / Align Edges / Align to Surface [15] | The row is shown with a Tangent or Curvature end; Free Edges only, the other two greyed with the reason (see the gaps) | A |
-| Extend Natural carries the face's own surface on (free-form faces too) [9] | Same for faces that are their surface's parameter rectangle: cylinders, cones, spheres, tori, revolved and extruded curves are carried on by their own definition (one face, still the same surface); free-form (B-spline, Bezier) faces by their own polynomial, refitted through 24 x 24 points of it (OpenCASCADE cannot trim a B-spline past its bounds). Past a sphere's pole or round onto itself: refused. Other faces: tangent bands as before | A, G (refit) |
+| Extend Natural carries the face's own surface on (free-form faces too) [9] | Same for faces that are their surface's parameter rectangle: cylinders, cones, spheres, tori, revolved and extruded curves are carried on by their own definition (one face, still the same surface); free-form (B-spline, Bezier) faces by their own polynomial, refitted through 24 x 24 points of it (OpenCASCADE cannot trim a B-spline past its bounds); the distance is measured along the surface's own curve from the edge (QA: an extruded spline carried on by the speed at its edge went 14.0 mm for 10). Past a sphere's pole or round onto itself: refused. Other faces: tangent bands as before | A, G (refit) |
 | Extend Natural, Edge Alignment **Align Edges** [9] | Same: the extension's sides carry on the outside edges meeting the picked one (a trapezoid's slanted sides go on slanting; a flat face stays one face); where no outside edge meets it, or that one is extended too, the side leaves square to the edge as with Free Edges. A face that is its surface's parameter rectangle carries itself on, its sides being the surface's own curves (aligned either way). Neighbours turning back too sharply: refused ("Use Free Edges") | A, G (the side directions blended along the edge) |
 | Stitch: Operation (New Body / Join / Cut / Intersect) when the result closes [21] | Same: Join, Cut and Intersect combine the closed stitch with the solid it touches (the step goes into that solid's body, the surfaces are used up); a stitch that does not close is refused ("do not close into a solid"), as is one that touches no solid | A |
 | Trim: a single face of a body as the Trimming Tool [22] | Same: a click on a face of a solid takes that face alone (a surface body is still taken whole, as before) | A |
 | Ruled: Corner Type **Rounded** / **Mitered**, Rounded by default [24] | Same: the Mitered Corners check box became the Corner Type row. Ruled Type stays Tangent first (Fusion's default was not found, **G**) | A, G |
 | INSPECT > **Environmental Map Analysis** (September 2026): a live reflection of the surroundings on the faces, Reflection Strength [17] | Same: Environment Studio (three soft light strips over a dark floor) / Horizon (sky over ground), Reflection Strength 0 .. 100 % (70 by default), Opacity, High Quality; a sphere map looked up by the reflection direction (Coin's environment mapping), so the bands slide over the surface as the view turns and a kink shows as a kink; listed in the browser's Analysis folder, saved with the design | A, G (the studio pictures) |
 | Sketch > Project / Include > **Isoparametric Curve** (March 2026): U or V curves of a face, one at a distance from the face edge or several distributed, associative [18] | Same: click a face in an open sketch: its U curve through the clicked place is drawn (purple); Direction U / V; Type Single (Distance from the face's first edge, measured along the face) / Distributed (Count curves spread evenly); OK or Enter keeps them. They follow the face when the design changes. Kept like Project to Surface's curves, in a companion of the sketch (FreeCAD's sketches are flat) | A, G (Single's distance measured along the middle of the face) |
-| Change Parameters lists the surface features' numbers | Same: every surface step's distances, angles, ratios and tolerance are rows of Change Parameters | A (H-MOD), G |
+| Change Parameters lists the surface features' numbers | Same: every surface step's distances, angles, ratios and tolerance are rows of Change Parameters; since QA only those its choices use (the dialog's hidden rows are hidden there: no Distance Two for One Side, no Extend Distance with Extend off), as Fusion lists a feature's values in use | A (H-MOD), G |
 
 Implemented in `surface_core.py` (the choices, `LEGACY` / `with_saved` for files saved
 before, `turn_angle` / `two_sided_to`, `corner_shift`, the isocurve fractions: unit tested),
@@ -63,6 +63,41 @@ target), `surface_ui.py` (the rows), `surface_analysis*.py` (Environmental Map),
 analytic) and `surface3_extend_align_edges`; scenarios `surface3_offset_patch`, `surface3_untrim_revolve` (with save / reopen
 and a component), `surface3_sweep_extrude`, `surface3_stitch_trim_ruled`,
 `surface3_extend_envmap`, `surface3_isocurve`.
+
+### Part 3 QA (branch `sf/surface-3-qa`, 2026-10-23)
+
+An independent QA pass over part 3, as Luca would click it. Fixed:
+
+- **Offset Sharp on rounded edges gave a surface kilometres wide.** OpenCASCADE's
+  intersection join (`makeOffsetShape(..., join=2)`) on the top of a box whose top edges are
+  rounded (the top, the rounds and the walls: Chain Selection takes all nine, they are
+  tangent) returned a shape it calls valid with faces 2e7 mm across (area 1e9 mm²); Sharp is
+  the default, so this was what Luca saw first. `surface_geom._runaway` now compares the
+  result with the picked faces (a sharp corner reaches d / cos(half its turn), allowed up to
+  25 d) and refuses with the reason ("Try Offset Type Rounded Offset"). Rounded works there.
+- **Natural Extend went too far on free-form faces.** The extension was sized by the
+  surface's speed at the edge; a spline carried on past its end speeds up (an extruded spline
+  went 4.59 mm for 4, 14.0 for 10). `_grow_by` now measures along the surface's own curve
+  (Richardson on two polylines, 1e-10) and solves for the distance: 4.00 and 10.00.
+- **Sweep Perpendicular to Path with a rail that leaves the path.** With the rail the
+  shorter, the path was cut by the plane square to the *rail* at its end: a rail from
+  (15, 0, 5) to (25, 30, 5) along a path up y ran the sweep to y 38.33 and tilted its end.
+  It now stops at the path's own square section through the rail's end (y 30). Golden
+  `surface3_sweep_rail_perpendicular` (analytic box).
+- **Change Parameters listed every number of a surface step**, also those its choices do not
+  use (a One Side extrude showed Distance Two, Offset, Taper Angle Two). The dialog now hides
+  the number of each row it hides on the step (`SurfacePanel._mark_numbers`), and
+  `parameters.py` passes over hidden properties as it does for FreeCAD's own features.
+
+Scenarios added: `surface3_qa` (Offset Sharp refused on rounded edges then Rounded; Untrim
+Keep Copy saved and reopened, deleted from the timeline with its copy, undone, edited with
+Keep Copy cleared and cancelled; Isoparametric Curve: an empty click, Esc before and after a
+pick, Enter, Ctrl+Z / Ctrl+Y in the sketch, save and reopen, the curve follows a radius
+change after the reopen; Change Parameters rows), `surface3_qa2` (Stitch Operation changed
+while the dialog is open: New Body / Cut / Intersect / New Body, Esc restores everything;
+an edit that moves a Join stitch back to New Body, undo / redo), `surface3_qa3` (Extrude of
+a flat face with a hole, To Object with Extend Faces, edit read-back, Cancel, undo / redo;
+Patch per-edge Continuity on leaning walls, saved, reopened, read back, Esc).
 
 ## Part 2: Extrude, Revolve, Sweep and Loft options (wave 5, branch `sf/surface-2`)
 
@@ -235,5 +270,7 @@ is undone or rolled back; the icon follows.
 | Extrude To Object Match Shape | Not built: Fusion's documentation found does not describe it (Autodesk's Inventor has a Match Shape for open profiles, [reference](https://help.autodesk.com/cloudhelp/2015/ENU/Inventor-Help/files/GUID-951A7AC9-D30D-4834-ADB9-959AC4CD404E.htm)); the audit's row came from one search excerpt. Chain Faces / Extend Faces is built |
 | Isoparametric Curve inside the sketch | Fusion puts the curves in the sketch itself; FreeCAD's sketches are flat, so they live in a companion of the sketch (like Project to Surface's): drawn, hidden, listed and deleted with the sketch, but the sketch's own tools (constraints, Trim) cannot use them. Editing them again means deleting and picking again (no edit dialog yet) |
 | Environmental Map pictures | Fusion's studio images were not found; SciForge draws its own two (Studio, Horizon) |
+| Offset Sharp on rounded (tangent) edges that meet at a corner | OpenCASCADE's intersection join cannot close the corner where two rounds meet (the top of a box with rounded top edges, measured): refused with the reason, Rounded works. Fusion makes it. Thicken refuses that shape too, Sharp or Rounded (OpenCASCADE: "no image for shape") |
+| Isoparametric Curve, Single after the face grows | The curve keeps its Distance (mm along the face from its first edge), as Fusion's parameter does: on a cylinder whose radius grows from 10 to 12 a curve 47.12 mm round moves from 270 to 225 degrees (measured) |
 | Boundary Fill from planes alone | Fusion is reported to need at least one body (**F**, one forum report); SciForge accepts planes alone, which does no harm, so it is kept until Luca's Fusion confirms it |
 | The design's first sketch body | A new design's first sketch lives in a body (FreeCAD needs one); when the first thing made from it is a surface, that body stays in the browser with only the sketch in it. Fusion keeps sketches outside bodies |

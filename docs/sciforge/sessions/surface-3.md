@@ -97,3 +97,42 @@ Surface (no OpenCASCADE control; greyed with the reason),
 Extrude Match Shape (not found in Fusion's documentation), Full Extents' rail mapping (G),
 the Isoparametric Curves live in a companion of the sketch (FreeCAD's sketches are flat) and
 have no edit dialog, Ruled Type default unverified.
+
+## QA pass (branch `sf/surface-3-qa`, 2026-10-23)
+
+An independent QA engineer ran every part-3 scenario, the existing `surface*` scenarios, the
+unit tests and the golden models, read the whole diff, and clicked the paths the builder's
+scenarios leave out. Details in `parity/surface.md`, section "Part 3 QA".
+
+Fixed:
+
+- Offset Sharp (the default) on a box top with rounded edges returned a "valid" surface
+  2e7 mm across: now refused with the reason (`surface_geom._runaway`); Rounded works.
+- Natural Extend of a free-form / extruded-spline face went up to 40 % too far (sized by the
+  speed at the edge): now measured along the surface (`_grow_by`).
+- Sweep Perpendicular to Path with a rail shorter than the path and leaving it: the end was
+  square to the rail, not the path (8 mm too far, tilted): fixed (`_section_through`), golden
+  `surface3_sweep_rail_perpendicular`.
+- Change Parameters listed numbers a step's choices do not use: the dialog hides them on the
+  step (`SurfacePanel._mark_numbers`).
+- `surface_iso_ui.py` reformatted (black).
+
+FreeCAD / OpenCASCADE facts (measured in FreeCAD 1.1.4):
+
+- `makeOffsetShape(d, 1e-6, False, False, 0, 2, False)` (intersection join) on faces where two
+  rounds meet at a corner returns `isValid()` True with faces 1e7 mm out; with the whole box
+  it returns a null shape. Compare the result's bound box with the faces'.
+- `BSplineSurface.value()` past the bounds speeds up or slows down with the last polynomial
+  piece: size an extension by arc length, not by `getD1` at the edge.
+- Chain Selection on a box top with rounded top edges takes nine faces (the walls are tangent
+  to the rounds too).
+
+Traps for the scenarios:
+
+- From a view of the whole design a hole's edge on a patch is a few pixels from the face: the
+  edge click lands on the face (`Face1`). Frame the patch first (select it, `ViewSelection`,
+  clear the selection before opening the dialog).
+- On the SURFACE tab there is no Create Sketch big button: switch to SOLID first.
+
+Tests added: `surface3_qa` (79 checks), `surface3_qa2` (55), `surface3_qa3`; golden
+`surface3_sweep_rail_perpendicular`.

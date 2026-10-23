@@ -1017,8 +1017,9 @@ STATIONS = 9  # sections along a guide rail that does not keep a straight course
 def _rail_extent(path, rail, o, at_end=False):
     """Path + Guide Rail: the path and rail the sweep runs along. Guide Rail Distance takes
     that share of the rail (from the end the profile sits at); Perpendicular to Path stops
-    where the plane square to the path through the rail's end (or the path's, when the path
-    is the shorter) cuts the other; Full Extents runs each to its own end. at_end: the
+    square to the path where the shorter of the two ends: the rail is cut by the plane square
+    to the path at its end, or the path ends at its own square section through the rail's
+    end; Full Extents runs each to its own end. at_end: the
     profile sits at the path's end (the sweep runs back along it)."""
     if at_end and not path.closed:
         back_path, back_rail = _rail_extent(path.reversed(), rail.reversed(), o)
@@ -1038,12 +1039,44 @@ def _rail_extent(path, rail, o, at_end=False):
     reach_rail = _plane_cut(rail, end, t)
     if reach_rail is not None and reach_rail < rail.length - 1e-6:
         return path, rail.sub(0.0, reach_rail)
-    r_end = rail.end
-    r_t = rail.tangent_at(rail.length)
-    reach_path = _plane_cut(path, r_end, r_t)
-    if reach_path is not None and reach_path < path.length - 1e-6:
+    # the rail is the shorter: the path stops where its own square section passes through
+    # the rail's end (a section square to the rail there would tilt the end of a rail that
+    # runs away from the path: measured, the sweep ran 8 mm past a diverging rail's end)
+    reach_path = _section_through(path, rail.end)
+    if reach_path is not None and 1e-6 < reach_path < path.length - 1e-6:
         return path.sub(0.0, reach_path), rail
     return path, rail
+
+
+def _section_through(curve_path, point):
+    """The length along `curve_path` where the plane square to it there passes through
+    `point` (of several such places, the one nearest the point), or None."""
+    count = 200
+
+    def side(s):
+        return (point - curve_path.point_at(s)).dot(unit(curve_path.tangent_at(s)))
+
+    found = []
+    previous = None
+    for k in range(count + 1):
+        s = curve_path.length * k / float(count)
+        h = side(s)
+        if abs(h) < 1e-12:
+            found.append(s)
+        elif previous is not None and (previous[1] < 0) != (h < 0) and abs(previous[1]) > 1e-12:
+            a, b, ha = previous[0], s, previous[1]
+            for _i in range(50):  # bisection on the crossing
+                m = 0.5 * (a + b)
+                hm = side(m)
+                if (ha < 0) == (hm < 0):
+                    a, ha = m, hm
+                else:
+                    b = m
+            found.append(0.5 * (a + b))
+        previous = (s, h)
+    if not found:
+        return None
+    return min(found, key=lambda s: (curve_path.point_at(s) - point).Length)
 
 
 def _plane_cut(curve_path, point, normal):
@@ -2392,13 +2425,18 @@ def _grow_by(surface, u, v, along_u, sign, d):
         x = sign * t
         return surface.value(u + x, v) if along_u else surface.value(u, v + x)
 
-    def length(t, n=64):
+    def polyline(t, n):
         total, last = 0.0, at(0.0)
         for i in range(1, n + 1):
             here = at(t * i / float(n))
             total += (here - last).Length
             last = here
         return total
+
+    def length(t):
+        # Richardson: two polylines' lengths give the curve's to 1e-10 (a polyline alone runs
+        # short by its chords' sag)
+        return (4.0 * polyline(t, 128) - polyline(t, 64)) / 3.0
 
     first = d / _speed(surface, u, v, along_u)
     t = first
