@@ -350,6 +350,10 @@ class ToolExamples(unittest.TestCase):
         self.assertTrue(docs_runner.same_answer(a, dict(a, text="Body1: 23000 mm3, 60 x 40")))
         self.assertTrue(docs_runner.same_answer(a, dict(a, text="Body2: 23785.4 mm3, 60 x 40")))
         self.assertTrue(docs_runner.same_answer(a, dict(a, is_error=True)))
+        dated = {"text": 'Done.\n{"Date": "2026-10-22", "sheet": "A3"}', "is_error": False}
+        self.assertIsNone(  # today's date in a title block is not a difference
+            docs_runner.same_answer(dated, dict(dated, text=dated["text"].replace("22", "23")))
+        )
 
     def test_expect_checks(self):
         from SciForgeTests.headless import docs_runner

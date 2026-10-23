@@ -36,6 +36,9 @@ import traceback
 
 SHOWN_TMP = "/home/me/sciforge"  # what a temporary folder is shown as on the pages
 _NUMBER = re.compile(r"-?\d+(?:\.\d+)?(?:[eE][-+]?\d+)?")
+# A date in an answer (a drawing's title block takes today's): never compared as numbers, so
+# a recorded example does not fail the day after it was recorded
+_DATE = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
 HERE = os.path.dirname(os.path.abspath(__file__))
 DOCS_TESTS = os.path.join(os.path.dirname(HERE), "docs")
 RESULTS = os.path.join(DOCS_TESTS, "tool_results.json")
@@ -163,6 +166,7 @@ def same_answer(recorded, now, rel=1e-4, absolute=1e-3):
     if recorded.get("image") != now.get("image"):
         return "the picture is %s, was %s" % (now.get("image"), recorded.get("image"))
     a, b = recorded.get("text", ""), now.get("text", "")
+    a, b = _DATE.sub("<date>", a), _DATE.sub("<date>", b)
     if _NUMBER.sub("#", a) != _NUMBER.sub("#", b):
         for i, (x, y) in enumerate(zip(a.splitlines(), b.splitlines())):
             if _NUMBER.sub("#", x) != _NUMBER.sub("#", y):
