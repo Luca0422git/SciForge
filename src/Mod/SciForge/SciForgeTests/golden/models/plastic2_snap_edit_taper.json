@@ -1,0 +1,109 @@
+{
+  "id": "plastic2_snap_edit_taper",
+  "title": "Snap Fit edited from the timeline: the beam tapers to 1 mm and its sides get 1 degree of draft",
+  "tags": [
+    "plastic",
+    "snap_fit",
+    "edit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 2,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_snap_fit",
+      "id": "sf1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          58,
+          20
+        ]
+      ],
+      "options": {
+        "fillet": 0,
+        "draft": 0
+      }
+    },
+    {
+      "op": "sf_snap_fit_edit",
+      "target": "sf1",
+      "set": {
+        "tip_thickness": 1,
+        "draft": 1
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 11690.176,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4916.5585071479045,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Beam = prismatoid L/6 (A0 + 4 Am + A1): root 2 x 6, tip 1 x w1 with w1 = 6 - 2 x 12 tan 1 = 5.58108, middle 1.5 x (6 + w1)/2 -> 104.64863; catch 2.13397 x w1 = 11.90988; the groove is sized by the root width, so the base still loses 21.824."
+  }
+}

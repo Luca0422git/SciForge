@@ -1,0 +1,108 @@
+{
+  "id": "plastic2_snap_parallel",
+  "title": "Snap Fit, Parallel Hook and Groove: a hook under a lid and its groove in the base wall",
+  "tags": [
+    "plastic",
+    "snap_fit"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 2,
+      "operation": "new_body"
+    },
+    {
+      "op": "sf_snap_fit",
+      "id": "sf1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          58,
+          20
+        ]
+      ],
+      "options": {
+        "fillet": 0,
+        "draft": 0
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 11690.176,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4956.803847577294,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      8,
+      60,
+      40,
+      22
+    ],
+    "source": "analytic",
+    "note": "Lid 60x40x2 = 4800 plus the hook: beam 2 (thick) x 6 (wide) x 12 (long) = 144 and the catch 6 wide with the profile 1 x (3 - 1/tan 30) + 1/2 x 1 x 1/tan 30 = 2.13397 (12.80385); the base (60x40x20 shelled 2 = 11712) loses the groove 1.1 (catch depth 1 + clearance 0.1 into the wall) x 6.2 (6 + 2 x 0.1) x 3.2 (catch 3 + 2 x 0.1) = 21.824."
+  }
+}
