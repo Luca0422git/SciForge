@@ -259,6 +259,108 @@ def escaped():
     h.check("unchanged", sm.near(sm.volume(s["body"]), 20 * MID, 1e-7))
 
 
+def design_2():
+    App.newDocument("SheetContourEdge")
+    h.fit()
+
+
+def d2_sketch():
+    h.ribbon("Create Sketch")
+
+
+def d2_xy():
+    st.open_sketch_clicked(V(12, -8, 0))
+
+
+def d2_rect():
+    sm.rect_sketch(0, 0, 50, 30)
+
+
+def d2_finish():
+    h.ribbon("Finish Sketch")
+
+
+def d2_flange():
+    h.fit()
+    h.click_empty()
+    sm.tab()
+    h.ribbon("Flange")
+
+
+def d2_profile():
+    h.fit()
+    h.click(V(25, 15, 0))
+
+
+def d2_ok():
+    sm.settle()
+    s["plate"] = sm.target_body()
+    sm.ok()
+
+
+def side_sketch():
+    h.check("a plate", s["plate"] is not None and sm.near(sm.volume(s["plate"]), 1500.0))
+    h.fit()
+    h.click_empty()
+    h.ribbon("Create Sketch")
+
+
+def side_plane():
+    from SciForgeTests.gui import plane_input as pl
+
+    pl.click_square("XZ_Plane")
+
+
+def side_lines():
+    sk = h.in_sketch()
+    h.check("a sketch on XZ", sk is not None)
+    if sk is not None:
+        st.add_lines(sk, [(50, 1), (50, 11), (60, 11)])
+
+
+def side_finish():
+    h.ribbon("Finish Sketch")
+
+
+def edge_contour():
+    h.fit()
+    h.click_empty()
+    h.ribbon("Flange")
+
+
+def click_side_line():
+    h.fit()
+    h.check("clicked the line", h.click_edge(V(50, 0, 6)))
+
+
+def on_edge():
+    sm.settle()
+    p = sm.panel()
+    h.check("a contour flange", p is not None and p.kind == "contour", p and p.kind)
+    h.check("found the sheet edge it starts at", p is not None and p.attached is not None)
+    h.check("Operation Join", p is not None and p.operation_box.currentData() == "join")
+    h.check("no Distance (it runs the whole edge)", not sm.shown("distance"))
+    h.check(
+        "says so", p is not None and "runs the whole edge" in p.mode.text(), p and p.mode.text()
+    )
+    vol = sm.volume(s["plate"])
+    expect = 1470 + 30 * (2 * (math.pi / 2) * 1.5 + 7 + 8)
+    h.check(
+        "bent out of the sheet along the edge (by hand)", sm.near(vol, expect, 1e-7), (vol, expect)
+    )
+    h.shot("3-on-edge")
+
+
+def ok_on_edge():
+    sm.ok()
+
+
+def on_edge_done():
+    h.check("dialog closed", sm.panel() is None)
+    h.check("Flange 2 in the timeline", "Flange 2" in sm.timeline_titles(), sm.timeline_titles())
+    h.check("one sheet metal body", len(sm.sheet_bodies()) == 1, sm.sheet_bodies())
+
+
 h.run(
     "sheetmetal_contour",
     [
@@ -294,5 +396,22 @@ h.run(
         edit_open,
         esc,
         escaped,
+        design_2,
+        d2_sketch,
+        d2_xy,
+        d2_rect,
+        d2_finish,
+        d2_flange,
+        d2_profile,
+        d2_ok,
+        side_sketch,
+        side_plane,
+        side_lines,
+        side_finish,
+        edge_contour,
+        click_side_line,
+        on_edge,
+        ok_on_edge,
+        on_edge_done,
     ],
 )

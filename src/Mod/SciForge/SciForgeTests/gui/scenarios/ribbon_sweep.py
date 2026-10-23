@@ -30,6 +30,7 @@ INTENDED = {
     "Derive": "Save",  # Derive takes the saved design: an unsaved one is saved first
     "Insert Derive": "Save",  # the source is kept relative to this design: saved first
     "3D Print": "3D Print",
+    "Sheet Metal Rules": "Sheet Metal Rules",  # the rules window (sheetmetal_rules_ui)
 }
 report = []
 # Known problems that a feature branch is fixing right now: reported, not failed,

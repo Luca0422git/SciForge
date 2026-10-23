@@ -178,8 +178,12 @@ def make_box():
     box = App.ActiveDocument.addObject("Part::Box", "Stop")
     box.Length, box.Width, box.Height = 20, 30, 5
     box.Placement.Base = V(70, 0, 25)
+    box2 = App.ActiveDocument.addObject("Part::Box", "Stop2")
+    box2.Length, box2.Width, box2.Height = 20, 5, 5
+    box2.Placement.Base = V(70, 20, 0)
     App.ActiveDocument.recompute()
     s["box"] = box
+    s["box2"] = box2
     h.fit()
 
 
@@ -282,6 +286,72 @@ def ok_object():
 def object_done():
     h.check("dialog closed", sm.panel() is None)
     h.check("Flange 2 in the timeline", "Flange 2" in sm.timeline_titles(), sm.timeline_titles())
+
+
+def flange_offsets():
+    h.fit()
+    h.ribbon("Flange")
+
+
+def click_left_edge():
+    h.fit()
+    h.check("clicked the left edge", h.click_edge(V(0, 15, 1)))
+
+
+def two_offsets():
+    sm.settle()
+    sm.choose("width_type", "Two Offsets")
+
+
+def refs_lit():
+    sm.settle()
+    p = sm.panel()
+    h.check(
+        "Offset Object 1 takes the clicks", p is not None and p.active == "ref1", p and p.active
+    )
+    h.check("Offset labels", p is not None and p.rows["distance1"][0].text() == "Offset 1")
+
+
+def click_xz():
+    from SciForgeTests.gui import plane_input as pl
+
+    pl.click_square("XZ_Plane")
+
+
+def ref1_taken():
+    sm.settle()
+    p = sm.panel()
+    h.check(
+        "a first reference", p is not None and p.offset_refs[0] is not None, p and p.offset_refs
+    )
+    h.check("then Offset Object 2", p is not None and p.active == "ref2", p and p.active)
+
+
+def click_box2():
+    h.fit()
+    h.click(V(80, 20, 2.5))
+
+
+def between():
+    sm.settle()
+    p = sm.panel()
+    ref = p.offset_refs[1] if p is not None else None
+    h.check(
+        "the box's face is the second", ref is not None and ref[0] is s["box2"], p and p.offset_refs
+    )
+    shape = s["body"].Shape
+    h.check(
+        "the wall runs between y 5 and y 15 (offsets 5)",
+        shape.isInside(V(0.5, 10, 8), 1e-6, True)
+        and not shape.isInside(V(0.5, 25, 8), 1e-6, True)
+        and not shape.isInside(V(0.5, 2, 8), 1e-6, True),
+        sm.message(),
+    )
+    h.shot("3-two-offsets")
+
+
+def esc_offsets():
+    sm.esc()
 
 
 def new_component():
@@ -397,6 +467,15 @@ h.run(
         runs_to_box,
         ok_object,
         object_done,
+        flange_offsets,
+        click_left_edge,
+        two_offsets,
+        refs_lit,
+        click_xz,
+        ref1_taken,
+        click_box2,
+        between,
+        esc_offsets,
         new_component,
         component_dialog,
         choose_rule,

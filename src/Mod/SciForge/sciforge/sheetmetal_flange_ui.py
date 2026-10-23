@@ -56,6 +56,7 @@ class FlangePanel(Panel):
         self.kind = None
         self.refs = []
         self.to_object = None  # (object, sub) the flange runs to (To Object)
+        self.offset_refs = [None, None]  # Two Offsets: the two faces / planes
         self.active = "selection"
         self.made_with = None  # (kind, operation, rule) the preview step was made with
         self.component = self._component()
@@ -71,6 +72,10 @@ class FlangePanel(Panel):
         self.overlay = None
         self._quiet = False
         self.rows = {}
+        self.formula_inputs = {}
+        self.formulas = {}  # field key -> formula typed ("" once a number replaced it)
+        self.owns_body = False
+        self.attached = None  # (edge, point): a contour drawn from the end of a sheet edge
         if feature is not None:
             try:
                 self.options = flange.options_of(feature)
@@ -79,8 +84,19 @@ class FlangePanel(Panel):
                 if feature.Target:
                     subs = list(feature.Target[1]) if len(feature.Target) > 1 else []
                     self.to_object = (feature.Target[0], subs[0] if subs else "")
+                self.offset_refs = flange.offset_refs_of(feature)
+                self._check_attached()
                 self.rule_name = sheetmetal.body_rule_name(self.body) or self.rule_name
                 self.made_with = (self.kind, "existing", self.rule_name)
+                # the flange that made its body: its Rule box swaps the body's rule (Fusion
+                # swaps rules, never detaches them)
+                self.owns_body = flange.made_body(feature)
+                for key, (prop, _g, _d) in list(flange.LENGTHS.items()) + [
+                    ("angle", ("Angle", None, None))
+                ]:
+                    text = preview.formula_of(feature, prop)
+                    if text:
+                        self.formulas[key] = text
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self._build_form()
@@ -132,7 +148,31 @@ class FlangePanel(Panel):
         field = DistanceField(value, unit=unit, on_change=self._value_typed)
         self._row(key, label, field.widget)
         setattr(self, "f_" + key, field)
+        # a parameter or a formula typed here drives the value (Fusion's value fields)
+        self.formula_inputs[key] = preview.FormulaInput(self, key, field)
         return field
+
+    # -- formulas typed in the fields (preview.FormulaInput) ----------------------------------
+    def formula_typed(self, key, text, value):
+        self.formulas[key] = text
+        self._changed(new_geometry=True)
+
+    def formula_cleared(self, key):
+        if key in self.formulas:
+            self.formulas[key] = ""
+            self._changed(new_geometry=True)
+
+    def formula_failed(self, key, message):
+        self.message.setText("⚠ %s" % message)
+
+    def _store_formulas(self):
+        """Put the formulas on the step's properties (an empty one removes it)."""
+        if self.target is None:
+            return
+        for key, text in self.formulas.items():
+            prop = "Angle" if key == "angle" else flange.LENGTHS.get(key, (None,))[0]
+            if prop:
+                preview.set_formula(self.target, prop, text)
 
     def _check(self, key, text, value):
         box = curve_pick.checkbox(text, value)
@@ -171,6 +211,12 @@ class FlangePanel(Panel):
         self._length("width", "Width", o["width"])
         self._length("distance1", "Distance 1", o["distance1"])
         self._length("width2", "Distance 2", o["width2"])
+        self.ref_fields = []
+        for i in (1, 2):
+            box = SelectionField(self, "ref%d" % i, "Select face or plane")
+            self._row("ref%d" % i, "Offset Object %d" % i, box.widget)
+            box.button.setObjectName("SciForgeFlange_ref%d_button" % i)
+            self.ref_fields.append(box)
         self.ov_radius = self._check(
             "override_bend_radius", "Bend Radius", o["override_bend_radius"]
         )
@@ -250,7 +296,12 @@ class FlangePanel(Panel):
                 keys |= {"operation"}
                 if self.operation_box.currentData() != "join":
                     keys.add("rule")
-        if self.kind == "contour":
+            elif self.owns_body:
+                keys.add("rule")
+        if self.kind == "contour" and self.attached is not None:
+            keys -= {"orientation"}  # the side that carries the sheet on
+            keys.add("override_bend_radius")
+        elif self.kind == "contour":
             keys |= {"distance", "direction", "flip", "override_bend_radius"}
             if o["direction"] == "two_sides":
                 keys.add("distance2")
@@ -266,6 +317,8 @@ class FlangePanel(Panel):
                 keys.add("width")
             elif o["width_type"] in ("two_sides", "two_offsets"):
                 keys |= {"distance1", "width2"}
+                if o["width_type"] == "two_offsets":
+                    keys |= {"ref1", "ref2"}
             keys |= {"override_bend_radius", "override_bend_relief", "override_corner_relief"}
             keys.add("override_corner3_relief")
             if o["override_bend_radius"]:
@@ -289,7 +342,17 @@ class FlangePanel(Panel):
             widget.setVisible(visible)
             if label is not None:
                 label.setVisible(visible)
-        self.mode.setText(MODE_TEXT[self.kind])
+        self.mode.setText(
+            "Contour flange on the edge of %s: it runs the whole edge, bent out of the sheet."
+            % (self._join_body().Label if self._join_body() is not None else "the body")
+            if self.kind == "contour" and self.attached is not None
+            else MODE_TEXT[self.kind]
+        )
+        offsets = self.options.get("width_type") == "two_offsets"
+        for key, word in (("distance1", 1), ("width2", 2)):
+            label = self.rows[key][0]
+            if label is not None:
+                label.setText(("Offset %d" if offsets else "Distance %d") % word)
         join = self.operation_box.model().item(2)
         if join is not None:
             join.setEnabled(self._join_body() is not None)
@@ -319,10 +382,17 @@ class FlangePanel(Panel):
         self.active = name
         self.field.set_active(name == "selection")
         self.object_field.set_active(name == "object")
+        for i, box in enumerate(self.ref_fields):
+            box.set_active(name == "ref%d" % (i + 1))
         if self.picker is not None:
             self.picker.paused = name != "selection"
 
     def clear_field(self, name):
+        if name in ("ref1", "ref2"):
+            self.offset_refs[int(name[3]) - 1] = None
+            self._refresh_picks()
+            self._changed()
+            return
         if name == "object":
             self.to_object = None
             self._refresh_picks()
@@ -401,6 +471,8 @@ class FlangePanel(Panel):
         for obj, short in picks:
             if self.active == "object":
                 self._object_clicked(obj, short)
+            elif self.active in ("ref1", "ref2"):
+                self._ref_clicked(obj, short, int(self.active[3]) - 1)
             elif short.startswith("Edge") and not extrude.is_sketch(obj):
                 self._edge_clicked(obj, short)
 
@@ -450,7 +522,28 @@ class FlangePanel(Panel):
             self.refs = []
         else:
             self.refs = [(sketch, n) for n in names]
+        self._check_attached()
         self._picks_changed()
+
+    def _check_attached(self):
+        """A contour drawn from the end of a sheet edge joins that edge (Fusion): Operation
+        Join, the Distance options hidden (it runs the whole edge)."""
+        self.attached = None
+        if self.kind != "contour" or not self.refs:
+            return
+        body = sheetmetal.find_sheet_body(self.doc, active=self.body)
+        if body is None:
+            return
+        base_obj = None
+        if self.target is not None and flange.owner_body(self.target) is body:
+            base_obj = self.target.BaseFeature
+        self.attached = flange.attachment(self.refs, body, base_obj)
+        if self.attached is not None and not self.editing:
+            self._quiet = True
+            try:
+                curve_pick.set_combo(self.operation_box, "join")
+            finally:
+                self._quiet = False
 
     def _edge_clicked(self, obj, short):
         body = curves.owner_body(obj)
@@ -495,6 +588,18 @@ class FlangePanel(Panel):
         self._refresh_picks()
         self._changed()
 
+    def _ref_clicked(self, obj, short, index):
+        """A Two Offsets reference: a flat face or a plane crossing the edge."""
+        if short and not short.startswith("Face"):
+            self.message.setText("⚠ Two Offsets: pick a flat face or a plane.")
+            return
+        if self.target is not None and obj is self.target:
+            obj = self.target.BaseFeature
+        self.offset_refs[index] = (obj, short)
+        self.activate("ref2" if index == 0 and self.offset_refs[1] is None else "selection")
+        self._refresh_picks()
+        self._changed()
+
     def _refresh_picks(self):
         if self.kind == "edge":
             text = "%d edge%s" % (len(self.refs), "" if len(self.refs) == 1 else "s")
@@ -508,6 +613,8 @@ class FlangePanel(Panel):
         self.object_field.set_text(
             "%s %s" % (self.to_object[0].Label, self.to_object[1]) if self.to_object else ""
         )
+        for box, ref in zip(self.ref_fields, self.offset_refs):
+            box.set_text("%s %s" % (ref[0].Label, ref[1]) if ref else "")
         if self.picker is not None:
             try:
                 keys = {(o.Name, s) for o, s in self.refs if self.kind == "base"}
@@ -556,6 +663,17 @@ class FlangePanel(Panel):
         self._changed(new_geometry=True)
         if (
             self.kind == "edge"
+            and self.options["width_type"] == "two_offsets"
+            and self.offset_refs == [None, None]
+            and self.active == "selection"
+        ):
+            self.activate("ref1")  # Two Offsets: the next clicks pick the two references
+            self.message.setText(
+                "Click the two faces or planes the width runs between (none: the offsets "
+                "count from the edge's ends)."
+            )
+        if (
+            self.kind == "edge"
             and self.options["extent"] == "to_object"
             and self.to_object is None
             and self.active != "object"
@@ -595,6 +713,7 @@ class FlangePanel(Panel):
                 if self.made_with and self.made_with[:2] == made_with[:2]:
                     body = flange.owner_body(self.target)
                     sheetmetal.make_sheet_metal_body(body, self.rule_name)
+                    self.target.touch()  # it reads the body's rule when it computes
                     self.made_with = made_with
                 else:
                     self._discard()
@@ -608,12 +727,27 @@ class FlangePanel(Panel):
                     operation=self.operation,
                     body=self._join_body(),
                     target=self.to_object,
+                    hide=False,  # the sketch stays in view while picking; OK hides it
+                    offset_refs=self.offset_refs,
                 )
                 self.made_with = made_with
             else:
-                flange.update(self.target, refs=self.refs, options=options, target=self.to_object)
+                if self.editing and self.owns_body:
+                    body = flange.owner_body(self.target)
+                    if sheetmetal.body_rule_name(body) != self.rule_name:
+                        from . import sheetmetal_rules
+
+                        sheetmetal_rules.set_body_rule(body, self.rule_name)
+                flange.update(
+                    self.target,
+                    refs=self.refs,
+                    options=options,
+                    target=self.to_object,
+                    offset_refs=self.offset_refs,
+                )
                 if not self.to_object:
                     self.target.Target = None
+            self._store_formulas()
             self.error = ""
         except (form.FormError, curves.CurveError, ValueError) as exc:
             self.error = str(exc)
@@ -648,18 +782,20 @@ class FlangePanel(Panel):
         if "Invalid" in list(getattr(self.target, "State", [])):
             return  # the message says why; no arrow on a flange that is not built
         try:
-            if self.kind == "edge" and self.options["extent"] == "distance":
+            if self.kind == "edge":
                 origin, direction = self._edge_arrow()
-                self.arrows["height"] = ArrowDragger(
-                    origin,
-                    direction,
-                    self.options["height"],
-                    5.0,
-                    on_drag=self._height_dragged,
-                    on_release=self._height_dragged,
-                )
-                self._attach_box("height")
-            elif self.kind == "contour":
+                if self.options["extent"] == "distance":
+                    self.arrows["height"] = ArrowDragger(
+                        origin,
+                        direction,
+                        self.options["height"],
+                        5.0,
+                        on_drag=self._height_dragged,
+                        on_release=self._height_dragged,
+                    )
+                    self._attach_box("height")
+                self._make_angle_handle()
+            elif self.kind == "contour" and self.attached is None:
                 origin, direction = self._contour_arrow()
                 self.arrows["distance"] = ArrowDragger(
                     origin,
@@ -707,7 +843,39 @@ class FlangePanel(Panel):
         )
         origin = frame.point(x, z, (t0 + t1) / 2.0)
         direction = frame.out * math.cos(a) + frame.up * math.sin(a)
+        # the bend's axis, for the angle handle: it turns `out` towards `up`
+        self._bend = (frame.point(xc, T + R, (t0 + t1) / 2.0), frame.out.cross(frame.up), frame.out)
+        self._bend_reach = R + T + 4.0
         return origin, direction
+
+    def _make_angle_handle(self):
+        """Fusion's angle manipulator on the bend: the ball turns about the bend's axis."""
+        from . import handles3d
+
+        center, axis, zero = self._bend
+        self.arrows["angle"] = handles3d.angle_handle(
+            center,
+            axis,
+            zero,
+            self._bend_reach,
+            self.options["angle"],
+            2.0,
+            on_drag=self._angle_dragged,
+            on_release=self._angle_dragged,
+        )
+        self._attach_box("angle")
+
+    @safe
+    def _angle_dragged(self, angle):
+        value = min(180.0, max(1.0, round(float(angle), 1)))
+        if self.formulas.get("angle"):
+            self.formulas["angle"] = ""
+        self._quiet = True
+        try:
+            self.f_angle.set_value(value)
+        finally:
+            self._quiet = False
+        self._changed()
 
     def _contour_arrow(self):
         edges = curves.refs_edges(self.refs)
@@ -730,15 +898,11 @@ class FlangePanel(Panel):
         )
 
     def _box_typed(self, key, text):
+        """A number, parameter or formula typed in the arrow's value box: as if typed in
+        the field."""
         if self._closed:
             return
-        field = getattr(self, "f_" + key)
-        try:
-            value = field.parse(text.strip().lstrip("="))
-        except ValueError as exc:
-            self.message.setText("⚠ " + str(exc))
-            return
-        field.take(value)
+        self.formula_inputs[key].take(text)
 
     @safe
     def _height_dragged(self, distance):
@@ -750,6 +914,8 @@ class FlangePanel(Panel):
 
     def _dragged(self, key, distance):
         value = max(0.1, abs(round(distance, 2)))
+        if self.formulas.get(key):
+            self.formulas[key] = ""  # dragging gives a plain value: the formula goes
         self._quiet = True
         try:
             getattr(self, "f_" + key).set_value(value)
@@ -904,6 +1070,8 @@ def _same_edge(obj, short, base):
 
 def _dragging(arrow):
     try:
+        if hasattr(arrow, "busy"):
+            return bool(arrow.busy())
         return bool(arrow.dragger.isActive.getValue())
     except Exception:
         return False

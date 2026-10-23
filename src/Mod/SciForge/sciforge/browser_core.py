@@ -342,7 +342,8 @@ def _component_nodes(by_component, parent, active_body, active_component, seen):
         node = _item(
             "component:",
             obj,
-            "new_component",
+            # a Sheet Metal component (sheetmetal_component.py) shows a bent sheet
+            "sm_component" if obj.get("sheet_metal_component") else "new_component",
             "component",
             active=name == active_component,
             children=children,
