@@ -845,6 +845,12 @@ class PatternPanel(Panel):
             self.operation_label = QtWidgets.QLabel("Operation")
             form.addRow(self.operation_label, self.operation)
             self.operation.currentIndexChanged.connect(self._typed)
+            # Join of a surface body stitches the copy to it (Fusion's Stitch Tolerance)
+            self.stitch_field = DistanceField(
+                self.options.get("stitch_tolerance", 1.0), on_change=lambda v: self._typed()
+            )
+            self.stitch_label = QtWidgets.QLabel("Stitch Tolerance")
+            form.addRow(self.stitch_label, self.stitch_field.widget)
 
     def _show_options(self):
         """Put self.options into the widgets (without reacting)."""
@@ -893,6 +899,20 @@ class PatternPanel(Panel):
             bodies = self.options["pattern_type"] == "bodies"
             self.operation.setVisible(bodies)
             self.operation_label.setVisible(bodies)
+            stitch = bodies and self._surface_join()
+            self.stitch_field.widget.setVisible(stitch)
+            self.stitch_label.setVisible(stitch)
+
+    def _surface_join(self):
+        """Mirror of a surface body with Operation Join: the Stitch Tolerance shows."""
+        try:
+            from . import surfmod
+
+            joined = self.operation.currentData() == "join"
+            picked = [o for o, _s in self.options.get("objects") or [] if o is not None]
+            return joined and bool(picked) and surfmod.is_surface_body(picked[0])
+        except Exception:
+            return False
 
     def _collect(self):
         options = self.options
@@ -909,6 +929,9 @@ class PatternPanel(Panel):
                 options[name] = box.currentData()
         if getattr(self, "circular_type", None) is not None:
             options["circular_type"] = self.circular_type.currentData()
+        if getattr(self, "stitch_field", None) is not None:
+            options["stitch_tolerance"] = max(self.stitch_field.value(), 1e-4)
+            self._update_visibility()
         options["compute"] = self.compute.currentData() or "optimized"
         for name in ("quantity", "quantity2"):
             spin = getattr(self, name, None)

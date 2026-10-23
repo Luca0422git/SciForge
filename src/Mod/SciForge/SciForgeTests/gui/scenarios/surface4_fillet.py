@@ -64,9 +64,7 @@ def type_radius():
 def preview_shown():
     s4.settle()
     h.check("the preview rounds the corner", s4.faces(s["box"]) == 6, s4.faces(s["box"]))
-    h.check(
-        "preview area", s4.near(st.area(s["box"]), fillet_area(3), 1e-5), st.area(s["box"])
-    )
+    h.check("preview area", s4.near(st.area(s["box"]), fillet_area(3), 1e-5), st.area(s["box"]))
     h.shot("1-fillet")
     st.ok()
 

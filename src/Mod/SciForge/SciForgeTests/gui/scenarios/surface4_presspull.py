@@ -119,7 +119,9 @@ def q_on_edge():
 def fillet_on_edge():
     s4.settle()
     p = s4.panel()
-    h.check("Press Pull on a surface edge is its Fillet", p is not None and p.kind == "surface_fillet")
+    h.check(
+        "Press Pull on a surface edge is its Fillet", p is not None and p.kind == "surface_fillet"
+    )
     h.check("with the edge", p is not None and len(p.picked) == 1, p and p.picked)
     st.esc()
 

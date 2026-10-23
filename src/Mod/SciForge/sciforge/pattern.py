@@ -87,6 +87,8 @@ DEFAULTS = {
     # mirror
     "plane": None,
     "operation": "new_body",  # Mirror of a body: "new_body" or "join"
+    # Join of a surface body: the copies are stitched, gaps up to this closed (surface-4)
+    "stitch_tolerance": 1.0,
     # pattern on path
     "path": None,
     "orientation": "identical",  # or "path": copies turn with the path
@@ -1437,6 +1439,12 @@ def _update_engine(obj, kind, options):
     _enum_set(obj, "ComputeOption", options.get("compute", "optimized"))
     start = options.get("start_point")
     _set(obj, "StartPoint", -1.0 if start is None else float(start))
+    tolerance = float(options.get("stitch_tolerance", 1.0) or 1.0)
+    if (
+        "StitchTolerance" in obj.PropertiesList
+        and abs(obj.StitchTolerance.Value - tolerance) > 1e-12
+    ):
+        obj.StitchTolerance = tolerance
     for prop, key in (
         ("Direction", "direction"),
         ("Direction2", "direction2"),
@@ -1952,6 +1960,10 @@ def read(feature):
         options = read_body_pattern(feature)
     elif feature.TypeId == ENGINE:
         options = read_engine(feature)
+        if kind == "mirror" and options["pattern_type"] == "bodies":
+            options["operation"] = "join"  # a mirrored surface body stitched (surface-4)
+        if "StitchTolerance" in feature.PropertiesList:
+            options["stitch_tolerance"] = feature.StitchTolerance.Value
     else:
         options = _read_native(feature, kind, meta)
         options["compute"] = meta.get("compute", "identical")

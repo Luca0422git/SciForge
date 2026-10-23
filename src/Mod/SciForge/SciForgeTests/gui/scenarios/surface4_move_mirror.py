@@ -82,6 +82,13 @@ def stitched_preview():
     h.check("one surface", len(body.Shape.Shells) == 1, len(body.Shape.Shells))
     h.check("area 2800", st.near(st.area(body), 2800.0), st.area(body))
     h.check("only the top is open (6 edges)", free_edges(body) == 6, free_edges(body))
+    p = ps.panel()
+    h.check(
+        "Stitch Tolerance shown, 1 mm",
+        p is not None
+        and p.stitch_field.widget.isVisible()
+        and st.near(p.stitch_field.value(), 1.0),
+    )
     h.shot("1-mirror-join")
     h.task_button("OK")
 
@@ -103,6 +110,35 @@ def undone():
 
 def redone():
     h.check("redo: 2800", st.near(st.area(s["half"]), 2800.0), st.area(s["half"]))
+    titles = [t for t in st.timeline_titles() if t.startswith("Mirror")]
+    h.check("double-clicked the Mirror", st.double_click_timeline(titles[0] if titles else ""))
+
+
+def mirror_edit_open():
+    p = ps.panel()
+    h.check("the Mirror dialog on it", p is not None and p.editing)
+    if p is None:
+        return
+    h.check("Join reads back", p.operation.currentData() == "join", p.operation.currentData())
+    h.check("Stitch Tolerance shown", p.stitch_field.widget.isVisible())
+    bs.type_value(p.stitch_field.widget, "0.5")
+
+
+def mirror_edit_ok():
+    h.idle_step()()
+    h.task_button("OK")
+
+
+def mirror_edited():
+    from sciforge import pattern
+
+    found = [o for o in doc().Objects if pattern.kind_of(o) == "mirror"]
+    h.check(
+        "Stitch Tolerance 0.5 kept",
+        found and abs(found[0].StitchTolerance.Value - 0.5) < 1e-9,
+        found and found[0].StitchTolerance,
+    )
+    h.check("still 2800, one surface", st.near(st.area(s["half"]), 2800.0))
     Gui.Selection.clearSelection()
     h.fit()
     h.click(V(15, 0, 5))
@@ -138,7 +174,9 @@ def move_ok():
 
 def moved():
     bb = s["half"].Shape.BoundBox
-    h.check("moved 50 along X: x 20 .. 80", abs(bb.XMin - 20) < 1e-6 and abs(bb.XMax - 80) < 1e-6, bb)
+    h.check(
+        "moved 50 along X: x 20 .. 80", abs(bb.XMin - 20) < 1e-6 and abs(bb.XMax - 80) < 1e-6, bb
+    )
     Gui.Selection.clearSelection()
     h.fit()
     h.click(V(65, 0, 5))
@@ -222,6 +260,9 @@ h.run(
         mirrored,
         undone,
         redone,
+        mirror_edit_open,
+        mirror_edit_ok,
+        mirror_edited,
         press_m,
         move_x,
         type_x,
