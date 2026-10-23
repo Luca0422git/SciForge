@@ -134,6 +134,17 @@ def delete_design_rule(doc, name):
         raise ValueError("A design keeps at least one rule.")
     if sheetmetal.active_rule_name(doc) == name:
         raise ValueError("'%s' is the active rule: make another rule active first." % name)
+    # a Sheet Metal component's own active rule is in use too (its next flange starts with it)
+    owners = [
+        o.Label
+        for o in doc.Objects
+        if o.TypeId == "App::Part" and getattr(o, sheetmetal.RULE_PROP, "") == name
+    ]
+    if owners:
+        raise ValueError(
+            "'%s' is the active rule of %s: make another rule active there first."
+            % (name, ", ".join(owners))
+        )
     sheetmetal.delete_rule(doc, name)
 
 

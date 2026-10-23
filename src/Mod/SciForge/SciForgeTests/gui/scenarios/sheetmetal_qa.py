@@ -9,7 +9,10 @@ plate as it was. Two edges that meet, Height 15: the mitred corner; OK. Save, cl
 the steps and their view providers come back, the same solid after a recompute; double-click
 "Flange 2": its two edges and Height 15; Height 20 changes the part, Cancel puts it back
 with no undo step. Sheet Metal Rules after the reopen: Steel (mm) Thickness 2 recomputes the
-whole part (2 mm, still one valid solid); Undo takes it back to 1 mm, Redo to 2 mm.
+whole part (2 mm, still one valid solid); Undo takes it back to 1 mm, Redo to 2 mm. A later
+Flange on the two plate edges next to the earlier flanges (their side faces run on into the
+flanges' end faces) is taken. New Component, Type Sheet Metal with Aluminum (mm): deleting
+that rule in Sheet Metal Rules is refused (it is the component's active rule).
 """
 
 import os
@@ -122,7 +125,9 @@ def empty_rules_esc_editor():
 
 def empty_rules_back():
     d = sm.rules_dialog()
-    h.check("Esc in the editor goes back to the lists", d is not None and d.pages.currentIndex() == 0)
+    h.check(
+        "Esc in the editor goes back to the lists", d is not None and d.pages.currentIndex() == 0
+    )
     h.check("the edit was not saved", not _doc().Objects, [o.Name for o in _doc().Objects])
 
 
@@ -382,6 +387,97 @@ def rule_redone():
     h.shot("1-redone")
 
 
+# -- later flanges on the edges next to the earlier ones -------------------------------------
+def flange_later():
+    h.fit()
+    h.click_empty()
+    h.ribbon("Flange")
+
+
+def click_front_edge():
+    h.fit()
+    h.check("clicked the plate's front edge", h.click_edge(V(25, 0, 2)))
+
+
+def click_left_edge():
+    sm.settle()
+    h.check("clicked the plate's left edge", h.click_edge(V(0, 13, 2)))
+
+
+def later_flanges():
+    sm.settle()
+    p = sm.panel()
+    # their side faces run on into the earlier flanges' end faces: still sheet edges
+    h.check(
+        "two more edges taken", p is not None and len(p.refs) == 2, (p and p.refs, sm.message())
+    )
+    h.check("no refusal", not sm.message(), sm.message())
+    body = s["body"]
+    h.check("more walls", sm.volume(body) > s["v2"] + 100.0, (sm.volume(body), s["v2"]))
+    h.check("one valid solid", body.Shape.isValid() and len(body.Shape.Solids) == 1)
+
+
+def ok_later():
+    sm.ok()
+
+
+def later_done():
+    h.check("dialog closed", sm.panel() is None)
+    titles = sm.timeline_titles()
+    h.check("Flange 3 in the timeline", "Flange 3" in titles, titles)
+    h.shot("2-four-walls")
+
+
+# -- a Sheet Metal component's rule cannot be deleted ----------------------------------------
+def new_component():
+    sm.menu("CREATE", "New Component")
+
+
+def component_sheet_metal():
+    from sciforge import components_ui
+
+    from SciForgeTests.gui import dialog_input as ui
+
+    p = components_ui.NewComponentPanel.last
+    h.check("New Component open", p is not None and not p._closed)
+    if p is None:
+        return
+    h.check("chose Sheet Metal", ui.choose(p.type_box, "Sheet Metal"))
+    h.check("chose Aluminum", ui.choose(p.rule_box, "Aluminum (mm) (Library)"))
+
+
+def ok_component():
+    sm.ok()
+
+
+def rules_with_component():
+    h.ribbon("Sheet Metal Rules")
+
+
+def delete_component_rule():
+    d = sm.rules_dialog()
+    h.check("Sheet Metal Rules open", d is not None)
+    sm.pick_rule("design", "Aluminum (mm)")
+    sm.click_rules_button("design_delete")
+
+
+def component_rule_kept():
+    from sciforge import sheetmetal
+
+    h.check(
+        "refused: the component's rule", "active rule" in sm.rules_message(), sm.rules_message()
+    )
+    h.check("still in the design", sheetmetal.find_rule(_doc(), "Aluminum (mm)") is not None)
+
+
+def close_rules_2():
+    sm.click_rules_button("close")
+
+
+def rules_closed_2():
+    h.check("closed", sm.rules_dialog() is None)
+
+
 h.run(
     "sheetmetal_qa",
     [
@@ -437,5 +533,19 @@ h.run(
         rule_undone,
         redo_rule,
         rule_redone,
+        flange_later,
+        click_front_edge,
+        click_left_edge,
+        later_flanges,
+        ok_later,
+        later_done,
+        new_component,
+        component_sheet_metal,
+        ok_component,
+        rules_with_component,
+        delete_component_rule,
+        component_rule_kept,
+        close_rules_2,
+        rules_closed_2,
     ],
 )

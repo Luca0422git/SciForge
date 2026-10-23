@@ -1,0 +1,75 @@
+{
+  "id": "sheetmetal_edge_flange_adjacent_later",
+  "title": "A second Flange on the plate edge next to an earlier edge flange (its side face runs on into the first flange's end face)",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    },
+    {
+      "op": "sf_flange",
+      "id": "f3",
+      "kind": "edge",
+      "edges": [
+        [
+          25,
+          30,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2229.783170,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      11
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "the L bracket 1440 + 30 (9 + 3 pi / 4); the 50 mm edge is 48 long after it (the first bend cut the plate back R + T = 2): its plate strip 48 x 2 x 1 goes (96) and 48 (9 + 3 pi / 4) comes (a quarter ring of mean radius 1.5 and a 9 mm wall, Inside / Inner Faces / H 10)"
+  }
+}

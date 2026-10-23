@@ -479,6 +479,29 @@ def _extent(face, direction):
     return max(values) - min(values) if values else 0.0
 
 
+def _inside(shape, point):
+    for solid in shape.Solids:
+        try:
+            if solid.isInside(point, 1e-7, True):
+                return True
+        except Exception:
+            pass
+    return False
+
+
+def _sheet_thick_at(shape, mid, n_face, n_side, thickness):
+    """True when the solid is `thickness` thick under the face of outward normal n_face at
+    the edge point `mid` (just inside the side face of outward normal n_side): material
+    half a thickness in, none just past the thickness. A side face that an earlier flange's
+    end face merged with (coplanar) is wider than the thickness, so the faces' extents
+    alone cannot tell a sheet edge then."""
+    eps = min(1e-3, thickness / 10.0)
+    inward = mid - n_side * eps
+    return _inside(shape, inward - n_face * (thickness / 2.0)) and not _inside(
+        shape, inward - n_face * (thickness + eps)
+    )
+
+
 def edge_frame(shape, edge_name, thickness, flip=False):
     """The EdgeFrame of a sheet edge `edge_name` ("EdgeN") of `shape`: a straight edge where
     a top or bottom face of the sheet meets a side face square to it whose width is the
@@ -506,6 +529,14 @@ def edge_frame(shape, edge_name, thickness, flip=False):
         n = _normal_at(face, mid)
         if abs(_extent(other, n) - thickness) <= LINEAR_TOL:
             candidates.append((face.Area, i, n))
+    if not candidates:
+        # the side face may run on into an earlier flange's end face (one coplanar face after
+        # the fuse): a flange on the plate's edge next to it is still a sheet edge (QA)
+        for i, face in enumerate(faces):
+            n = _normal_at(face, mid)
+            n_side = _normal_at(faces[1 - i], mid)
+            if abs(n.dot(n_side)) < 1e-6 and _sheet_thick_at(shape, mid, n, n_side, thickness):
+                candidates.append((face.Area, i, n))
     if not candidates:
         raise FormError(
             "%s is not on the sheet's %.3g mm thickness: pick a long edge of the top or bottom "
