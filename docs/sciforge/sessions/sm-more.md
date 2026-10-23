@@ -117,3 +117,71 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 Corner relief where bend lines meet with Center (Start / End work), Relief Remnant, Corner Closure's weld relief shapes,
 bend transitions and 3-bend corners, Lofted Flange inside the Flange dialog and with real bends
 between facets (so a Brake Form lofted flange has no flat pattern yet).
+
+## QA pass (branch `sf/sm-more-qa`, 2026-10-23, independent QA)
+
+Ran the builder's 8 scenarios, the unit tests (1906 OK) and the golden models (505 + 2 known
+xfail) on `sf/sm-more` first: all passed. Then probed what Luca would do next, headless
+(FreeCADCmd + the golden Builder) and through the GUI, and fixed what broke:
+
+- **Bend along a diagonal line was always refused** ("would run the sheet into itself"). Two
+  causes in `sheetmetal_bend.py`: `_moving_spans` compared the moving side's front with the
+  zone's whole extent along the line, so a zone whose ends are slanted looked wider than what
+  moves (a tab); and `_bend_zone_solid` pushed the corners of the zone's missing triangles
+  square to the zone's sides, so the plug no longer followed the slanted outline. A tab is now
+  a moving side narrower than the zone's own slices, and corners slide along the outline.
+  Golden `sheetmetal_smm_bend_diagonal` (analytic); the unfolder lays it flat to the plate.
+- **Join by Bend of an upright below the plate, or of edges overlapping only in part, was
+  refused** ("would split the body"): the extension pieces were placed along the bend's axis
+  from the wrong edge's start. Picking a plate's far edge (the bend would remove the whole
+  plate) is now refused with what to pick. Goldens `sheetmetal_smm_join_bend_below` /
+  `_overlap` (analytic).
+- **A first click on another sheet metal body was silently ignored** by every sm-more dialog
+  (they open on the active body). With nothing picked yet it now moves the dialog to that body
+  (`SmPanel._other_sheet` / `_move_to`, using PickPanel's `switch_body`): Fusion's First Edge
+  of Join by Bend may be on any body. Scenario `smmore_qa_join_order` (fails without the fix).
+- **Lofted Flange between two straight lines** on separate planes was refused as "in one
+  plane" (two parallel lines always share a plane): now a flat slanted flange. Golden
+  `sheetmetal_smm_lofted_lines` (analytic).
+- **Lofted Flange Brake Form, Face Number 1 or 2 on a circle** made a pyramid / wedge
+  silently: a full circle keeps at least 3 facets (unit test).
+- **Lofted Flange edit, Operation**: Join edited to New Body dropped the body's earlier
+  shape; New Body edited to Join stayed its own body. The Operation is greyed in an edit.
+- **Corner Closure, Extend Aligned off on a corner mitred to the gap** was refused while on
+  built the relief cut: both now cut the relief. Golden `..._mitred_square`.
+- **Change Parameters** listed values the step's choices do not use (a Rolled hem's Gap, a
+  rule gap's Gap, a rule radius's Bend Radius): hidden like Shell / Flange do (`show_used`).
+- **Bend's Corner Relief checkbox** changed nothing: greyed with the reason.
+- **Bend across a plate's slanted end** got tab reliefs cut: a tab is now recognised by a
+  concave corner of the outline in the bend's band (`_concave_in_band`). Golden
+  `sheetmetal_smm_bend_slanted_end` (analytic).
+- **Corner Closure, Extend Aligned off on 60 degree flanges** built ends meeting their flanges in
+  a sharp fold (no flat pattern): refused with the reason (`_lays_flat_any`). A Round / Square
+  relief there now says why it cannot be cut. Golden `sheetmetal_smm_corner_closure_60`.
+- A dialog that moves to another body takes that body's rule defaults for untouched values.
+- **Hem on a flanged plate's free edge was refused**: after an edge flange the plate's side
+  face runs on into the flange's side (refine merges them), and `edge_frame` measured the whole
+  face. It now also accepts a side as thick as the sheet where the edge is. Golden
+  `sheetmetal_smm_hem_beside_flange`.
+
+New scenarios: `smmore_qa_reopen` (save / reopen of Hem, two-set Fillet, Corner Closure, Join
+by Bend, Lofted Flange; each edited from the timeline, a value changed, Cancel / Esc leave
+values and part as they were; Join deleted from the timeline brings the other body back,
+Ctrl+Z hides it again), `smmore_qa_refusals` (empty design for every command, the SOLID
+Fillet fallback, Join of two thicknesses, a Lofted Flange's new body gone after Esc),
+`smmore_qa_join_order`.
+
+Facts: sm-flat's unfolder still raises a raw "Wire is not closed" on some bent parts from one
+side (a bend across a slanted plate end: from both sides, though the part is valid and its
+volume exact) - a note for sm-flat. The golden runner's `SCIFORGE_GOLDEN_FILTER` runs a subset; a check step's `expect`
+needs its own `source`. Comparing a step's property strings before / after Cancel must skip
+shapes, `ShapeMaterial` and `SciForgePicks` (rebuilt with float noise).
+
+Final QA run on `sf/sm-more-qa` (10:02-10:18 UTC): the 11 smmore_* scenarios PASS (bend 44,
+bend_two 18, bend_tab 20, hem 40, join 25, corner 37, round 26, lofted 27, qa_reopen 92,
+qa_refusals 60, qa_join_order 21), the SHEET METAL ribbon sweep PASS (109 checks), `--only base`
+PASS (unit 1906 OK / 9 skipped; golden 513 pass + 2 known xfail; smoke, journey, restart).
+
+Left (parity doc Known gaps 13-15 and the builder's): Corner Closure's default relief is not
+the rule's (Fusion's "Use rule defaults"), Hem's Override Rules has no bend relief override,
+a Brake Form lofted flange still has no flat pattern, Join by Bend reads the other body live.

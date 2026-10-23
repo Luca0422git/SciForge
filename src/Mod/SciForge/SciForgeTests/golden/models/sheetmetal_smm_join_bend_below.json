@@ -1,0 +1,82 @@
+{
+  "id": "sheetmetal_smm_join_bend_below",
+  "title": "Join by Bend: an upright plate below a flat one (their edges run opposite ways; the extensions were once put 40 mm off)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "YZ",
+      "offset": 60,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            -45,
+            40,
+            -5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "base",
+      "profile": "s2"
+    },
+    {
+      "op": "sf_sm_join_bend",
+      "id": "j1",
+      "first": [
+        60,
+        20,
+        -5
+      ],
+      "other": "f1",
+      "second": [
+        50,
+        20,
+        1
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 4214.24778,
+    "solids": 1,
+    "bbox": [
+      0.0,
+      0.0,
+      -45.0,
+      61.0,
+      40.0,
+      1.0
+    ],
+    "source": "analytic",
+    "note": "mid-planes meet at (60.5, 0.5); a bend of centre radius 1.5 is tangent 1.5 from there: the flat plate is extended 9 mm (to x 59), the upright 4 mm up (from z -5 to -1), plus the bent quarter ring (pi/2 x 40 x 1.5)"
+  }
+}

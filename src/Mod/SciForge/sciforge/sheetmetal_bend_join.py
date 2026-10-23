@@ -95,12 +95,21 @@ def join_shapes(shape_a, edge_a, shape_b, edge_b, thickness, radius, thickness_b
         reach = (to3(tangent2) - mid).dot(into)  # > 0: the tangent line is inside the plate
         side = normal.cross(into)
         if reach > 1e-6:
+            depth = max((v.Point - mid).dot(into) for v in shape.Vertexes)
+            if reach >= depth - 1e-6:
+                raise sb.SheetMetalError(
+                    "From this edge the bend would cut away the whole plate: pick the edges "
+                    "where the two plates come closest to each other."
+                )
             cut = sb.frame_box(
                 mid, into, side, normal, -big, reach, -big, big, -thickness, thickness
             )
             return shape.cut(cut)
         if reach < -1e-6:
-            start = mid + into * reach
+            # a0 / a1 are measured along the bend's axis from `origin` (the first edge's
+            # start), not from this edge's start: the two edges' starts may be at different
+            # places along the axis (the edges run opposite ways, or overlap only in part)
+            start = mid + into * reach - d * (mid - origin).dot(d)
             corners = [
                 start + d * a0 + normal * (thickness / 2.0),
                 start + d * a1 + normal * (thickness / 2.0),
@@ -169,6 +178,11 @@ class JoinBendFeature:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        show_used(obj)
+
+    def onChanged(self, obj, prop):
+        if prop == "UseRuleRadius":
+            show_used(obj)
 
     def execute(self, obj):
         try:
@@ -185,6 +199,14 @@ class JoinBendFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def show_used(obj):
+    """Bend Radius is shown (property editor, Change Parameters) only when it is used."""
+    try:
+        obj.setEditorMode("BendRadius", 2 if obj.UseRuleRadius else 0)
+    except Exception:
+        pass
 
 
 def build(obj):

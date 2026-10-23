@@ -255,7 +255,9 @@ def closure_shape(
     else:
         raise sb.SheetMetalError("Alignment must be Symmetric Gap or Overlap.")
     pieces = [p for p in pieces if not p.isNull() and p.Volume > 1e-9]
-    if not pieces:
+    if not pieces and relief not in ("trim_to_bend",) + CUT_RELIEFS:
+        # a corner already closed to this gap (two flanges mitred by Flange) can still get
+        # its relief: only a Tear there changes nothing
         raise sb.SheetMetalError("The corner is already closed this far; nothing to add.")
     size = relief_size if relief_size is not None else options.get("relief_size")
     size = float(size or 4 * thickness)
@@ -268,6 +270,16 @@ def closure_shape(
     closed = sb.one_solid(merged, "This corner closure")
     if relief == "trim_to_bend":
         closed = trim_to_bend(closed, fd, fs, corner, thickness)
+    if not aligned and any((way[id(fr)] - fr["out"]).Length > 1e-6 for fr in (fd, fs)):
+        # flanges not square to each other: an end taken square toward the other flange meets
+        # its own flange in a sharp fold, which the flat pattern cannot lay flat (QA)
+        reason = _lays_flat_any(closed, thickness, k_factor)
+        if reason:
+            log("corner closure, Extend Aligned off: does not lay flat: %s" % reason)
+            raise sb.SheetMetalError(
+                "With Extend Aligned off these flange ends would meet their flanges in a sharp "
+                "fold, which cannot be laid flat: turn Extend Aligned on."
+            )
     if relief in CUT_RELIEFS and alignment != "overlap":
         try:
             closed = corner_relief(
@@ -383,6 +395,27 @@ def _flat_bases(solid, line_dir, thickness):
     return found
 
 
+def _lays_flat_any(solid, thickness, k_factor):
+    """None when the unfolder lays the solid flat from one of its two largest sheet faces
+    (any orientation), else the reason."""
+    from . import sheetmetal_unfold as uf
+
+    faces = [
+        ("Face%d" % i, face)
+        for i, face in enumerate(solid.Faces, start=1)
+        if sb.is_plane(face) and sb.face_thickness(solid, face, thickness)
+    ]
+    faces.sort(key=lambda item: -item[1].Area)
+    reason = "no flat sheet left"
+    for name, _face in faces[:2]:
+        try:
+            uf.unfold(solid, name, k_factor)
+            return None
+        except Exception as exc:
+            reason = str(exc)
+    return reason
+
+
 def _lays_flat(solid, line_dir, thickness, k_factor):
     """None when the unfolder lays the solid flat from one of its two largest sheet faces
     (top or bottom), else the reason."""
@@ -420,7 +453,13 @@ def corner_relief(
     bases = _flat_bases(solid, line_dir, thickness)
     base = bases[0] if bases else None
     if base is None:
-        raise sb.SheetMetalError("No flat sheet joins the two flanges' bends: no relief to cut.")
+        # the corner line is not square to a flat sheet: no sheet joins the bends, or the
+        # flanges are bent at another angle than 90 degrees (SciForge cuts the relief only
+        # where the corner line stands square to the sheet)
+        raise sb.SheetMetalError(
+            "A Round or Square relief can be cut only where both flanges stand square (90°) on "
+            "one flat sheet: use Trim To Bend or Tear at this corner."
+        )
     try:
         result = uf.unfold(solid, base[0], k_factor)
     except uf.UnfoldError as exc:
@@ -560,6 +599,11 @@ class CornerClosureFeature:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        show_used(obj)
+
+    def onChanged(self, obj, prop):
+        if prop in ("Alignment", "UseRuleGap", "Relief", "UseRuleRelief"):
+            show_used(obj)
 
     def execute(self, obj):
         try:
@@ -576,6 +620,23 @@ class CornerClosureFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def show_used(obj):
+    """Only the values the step's choices use are shown (property editor, the timeline's
+    Change Parameters), like the dialog's rows: a Gap typed there while the rule's gap is
+    used changed nothing."""
+    try:
+        overlap = str(obj.Alignment) == core.CLOSURE_LABELS["overlap"]
+        cut = _key(str(obj.Relief), core.CLOSURE_RELIEF_LABELS) in CUT_RELIEFS
+        obj.setEditorMode("Gap", 2 if obj.UseRuleGap else 0)
+        obj.setEditorMode("Overlap", 0 if overlap else 2)
+        obj.setEditorMode("FlipOverlap", 0 if overlap else 2)
+        obj.setEditorMode("ReliefPlacement", 0 if cut else 2)
+        obj.setEditorMode("UseRuleRelief", 0 if cut else 2)
+        obj.setEditorMode("ReliefSize", 0 if cut and not obj.UseRuleRelief else 2)
+    except Exception:
+        pass
 
 
 def _key(label, table):

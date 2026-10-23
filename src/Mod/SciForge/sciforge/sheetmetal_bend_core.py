@@ -503,10 +503,16 @@ FACET_DEFAULTS = {
 def facets_for_arc(radius, sweep_deg, control, value):
     """How many straight facets replace an arc of this radius and sweep (Brake Form): the
     fewest that keep the chord within the tolerance / the angle per facet / the facet width,
-    or the number asked for. At least one."""
+    or the number asked for. At least one, and at least three for a full circle (one or two
+    "facets" would flatten the circle to a point or a line)."""
     sweep = abs(math.radians(sweep_deg))
     if sweep < 1e-9 or radius <= 0:
         return 1
+    least = 3 if sweep >= 2.0 * math.pi - 1e-6 else 1
+    return max(least, _facets(radius, sweep, control, value))
+
+
+def _facets(radius, sweep, control, value):
     if control == "facet_number":
         return max(1, int(round(value)))
     if control == "facet_angle":

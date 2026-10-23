@@ -1,0 +1,103 @@
+{
+  "id": "sheetmetal_smm_corner_closure_60",
+  "title": "Corner Closure (Symmetric Gap, rule gap, Trim To Bend) of two edge flanges bent 60 degrees at a notched corner",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              100,
+              0
+            ],
+            [
+              100,
+              55
+            ],
+            [
+              95,
+              55
+            ],
+            [
+              95,
+              60
+            ],
+            [
+              0,
+              60
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          100,
+          20,
+          1
+        ]
+      ],
+      "options": {
+        "height": 20,
+        "angle": 60
+      }
+    },
+    {
+      "op": "sf_flange",
+      "id": "f3",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          60,
+          1
+        ]
+      ],
+      "options": {
+        "height": 20,
+        "angle": 60
+      }
+    },
+    {
+      "op": "sf_sm_corner_closure",
+      "id": "c1",
+      "dominant": [
+        105.43301270189221,
+        55.0,
+        9.410254037844386
+      ],
+      "submissive": [
+        95.0,
+        65.43301270189221,
+        9.410254037844386
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 9333.2142,
+    "solids": 1,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4 (QA); the result lays flat with sm-flat's unfolder (checked by hand: 9306.24 flat). Extend Aligned off on this corner is refused: its ends would meet the flanges in a sharp fold"
+  }
+}

@@ -206,8 +206,39 @@ def edge_frame(shape, edge_name, thickness, tol=1e-3):
         vals = [v.Point.dot(direction) for v in face.Vertexes]
         return max(vals) - min(vals)
 
-    a_side = abs(extent(a, nb) - thickness) < tol
-    b_side = abs(extent(b, na) - thickness) < tol
+    mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
+    along_edge = unit(edge.Vertexes[-1].Point - edge.Vertexes[0].Point)
+
+    def thick_here(face, direction):
+        """The side face is as thick as the sheet at the edge: the whole face (a plain side),
+        or where the edge is (a side that runs on into a flange's side, merged into one face
+        with it: the sheet's outline next to a flange)."""
+        if abs(extent(face, direction) - thickness) < tol:
+            return True
+        try:
+            # from the edge across the side face, away from the other (top) face, whose
+            # outward normal `direction` is
+            inward = direction * -1.0
+            half = mid + inward * (0.5 * thickness)
+            far = mid + inward * thickness
+            beyond = mid + inward * (thickness + 10.0 * tol)
+            if not face.isInside(half, 1e-6, True) or face.isInside(beyond, 1e-6, False):
+                return False
+            # the far side is the sheet's other face: an edge of it lies there, along the edge
+            for other in face.Edges:
+                if not isinstance(other.Curve, (Part.Line, Part.LineSegment)):
+                    continue
+                d = other.Vertexes[-1].Point - other.Vertexes[0].Point
+                if d.Length < 1e-9 or abs(abs(unit(d).dot(along_edge)) - 1.0) > 1e-6:
+                    continue
+                if other.distToShape(Part.Vertex(far))[0] < tol:
+                    return True
+            return False
+        except Exception:
+            return False
+
+    a_side = thick_here(a, nb)
+    b_side = thick_here(b, na)
     if a_side and b_side:
         top, side = (a, b) if a.Area >= b.Area else (b, a)
     elif b_side:
@@ -371,10 +402,71 @@ def _bend_zone_solid(
     circle.XAxis = xdir
     surface = Part.Cylinder(circle)
 
-    def to_uv(p):
+    def sa(p):
         rel = p - origin
-        s = rel.dot(across)
-        a = rel.dot(along)
+        return rel.dot(across), rel.dot(along)
+
+    def on_boundary(p):
+        s, a = sa(p)
+        return (abs(s - s0) < 1e-6 or abs(s - s1) < 1e-6, abs(a - a0) < 1e-6 or abs(a - a1) < 1e-6)
+
+    def boundary_edge(edge):
+        """An edge of the zone's own rectangle (it lies on one of its four sides)."""
+        if not isinstance(edge.Curve, (Part.Line, Part.LineSegment)):
+            return False
+        ends = [sa(v.Point) for v in edge.Vertexes]
+        for k, lo, hi in ((0, s0, s1), (1, a0, a1)):
+            for side in (lo, hi):
+                if all(abs(e[k] - side) < 1e-6 for e in ends):
+                    return True
+        return False
+
+    def pushed_corners(wire):
+        """Where the piece's corners on the zone's sides go so its plug reaches `margin` past
+        the slab: a corner where the outline meets a side slides along the outline (a slanted
+        outline keeps its slope, so the cut follows it exactly); the rectangle's own corners
+        and the rest move straight out."""
+        edges = list(wire.OrderedEdges)
+        out = {}
+        for i, edge in enumerate(edges):
+            nxt = edges[(i + 1) % len(edges)]
+            shared = [
+                v.Point
+                for v in edge.Vertexes
+                if any((v.Point - w.Point).Length < 1e-7 for w in nxt.Vertexes)
+            ]
+            if not shared:
+                continue
+            p = shared[0]
+            on_s, on_a = on_boundary(p)
+            if not (on_s or on_a):
+                continue
+            free = [e for e in (edge, nxt) if not boundary_edge(e)]
+            if len(free) != 1 or not isinstance(free[0].Curve, (Part.Line, Part.LineSegment)):
+                continue
+            far = [v.Point for v in free[0].Vertexes if (v.Point - p).Length > 1e-7]
+            if not far:
+                continue
+            d = unit(p - far[0])
+            s, a = sa(p)
+            reach_dir = 0.0
+            for on, value, lo, normal_dir in ((on_s, s, s0, across), (on_a, a, a0, along)):
+                if on:
+                    sign = -1.0 if abs(value - lo) < 1e-6 else 1.0
+                    reach_dir = max(reach_dir, d.dot(normal_dir) * sign)
+            if reach_dir < 0.05:  # the outline runs nearly along the side: push straight out
+                continue
+            out[(round(p.x, 6), round(p.y, 6), round(p.z, 6))] = p + d * (margin / reach_dir)
+        return out
+
+    slid = {}
+
+    def to_uv(p):
+        key = (round(p.x, 6), round(p.y, 6), round(p.z, 6))
+        if key in slid:
+            s, a = sa(slid[key])
+            return ((s - s0) / rn, (origin + along * a - axis_pt).dot(axis))
+        s, a = sa(p)
         if abs(s - s0) < 1e-6:
             s -= margin
         elif abs(s - s1) < 1e-6:
@@ -389,6 +481,8 @@ def _bend_zone_solid(
     for piece in pieces:
         if len(piece.Wires) != 1:
             raise SheetMetalError("The bend zone holds an island inside a hole; move the line.")
+        slid.clear()
+        slid.update(pushed_corners(piece.OuterWire))
         edges = [_map_edge(e, to_uv, surface) for e in piece.OuterWire.OrderedEdges]
         mapped = Part.Face(surface, Part.Wire(edges))
         plug = mapped.makeOffsetShape(reach, 1e-6, fill=True)
@@ -413,33 +507,112 @@ def _extent(shape, along):
     return lo, hi
 
 
-def _moving_spans(result, zone, origin, along, across, normal, s1, thickness, big):
-    """Where the sheet goes on past the bend zone, along the line: [(m0, m1)] measured from
-    `origin`, or None when that covers the whole zone (a bend right across the sheet)."""
-    if zone.isNull() or zone.Volume < 1e-9:
-        return None
-    step = min(0.05, thickness / 4.0)
-    cap = result.common(
-        frame_box(origin, across, along, normal, s1, s1 + step, -big, big, -big, big)
-    )
-    if cap.isNull() or not cap.Solids:
-        return None
-    base = origin.dot(along)
+def _merged_spans(slab, along, base):
+    """[[lo, hi]] the solids of a thin slab cover along a direction (measured from `base`),
+    overlapping ones merged."""
     spans = []
-    for solid in cap.Solids:
+    for solid in slab.Solids:
         lo, hi = _extent(solid, along)
         spans.append([lo - base, hi - base])
     spans.sort()
-    merged = [spans[0]]
+    merged = spans[:1]
     for lo, hi in spans[1:]:
         if lo <= merged[-1][1] + 1e-6:
             merged[-1][1] = max(merged[-1][1], hi)
         else:
             merged.append([lo, hi])
+    return merged
+
+
+def _concave_in_band(result, origin, along, across, normal, s0, s1, thickness):
+    """True when the sheet's outline in the stationary face's plane turns inward (a concave
+    corner) between s0 and s1 (a little beyond each)."""
+    import Part
+
+    tol = 0.25 * thickness
+    for face in _zone_faces(result, origin, normal):
+        edges = list(face.OuterWire.OrderedEdges)
+        pts = []
+        cur = None
+        for edge in edges:
+            if isinstance(edge.Curve, (Part.Line, Part.LineSegment)):
+                seq = [v.Point for v in edge.Vertexes]
+            else:
+                seq = list(edge.discretize(12))
+            if cur is None and len(edges) > 1:
+                # the first edge runs toward the second
+                ends = [v.Point for v in edges[1].Vertexes]
+                if min((seq[0] - q).Length for q in ends) < min((seq[-1] - q).Length for q in ends):
+                    seq.reverse()
+            elif cur is not None and (seq[-1] - cur).Length < (seq[0] - cur).Length:
+                seq.reverse()
+            pts += seq[:-1]
+            cur = seq[-1]
+        flat = [((p - origin).dot(across), (p - origin).dot(along)) for p in pts]
+        clean = []
+        for q in flat:
+            if not clean or abs(q[0] - clean[-1][0]) + abs(q[1] - clean[-1][1]) > 1e-9:
+                clean.append(q)
+        if (
+            len(clean) > 1
+            and abs(clean[0][0] - clean[-1][0]) + abs(clean[0][1] - clean[-1][1]) < 1e-9
+        ):
+            clean.pop()
+        n = len(clean)
+        if n < 3:
+            continue
+        area = sum(
+            clean[i][0] * clean[(i + 1) % n][1] - clean[(i + 1) % n][0] * clean[i][1]
+            for i in range(n)
+        )
+        sign = 1.0 if area > 0 else -1.0
+        for i in range(n):
+            a, b, c = clean[i - 1], clean[i], clean[(i + 1) % n]
+            turn = (b[0] - a[0]) * (c[1] - b[1]) - (b[1] - a[1]) * (c[0] - b[0])
+            if turn * sign < -1e-9 and s0 - tol <= b[0] <= s1 + tol:
+                return True
+    return False
+
+
+def _moving_spans(result, zone, origin, along, across, normal, s0, s1, thickness, big):
+    """Where the sheet goes on past the bend zone, along the line: [(m0, m1)] measured from
+    `origin`, or None when that covers the whole zone (a bend right across the sheet)."""
+    if zone.isNull() or zone.Volume < 1e-9:
+        return None
+    step = min(0.05, thickness / 4.0)
+
+    def slab(x0, x1):
+        return result.common(frame_box(origin, across, along, normal, x0, x1, -big, big, -big, big))
+
+    cap = slab(s1, s1 + step)
+    if cap.isNull() or not cap.Solids:
+        return None
+    base = origin.dot(along)
+    merged = _merged_spans(cap, along, base)
     z0, z1 = _extent(zone, along)
     z0, z1 = z0 - base, z1 - base
     covered = sum(min(hi, z1) - max(lo, z0) for lo, hi in merged if hi > z0 and lo < z1)
     if covered >= (z1 - z0) - 1e-6:
+        return None
+    # a bend line slanted to the sheet's outline (a diagonal line across a rectangle, or a
+    # plate whose end is slanted): the zone reaches past the moving side's front only because
+    # the outline narrows gradually. A tab narrows in a step: the outline turns inward (a
+    # concave corner, the tab's root) in the bend's band, and the sheet beyond is narrower
+    # than the zone. Otherwise the whole zone bends (no tab, no relief)
+    try:
+        concave = _concave_in_band(result, origin, along, across, normal, s0, s1, thickness)
+    except Exception as exc:  # an outline that cannot be read: the width test decides
+        log("bend: outline not read (%s)" % exc)
+        concave = True
+    if not concave:
+        return None
+    width = sum(hi - lo for lo, hi in merged)
+    widest = 0.0
+    for x0, x1 in ((s0, s0 + step), (s1 - step, s1)):
+        piece = slab(x0, x1)
+        if not piece.isNull() and piece.Solids:
+            widest = max(widest, sum(hi - lo for lo, hi in _merged_spans(piece, along, base)))
+    if width >= widest - max(1e-4, 2.0 * step * 1e-3):
         return None
     return [(lo, hi) for lo, hi in merged]
 
@@ -570,7 +743,7 @@ def fold(
             )
         if stationary.isNull() or stationary.Volume < 1e-9:
             raise SheetMetalError("Nothing stays: click the stationary face on the side to keep.")
-        spans = _moving_spans(result, zone, origin, along, across, normal, s1, thickness, big)
+        spans = _moving_spans(result, zone, origin, along, across, normal, s0, s1, thickness, big)
         if spans:
             stationary, zone = _partial_zone(
                 stationary,
@@ -681,6 +854,11 @@ class BendFeature:
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
+        show_used(obj)
+
+    def onChanged(self, obj, prop):
+        if prop == "OverrideRadius":
+            show_used(obj)
 
     def execute(self, obj):
         try:
@@ -697,6 +875,15 @@ class BendFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def show_used(obj):
+    """Bend Radius is shown (property editor, Change Parameters) only when it overrides the
+    rule's."""
+    try:
+        obj.setEditorMode("BendRadius", 0 if obj.OverrideRadius else 2)
+    except Exception:
+        pass
 
 
 def options_of(obj):
