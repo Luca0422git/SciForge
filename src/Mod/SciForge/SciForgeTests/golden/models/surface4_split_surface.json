@@ -1,0 +1,108 @@
+{
+  "id": "surface4_split_surface",
+  "title": "Split Body of an open box of surfaces by the YZ plane: two surface bodies (Fusion's Body to Split takes open bodies)",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "split-body"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              -15,
+              -10
+            ],
+            [
+              15,
+              -10
+            ],
+            [
+              15,
+              10
+            ],
+            [
+              -15,
+              10
+            ],
+            [
+              -15,
+              -10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            0.0,
+            -10
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            0.0,
+            -10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces: walls 10 high round a 30 x 20 floor, area 1600"
+    },
+    {
+      "op": "split_body",
+      "id": "x1",
+      "body": "st",
+      "tool": "YZ"
+    }
+  ],
+  "expect": {
+    "area": 1600,
+    "faces": 8,
+    "solids": 0,
+    "bbox": [
+      -15,
+      -10,
+      0,
+      15,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "two halves (each half the floor, two half walls and an end wall: 4 faces, 800), together the box"
+  }
+}
