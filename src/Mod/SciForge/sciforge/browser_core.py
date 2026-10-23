@@ -181,6 +181,7 @@ def _folders(objects, active_body, component):
     joints, joint_origins = [], []
     contacts, studies = [], []  # Fusion's Contacts and Motion Studies folders
     drawings = []
+    flat_patterns = []  # sheet metal Flat Pattern nodes (one per component, like Fusion)
     sketch_curves = []  # (owner sketch, node): a sketch's Projected Curves and 3D curves
     body_names = {o["name"] for o in objects if o["type_id"] in BODY_TYPES}
     if component is None:
@@ -261,6 +262,11 @@ def _folders(objects, active_body, component):
                 studies.append(node)
         elif sciforge_type == "DrawingBreak":
             pass  # a drawing's break lines (drawing.py): part of the drawing, not the design
+        elif sciforge_type == "FlatPattern":
+            # Fusion's Flat Pattern node under its component (sheet metal, flatpattern.py)
+            node = _item("flat_pattern:", obj, "flat_pattern", "flat_pattern")
+            node["visible"] = None  # it opens in its own environment (FLAT PATTERN tab)
+            flat_patterns.append(node)
         elif type_id in SKETCH_TYPES:
             sketches.append(_item("sketch:", obj, "sk_rectangle", "sketch"))
         elif type_id in CONSTRUCTION_TYPES:
@@ -309,6 +315,7 @@ def _folders(objects, active_body, component):
         folders.append(_folder("canvases" + suffix, "Canvases", canvases))
     if decals:
         folders.append(_folder("decals" + suffix, "Decals", decals))
+    folders.extend(flat_patterns)
     if drawings:
         folders.append(_folder("drawings", "Drawings", drawings))
     return folders
@@ -643,6 +650,7 @@ MENUS = {
         "Delete",
     ],
     "drawing": ["Open Drawing", "-", "Rename", "Delete"],
+    "flat_pattern": ["Edit Flat Pattern", "Export DXF", "-", "Rename", "Delete"],
 }
 
 

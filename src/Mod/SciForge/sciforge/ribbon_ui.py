@@ -12,6 +12,10 @@ BIG = 36  # ribbon icon size (Fusion: about 36-40 px at 100% scaling)
 SMALL = 18  # menu / quick-access icon size
 
 
+# Tabs shown only in their own mode (never remembered as the tab to go back to).
+CONTEXTUAL = ("sketch", "drawing", "flat_pattern")
+
+
 def resolve(command, available):
     """Command slot -> ("Name", index or None), or None when not available."""
     if command is None:
@@ -526,7 +530,8 @@ class RibbonWidget(QtWidgets.QWidget):
             menu.addSeparator()
             menu.addAction("Update now", lambda: QtCore.QTimer.singleShot(0, update_ui.install_now))
             menu.addAction(
-                "What's new", lambda: QtCore.QTimer.singleShot(0, lambda: update_ui.whats_new(version))
+                "What's new",
+                lambda: QtCore.QTimer.singleShot(0, lambda: update_ui.whats_new(version)),
             )
             menu.exec_(self.update_icon.mapToGlobal(QtCore.QPoint(0, self.update_icon.height())))
         except Exception as exc:
@@ -624,7 +629,7 @@ class RibbonWidget(QtWidgets.QWidget):
         for tid, button in self.tab_buttons.items():
             button.setChecked(tid == tab_id)
         self.pages.setCurrentIndex(self.page_index[tab_id])
-        if user and tab_id not in ("sketch", "drawing"):
+        if user and tab_id not in CONTEXTUAL:
             self._user_tab = tab_id
 
     def set_sketch_mode(self, on):
@@ -635,7 +640,8 @@ class RibbonWidget(QtWidgets.QWidget):
         drawing = getattr(self, "_drawing_mode", False)  # (a drawing's tab keeps DRAWING)
         self.tab_buttons["sketch"].setVisible(on and not drawing)
         if not drawing:
-            self.select_tab("sketch" if on else self._user_tab)
+            back = "flat_pattern" if getattr(self, "_flat_mode", False) else self._user_tab
+            self.select_tab("sketch" if on else back)
         log("ribbon: sketch mode %s" % ("on" if on else "off"))
 
     def set_drawing_mode(self, on):
@@ -649,14 +655,44 @@ class RibbonWidget(QtWidgets.QWidget):
                 button.setVisible(on)
             elif tid == "sketch":
                 button.setVisible(self._sketch_mode and not on)
+            elif tid == "flat_pattern":
+                button.setVisible(getattr(self, "_flat_mode", False) and not on)
             else:
-                button.setVisible(not on)
+                button.setVisible(not on and not getattr(self, "_flat_mode", False))
         self.workspace.setText("DRAWING ▾" if on else "DESIGN ▾")
         if on:
             self.select_tab("drawing")
+        elif getattr(self, "_flat_mode", False):
+            self.select_tab("flat_pattern")
         else:
             self.select_tab("sketch" if self._sketch_mode else self._user_tab)
         log("ribbon: drawing mode %s" % ("on" if on else "off"))
+
+    def set_flat_pattern_mode(self, on):
+        """While a flat pattern is open (sheet metal), Fusion shows its FLAT PATTERN tab
+        alone (Export DXF, Finish Flat Pattern); back to the design's tabs after.
+        SCIFORGE wave 6 (sm-flat)."""
+        if on == getattr(self, "_flat_mode", False) or "flat_pattern" not in self.tab_buttons:
+            return
+        self._flat_mode = on
+        drawing = getattr(self, "_drawing_mode", False)
+        for tid, button in self.tab_buttons.items():
+            if tid == "flat_pattern":
+                button.setVisible(on and not drawing)
+            elif tid == "drawing":
+                button.setVisible(drawing)
+            elif tid == "sketch":
+                button.setVisible(self._sketch_mode and not on and not drawing)
+            else:
+                button.setVisible(not on and not drawing)
+        if drawing:
+            return
+        if on:
+            self.select_tab("flat_pattern")
+        else:
+            back = self._user_tab if self._user_tab in self.page_index else "solid"
+            self.select_tab("sketch" if self._sketch_mode else back)
+        log("ribbon: flat pattern mode %s" % ("on" if on else "off"))
 
     def current_tab(self):
         for tid, button in self.tab_buttons.items():
