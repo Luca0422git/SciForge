@@ -5,7 +5,8 @@ New Drawing; Contents Select lists "Flat Pattern / Body" (not ticked); tick it, 
 body; OK: the drawing opens and its Base View shows the flat pattern from the top (the flat
 lies on XY): the outline, the hole and the bend lines are its 11 visible edges; a click places
 it; OK. TABLES > Bend Table: a table of the two bends (B1, B2: UP, 90 degrees, R 1.00, K 0.44)
-and an identifier balloon on each bend centre line; Ctrl+Z takes it away."""
+and an identifier balloon on each bend centre line; undo / redo; the design's rule set to K
+0.33: the table and the identifiers follow."""
 
 import FreeCAD as App
 from PySide import QtCore, QtWidgets
@@ -164,6 +165,49 @@ def table_undone():
     h.check("undo takes the bend table away", fpd.bend_table_of(d.page()) is None)
 
 
+def redo_table():
+    d.redo()
+
+
+def table_redone():
+    from sciforge import flatpattern_drawing as fpd
+
+    h.check("redo brings it back", fpd.bend_table_of(d.page()) is not None)
+
+
+def change_k():
+    # the design's rule changes (Sheet Metal Rules: K 0.33): the flat and its table follow
+    from sciforge import sheetmetal
+
+    doc = App.ActiveDocument
+    body = fs.STATE["body"]
+    rule = sheetmetal.find_rule(doc, sheetmetal.body_rule_name(body))
+    rule["k_factor"] = "0.33"
+    sheetmetal.save_rule(doc, rule)
+    doc.recompute()
+
+
+change_k.wait_ms = 3000
+
+
+def table_follows():
+    from sciforge import drawing, flatpattern_drawing as fpd
+
+    table = fpd.bend_table_of(d.page())
+    rows = drawing.table_rows(table) if table is not None else []
+    h.check(
+        "the table follows the rule: K 0.33", [r["KFactor"] for r in rows] == ["0.33"] * 2, rows
+    )
+    ba = 3.141592653589793 / 2 * 1.33
+    want = 28 + ba / 2
+    offsets = sorted(abs(b.OriginX.Value) for b in d.of_type("TechDraw::DrawViewBalloon"))
+    h.check(
+        "the identifiers follow the bend lines (28 + BA/2 from the middle)",
+        len(offsets) == 2 and all(abs(o - want) < 0.01 for o in offsets),
+        (offsets, want),
+    )
+
+
 h.run(
     "flatpattern_drawing",
     [
@@ -182,5 +226,9 @@ h.run(
         table_made,
         undo_table,
         table_undone,
+        redo_table,
+        table_redone,
+        change_k,
+        table_follows,
     ],
 )

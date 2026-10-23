@@ -125,6 +125,59 @@ def add_bend_table(page, view, top_left):
     return table, balloons
 
 
+def refresh(page):
+    """After the design changed: the bend table's rows and its identifiers follow the flat
+    pattern (another K-factor, a bend moved). True when anything changed."""
+    table = bend_table_of(page)
+    if table is None:
+        return False
+    view = getattr(table, "SciForgeView", None)
+    fp = flat_of(view) if drawing.alive(view) else None
+    if fp is None:
+        return False
+    rows = bend_rows(fp)
+    changed = False
+    if json.dumps(rows) != getattr(table, "SciForgeRows", ""):
+        layout = core.table_layout(rows, columns=COLUMNS)
+        x = table.X.Value - _old_width(table) / 2.0
+        y = table.Y.Value + _old_height(table) / 2.0
+        table.Symbol = core.table_svg(layout)
+        table.X = x + layout["width"] / 2.0
+        table.Y = y - layout["height"] / 2.0
+        table.SciForgeRows = json.dumps(rows)
+        changed = True
+    by_text = {}
+    for obj in getattr(view, "InList", []):
+        if obj.TypeId == drawing.BALLOON and getattr(obj, "SourceView", None) is view:
+            by_text[obj.Text] = obj
+    x, y = drawing.view_position(view)
+    for row, anchor in zip(rows, bend_anchors(view, fp)):
+        balloon = by_text.get(row["Item"])
+        if balloon is None:
+            continue
+        ox, oy = anchor[0] - x, anchor[1] - y
+        if abs(balloon.OriginX.Value - ox) > 1e-6 or abs(balloon.OriginY.Value - oy) > 1e-6:
+            balloon.OriginX = ox
+            balloon.OriginY = oy
+            balloon.X = ox
+            changed = True
+    return changed
+
+
+def _old_width(table):
+    try:
+        return core.table_layout(json.loads(table.SciForgeRows), columns=COLUMNS)["width"]
+    except Exception:
+        return 0.0
+
+
+def _old_height(table):
+    try:
+        return core.table_layout(json.loads(table.SciForgeRows), columns=COLUMNS)["height"]
+    except Exception:
+        return 0.0
+
+
 def _half_height(view, fp):
     """How far the flat reaches up the view from its centre (the view's own units)."""
     axes = drawing.axes_of(view)

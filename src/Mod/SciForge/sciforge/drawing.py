@@ -2130,6 +2130,12 @@ def refresh(page):
             changed |= refresh_parts_list(table)
         except Exception as exc:
             warn("parts list: %s" % exc)
+    try:
+        from . import flatpattern_drawing  # a flat pattern's bend table (sm-flat)
+
+        changed |= flatpattern_drawing.refresh(page)
+    except Exception as exc:
+        warn("bend table: %s" % exc)
     for view in all_views(page):
         try:
             changed |= follow_center_marks(view)

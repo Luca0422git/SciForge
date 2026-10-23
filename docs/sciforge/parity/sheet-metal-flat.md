@@ -61,7 +61,7 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | Fusion | SciForge | Src |
 |---|---|---|
 | Drawing > From Design, the flat pattern as the view source | File > New Drawing, Contents Select lists "Flat Pattern / <body>" (unticked); its Base View defaults to Top (the flat lies on XY); outline, holes and bend lines are drawn | F[F9], A[R37] |
-| Tables > Bend Table, pick a flat pattern view: a table of the bends, identifiers added to the view | DRAWING > TABLES > Bend Table: the picked (or only) flat pattern view gets balloons B1, B2 ... on its bend centre lines (left to right) and a table BEND ID / DIRECTION / ANGLE / RADIUS / K-FACTOR at the top left of the sheet; one undo step; one per drawing | A[R17], G (columns, balloons) |
+| Tables > Bend Table, pick a flat pattern view: a table of the bends, identifiers added to the view | DRAWING > TABLES > Bend Table: the picked (or only) flat pattern view gets balloons B1, B2 ... on its bend centre lines (left to right) and a table BEND ID / DIRECTION / ANGLE / RADIUS / K-FACTOR at the top left of the sheet; one undo step; one per drawing; it follows the flat (a new K-factor, moved bends) | A[R17], G (columns, balloons) |
 
 ### Export DXF (FLAT PATTERN > EXPORT, or right-click the Flat Pattern)
 
@@ -139,8 +139,8 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   pattern is a shape beside the body, not a component of its own.
 - **Flat pattern STEP export and drawing bend notes** (Fusion: A[R36] preview, "Create and
   modify bend notes"): not built (the DXF carries the bend notes as text; the drawing has
-  the Bend Table). The drawing's bend lines have no up / down styles; the Bend Table does not
-  follow later edits of the flat (make it again).
+  the Bend Table, which follows later edits of the flat). The drawing's bend lines have no
+  up / down styles.
 - **Side faces cut at an angle through the thickness** (sm-forming's mitres are bevelled
   along the corner's bisector plane): the flat takes the stationary side's outline, so its
   volume differs a little from the folded part's; a real (square) mitre cut has no such
