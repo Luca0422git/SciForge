@@ -74,6 +74,15 @@ doc (`parity/surface.md`, section "Part 3") has the behaviour table with sources
   `surface_reopen` (the offset of the L is now Sharp: 560 outside), `surface2_revolve_sweep`
   (Type reads Partial / To / Full).
 
+## Results (FreeCAD 1.1.4, this sandbox)
+
+- Scenarios (all PASS): surface3_offset_patch 76 checks, surface3_untrim_revolve 77,
+  surface3_sweep_extrude 58, surface3_stitch_trim_ruled 63, surface3_extend_envmap 53,
+  surface3_isocurve 26. Existing ones re-run and passing: every `surface*` and `surface2*`
+  scenario, gaps_sweep_guide_surface, inspect_analysis_components / curvature / zebra,
+  ribbon_sweep (221).
+- Golden: 449 pass, 2 known xfail (all models); unit: 1862 OK; base smoke and journey pass.
+
 ## Shared files touched
 
 - `ribbon_config.py`: one INSPECT item (Environmental Map Analysis) and one sketch Project /
