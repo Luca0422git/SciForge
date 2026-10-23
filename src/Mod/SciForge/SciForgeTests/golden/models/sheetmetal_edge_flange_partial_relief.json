@@ -1,0 +1,67 @@
+{
+  "id": "sheetmetal_edge_flange_partial_relief",
+  "title": "Edge flange 10 mm wide (Symmetric) with Straight bend reliefs",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10,
+        "width_type": "symmetric",
+        "width": 10,
+        "override_bend_relief": true,
+        "relief_shape": "straight",
+        "relief_width": 1,
+        "relief_depth": 0.5,
+        "relief_remnant": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1588.561945,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      11
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "plate 1500 - the bend strip under the 10 mm flange (2 x 10) - two reliefs 1 wide, 2.5 deep (bend zone 2 + depth 0.5) = 1475; flange 10 x 11.356"
+  }
+}

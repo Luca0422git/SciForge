@@ -1,0 +1,80 @@
+{
+  "id": "sheetmetal_base_flange_side2_rule",
+  "title": "Base flange with a 0.5 mm rule, Side 2 then Centered",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sf_sheet_rule",
+      "name": "Thin (mm)",
+      "from": "Steel (mm)",
+      "set": {
+        "thickness": "0.5"
+      }
+    },
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1",
+      "rule": "Thin (mm)",
+      "options": {
+        "orientation": "side2"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 750.0,
+        "bbox": [
+          0,
+          0,
+          -0.5,
+          50,
+          30,
+          0
+        ],
+        "source": "analytic",
+        "note": "Side 2: the 0.5 mm sheet below the sketch plane"
+      }
+    },
+    {
+      "op": "sf_flange_edit",
+      "target": "f1",
+      "set": {
+        "orientation": "centered"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 750.0,
+    "bbox": [
+      0,
+      0,
+      -0.25,
+      50,
+      30,
+      0.25
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Centered: 0.25 mm each side of the sketch plane"
+  }
+}

@@ -99,6 +99,28 @@ def _is_linked(obj):
         return False
 
 
+def _settings_rows(doc):
+    """Rows under Document Settings beside Units: the design's active sheet metal rule, once
+    the design uses sheet metal (a click opens Sheet Metal Rules)."""
+    try:
+        from . import sheetmetal
+
+        if sheetmetal.rules_object(doc) is None and not sheetmetal.sheet_metal_bodies(doc):
+            return ()
+        name = sheetmetal.active_rule_name(doc, components.active_component(doc))
+        return (
+            (
+                "settings:sheet_metal",
+                "Sheet Metal Rule: %s" % name,
+                "sm_rules",
+                "sheet_metal_rule",
+                "Click to open Sheet Metal Rules",
+            ),
+        )
+    except Exception:
+        return ()
+
+
 def _is_surface_body(body):
     try:
         from . import surface
@@ -183,6 +205,8 @@ def _objects(doc):
                     row[note[0]] = note[1]
             if obj.TypeId in core.BODY_TYPES and _is_surface_body(obj):
                 row["surface"] = True  # the surface icon (surface.py)
+            if obj.TypeId in core.BODY_TYPES and getattr(obj, "SciForgeSheetMetalRule", ""):
+                row["sheet_metal"] = obj.SciForgeSheetMetalRule  # bent-sheet icon (sheetmetal.py)
             if obj.TypeId in core.SKETCH_TYPES or obj.TypeId in core.CONSTRUCTION_TYPES:
                 if ops.is_suppressed(obj):
                     row["suppressed"] = True  # off, not broken: greyed, like Fusion
@@ -724,6 +748,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             body.Name if body is not None else None,
             saved_views(doc),
             active_component=component.Name if component is not None else None,
+            settings_extra=_settings_rows(doc),
         )
 
     def refresh(self, force=False):
@@ -1055,6 +1080,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 self._go_to_view(node["object"])
             elif node["kind"] == "units":
                 _later(open_units_panel)
+            elif node["kind"] == "sheet_metal_rule":
+                _later(lambda: Gui.runCommand("SciForge_SheetMetalRules"))
         except Exception as exc:
             warn("browser: %s" % exc)
 
@@ -1416,6 +1443,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Look At": lambda: self._look_at(obj),
             "Create Sketch": lambda: self._create_sketch(obj),
             "Change Active Units": open_units_panel,
+            "Sheet Metal Rules": lambda: Gui.runCommand("SciForge_SheetMetalRules"),
             "New Named View": self.new_named_view,
             "Go to View": lambda: (
                 Gui.runCommand(node["object"])

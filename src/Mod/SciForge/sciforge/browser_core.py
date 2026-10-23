@@ -206,8 +206,11 @@ def _folders(objects, active_body, component):
             continue
         if type_id in BODY_TYPES:
             grounded = bool(obj.get("grounded"))
-            # A surface body (surface.py) has its own icon, like Fusion's browser.
+            # A surface body (surface.py) has its own icon, like Fusion's browser; a sheet
+            # metal body (sheetmetal.py) a bent sheet, its rule in the tooltip.
             icon = "ground" if grounded else ("surface_body" if obj.get("surface") else "box")
+            if not grounded and obj.get("sheet_metal"):
+                icon = "sheet_metal_body"
             node = _item(
                 "body:",
                 obj,
@@ -218,6 +221,10 @@ def _folders(objects, active_body, component):
             )
             if node["active"]:
                 node["tip"] = node["tip"] or "Active body: new features go here"
+            if obj.get("sheet_metal"):
+                node["tip"] = (node["tip"] + "; " if node["tip"] else "") + (
+                    "Sheet metal, rule: %s" % obj["sheet_metal"]
+                )
             if grounded:
                 node["tip"] = (
                     node["tip"] + "; " if node["tip"] else ""
@@ -347,10 +354,20 @@ def _component_nodes(by_component, parent, active_body, active_component, seen):
     return nodes
 
 
-def build(doc_label, objects, units="mm", active_body=None, views=(), active_component=None):
+def build(
+    doc_label,
+    objects,
+    units="mm",
+    active_body=None,
+    views=(),
+    active_component=None,
+    settings_extra=(),
+):
     """The whole browser tree for a document. ``views``: names of saved named views;
     ``active_component``: name of the active component (None: the root is active). Each
-    row may carry "component": the name of the component it is in (None: the root)."""
+    row may carry "component": the name of the component it is in (None: the root).
+    ``settings_extra``: more rows under Document Settings, (key, label, icon, kind, tip)
+    (the design's sheet metal rule, wave 6)."""
     by_component = {}
     for obj in objects:
         by_component.setdefault(obj.get("component"), []).append(obj)
@@ -369,7 +386,8 @@ def build(doc_label, objects, units="mm", active_body=None, views=(), active_com
                 "units",
                 tip="Click to change the units of this design",
             ),
-        ],
+        ]
+        + [_node(k, label, icon, kind, tip=tip) for k, label, icon, kind, tip in settings_extra],
     )
     named = [
         _node("view:" + label, label.upper(), "nav_lookat", "view", command)
@@ -485,6 +503,7 @@ MENUS = {
         "Capture Design History",
     ],
     "units": ["Change Active Units"],
+    "sheet_metal_rule": ["Sheet Metal Rules"],
     "settings": ["Change Active Units"],
     "views": ["New Named View"],
     "view": ["Go to View"],

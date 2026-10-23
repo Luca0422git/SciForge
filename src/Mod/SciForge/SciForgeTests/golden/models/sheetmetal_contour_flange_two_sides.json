@@ -1,0 +1,81 @@
+{
+  "id": "sheetmetal_contour_flange_two_sides",
+  "title": "Contour flange Direction Two Sides (20 one way, 5 the other) and Side 2",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              50,
+              0
+            ],
+            [
+              50,
+              50
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "contour",
+      "profile": "s1",
+      "options": {
+        "distance": 20,
+        "direction": "two_sides",
+        "distance2": 5
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 2458.904862,
+        "bbox": [
+          0,
+          0,
+          -5,
+          50,
+          50,
+          20
+        ],
+        "source": "analytic",
+        "note": "25 deep in all, from z -5 to 20"
+      }
+    },
+    {
+      "op": "sf_flange_edit",
+      "target": "f1",
+      "set": {
+        "orientation": "side2"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 2508.904862,
+    "bbox": [
+      0,
+      -1,
+      -5,
+      51,
+      50,
+      20
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Side 2: the sheet outside the L, the line its inner face (radius R = 1): mid layer 49 + 49 + pi/2 x 1.5"
+  }
+}

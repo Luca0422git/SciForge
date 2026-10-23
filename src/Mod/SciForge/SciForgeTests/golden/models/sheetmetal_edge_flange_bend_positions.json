@@ -1,0 +1,137 @@
+{
+  "id": "sheetmetal_edge_flange_bend_positions",
+  "title": "Edge flange Bend Position and Height Datum edits",
+  "tags": [
+    "sheetmetal",
+    "flange"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    },
+    {
+      "op": "sf_flange_edit",
+      "target": "f2",
+      "set": {
+        "position": "outside"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1810.685835,
+        "bbox": [
+          0,
+          0,
+          0,
+          51,
+          30,
+          11
+        ],
+        "source": "analytic",
+        "note": "Outside: the inner faces' corner on the edge: plate cut back R = 1 (30), outer face at x 51"
+      }
+    },
+    {
+      "op": "sf_flange_edit",
+      "target": "f2",
+      "set": {
+        "position": "adjacent"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1840.685835,
+        "bbox": [
+          0,
+          0,
+          0,
+          52,
+          30,
+          11
+        ],
+        "source": "analytic",
+        "note": "Adjacent: the bend starts at the edge, nothing cut, outer face at x 52"
+      }
+    },
+    {
+      "op": "sf_flange_edit",
+      "target": "f2",
+      "set": {
+        "position": "inside",
+        "datum": "outer"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1750.685835,
+        "bbox": [
+          0,
+          0,
+          0,
+          50,
+          30,
+          10
+        ],
+        "source": "analytic",
+        "note": "Outer Faces: height from the outer corner, top at z 10, wall 8 long"
+      }
+    },
+    {
+      "op": "sf_flange_edit",
+      "target": "f2",
+      "set": {
+        "datum": "tangent"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 1810.685835,
+    "bbox": [
+      0,
+      0,
+      0,
+      50,
+      30,
+      12
+    ],
+    "solids": 1,
+    "source": "analytic",
+    "note": "Tangent To Bend: the 10 mm wall starts after the bend, top at T + R + H = 12"
+  }
+}
