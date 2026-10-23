@@ -152,6 +152,13 @@ xfail) on `sf/sm-more` first: all passed. Then probed what Luca would do next, h
 - **Change Parameters** listed values the step's choices do not use (a Rolled hem's Gap, a
   rule gap's Gap, a rule radius's Bend Radius): hidden like Shell / Flange do (`show_used`).
 - **Bend's Corner Relief checkbox** changed nothing: greyed with the reason.
+- **Bend across a plate's slanted end** got tab reliefs cut: a tab is now recognised by a
+  concave corner of the outline in the bend's band (`_concave_in_band`). Golden
+  `sheetmetal_smm_bend_slanted_end` (analytic).
+- **Corner Closure, Extend Aligned off on 60 degree flanges** built ends meeting their flanges in
+  a sharp fold (no flat pattern): refused with the reason (`_lays_flat_any`). A Round / Square
+  relief there now says why it cannot be cut. Golden `sheetmetal_smm_corner_closure_60`.
+- A dialog that moves to another body takes that body's rule defaults for untouched values.
 
 New scenarios: `smmore_qa_reopen` (save / reopen of Hem, two-set Fillet, Corner Closure, Join
 by Bend, Lofted Flange; each edited from the timeline, a value changed, Cancel / Esc leave
@@ -160,7 +167,9 @@ Ctrl+Z hides it again), `smmore_qa_refusals` (empty design for every command, th
 Fillet fallback, Join of two thicknesses, a Lofted Flange's new body gone after Esc),
 `smmore_qa_join_order`.
 
-Facts: the golden runner's `SCIFORGE_GOLDEN_FILTER` runs a subset; a check step's `expect`
+Facts: sm-flat's unfolder still raises a raw "Wire is not closed" on some bent parts from one
+side (a bend across a slanted plate end: from both sides, though the part is valid and its
+volume exact) - a note for sm-flat. The golden runner's `SCIFORGE_GOLDEN_FILTER` runs a subset; a check step's `expect`
 needs its own `source`. Comparing a step's property strings before / after Cancel must skip
 shapes, `ShapeMaterial` and `SciForgePicks` (rebuilt with float noise).
 
