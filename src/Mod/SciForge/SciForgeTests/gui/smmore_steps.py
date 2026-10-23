@@ -37,7 +37,8 @@ def new_design(name):
     return App.ActiveDocument
 
 
-def plate(x0, y0, x1, y1, holes=(), label=None, z=0.0, body=None):
+def plate(x0, y0, x1, y1, holes=(), label=None, z=0.0, body=None, plane="XY_Plane",
+          outline=None):
     """A flat sheet metal plate 1 mm thick (rule Steel (mm): T = R = 1) from a rectangle on
     the XY plane (offset z): an extrude of the sheet's thickness in a body flagged as sheet
     metal, which is what a base flange makes."""
@@ -52,12 +53,14 @@ def plate(x0, y0, x1, y1, holes=(), label=None, z=0.0, body=None):
             body = components.new_body_in(doc, None)
     planes = sketch_ui.origin_planes(body)
     sketch = body.newObject("Sketcher::SketchObject", "PlateSketch")
-    sketch.AttachmentSupport = [(planes["XY_Plane"], "")]
+    sketch.AttachmentSupport = [(planes[plane], "")]
     sketch.MapMode = "FlatFace"
     sketch.AttachmentOffset = App.Placement(V(0, 0, z), App.Rotation())
     pts = [V(x0, y0, 0), V(x1, y0, 0), V(x1, y1, 0), V(x0, y1, 0)]
-    for i in range(4):
-        sketch.addGeometry(Part.LineSegment(pts[i], pts[(i + 1) % 4]))
+    if outline:
+        pts = [V(x, y, 0) for x, y in outline]
+    for i in range(len(pts)):
+        sketch.addGeometry(Part.LineSegment(pts[i], pts[(i + 1) % len(pts)]))
     for cx, cy, r in holes:
         sketch.addGeometry(Part.Circle(V(cx, cy, 0), V(0, 0, 1), r))
     doc.recompute()
@@ -67,6 +70,47 @@ def plate(x0, y0, x1, y1, holes=(), label=None, z=0.0, body=None):
     if label:
         body.Label = label
     return body, feature
+
+
+def new_body():
+    from sciforge import components
+
+    return components.new_body_in(App.ActiveDocument, None)
+
+
+def edge_flange(body, point, height):
+    """An edge flange (sm-forming's Flange code) on the straight edge of the body's end
+    through `point`."""
+    from sciforge import sheetmetal_flange as flange
+
+    tip = body.Tip
+    vertex = Part.Vertex(point)
+    name = None
+    for i, edge in enumerate(tip.Shape.Edges, 1):
+        if edge.distToShape(vertex)[0] < 1e-4:
+            name = "Edge%d" % i
+            break
+    feature = flange.make(App.ActiveDocument, "edge", [(tip, name)], {"height": height})
+    App.ActiveDocument.recompute()
+    return feature
+
+
+def profile_sketch(body, curves, z=0.0):
+    """A sketch on XY at height z with lines (x0, y0, x1, y1) and circles ("c", cx, cy, r)."""
+    from sciforge import sketch_ui
+
+    planes = sketch_ui.origin_planes(body)
+    sketch = body.newObject("Sketcher::SketchObject", "Profile")
+    sketch.AttachmentSupport = [(planes["XY_Plane"], "")]
+    sketch.MapMode = "FlatFace"
+    sketch.AttachmentOffset = App.Placement(V(0, 0, z), App.Rotation())
+    for c in curves:
+        if c[0] == "c":
+            sketch.addGeometry(Part.Circle(V(c[1], c[2], 0), V(0, 0, 1), c[3]))
+        else:
+            sketch.addGeometry(Part.LineSegment(V(c[0], c[1], 0), V(c[2], c[3], 0)))
+    App.ActiveDocument.recompute()
+    return sketch
 
 
 def bend_sketch(body, lines, z=1.0):
