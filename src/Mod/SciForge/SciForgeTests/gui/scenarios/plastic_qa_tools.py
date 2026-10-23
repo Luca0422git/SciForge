@@ -65,6 +65,37 @@ def standoff_previewed():
     h.check("the part grew", ps.volume(bottom) > s["v0"] + 1.0, ps.volume(bottom))
 
 
+def drag_offset():
+    """Drag the blue Offset Position arrow 3 mm further up (real mouse drag)."""
+    p = ps.boss_panel()
+    if p is None or p.arrow is None:
+        h.check("the offset arrow to drag", False)
+        return
+    from sciforge import plastic_boss as pb
+
+    point = pb.global_points(p.refs[:1])[0]
+    _o, normal, _x = pb.sketch_frame(p.refs[0][0])
+    s["offset0"] = p.offset.value()
+    s["v_drag0"] = ps.volume(App.ActiveDocument.getObject(s["bottom"]))
+    centre = point + normal * p.arrow.distance()
+    h.fit()
+    h.drag(h.screen_point(centre), h.screen_point(centre + normal * 3.0))
+
+
+def offset_dragged():
+    p = ps.boss_panel()
+    ps.settle(p)
+    off = p.offset.value() if p else 0.0
+    h.check(
+        "the drag raised the parting plane (about 3 mm)",
+        off > s["offset0"] + 1.0,
+        (s["offset0"], off),
+    )
+    v = ps.volume(App.ActiveDocument.getObject(s["bottom"]))
+    h.check("the standoff grew with it", v > s["v_drag0"] + 1.0, (v, s["v_drag0"]))
+    h.check("no error", p and not p.message.text().startswith("⚠"), p and p.message.text())
+
+
 def esc():
     ps.esc()
 
@@ -649,6 +680,8 @@ h.run(
         face_setup,
         click_floor,
         standoff_previewed,
+        drag_offset,
+        offset_dragged,
         esc,
         face_esc_dropped,
         rest_setup,
