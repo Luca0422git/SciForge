@@ -147,7 +147,7 @@ class FlatPatternFeature:
         try:
             result = unfolder.unfold(shape, name, k)
         except unfolder.UnfoldError as exc:
-            raise FlatPatternError(str(exc))
+            raise FlatPatternError(sheetmetal_flat.why_not_flat(body, str(exc)))
         frame = unfolder.flat_frame(result)
         flat = result.shape.copy()
         flat.transformShape(frame)
@@ -251,11 +251,13 @@ def with_corner_reliefs(flat, bends, body, thickness, folded=None):
     """The flat with a 2-bend corner relief (Round: a hole of the Size's diameter, Square: a
     square of that side) where two bends meet at a corner, at the Relief Placement
     (Intersection: where their centre lines cross; Tangent: reaching the far side of both
-    bend zones). The relief is the edge Flange's at that corner (its Override Corner Relief),
-    else the rule's; a corner a Corner Closure step closed keeps the Corner Closure's own
-    relief (folded: the folded part, whose bend faces the bends name; without it, the rule's
-    relief everywhere). The folded part keeps its corner as the Flange made it (sm-forming's
-    known gap): this relief is the flat's."""
+    bend zones). With `folded` (the folded part, whose bend faces the bends name) a relief
+    goes only at the corners an edge Flange mitred, the Flange's own (its Override Corner
+    Relief, else the rule's); a corner a Corner Closure step closed keeps the closure's
+    relief, and corners made otherwise (sm-more's Bend lines or Hems, a converted part) keep
+    what the folded part has. Without `folded`: the rule's relief at every corner. The folded
+    part keeps its corner as the Flange made it (sm-forming's known gap): this relief is the
+    flat's."""
     from . import flatpattern_core as core
 
     if len(bends) < 2:
@@ -275,7 +277,7 @@ def with_corner_reliefs(flat, bends, body, thickness, folded=None):
     tools = []
     for x, y, i, j in core.corner_points(bends, reach):
         shape, size, place = rule_shape, rule_size, rule_place
-        if folded is not None and (closures or flanges):
+        if folded is not None:
             a, b = _bend_axis(folded, bends[i]), _bend_axis(folded, bends[j])
             meet = core.axes_meet(a[0], a[1], b[0], b[1]) if a and b else None
             if meet is not None and _closed(closures, meet, reach_3d):
@@ -285,11 +287,14 @@ def with_corner_reliefs(flat, bends, body, thickness, folded=None):
                 )
                 continue
             k = None if meet is None else core.nearest(meet, [p for p, _c in flanges], reach_3d)
-            if k is not None:
-                corner = flanges[k][1]
-                shape = corner.get("shape", shape)
-                place = corner.get("placement", place)
-                size = float(corner.get("size", 0.0) or 0.0)
+            if k is None:
+                # a corner no edge Flange mitred (sm-more's Bend lines or Hems, a converted
+                # part): the folded part has the corner it was made with, the flat keeps it
+                continue
+            corner = flanges[k][1]
+            shape = corner.get("shape", shape)
+            place = corner.get("placement", place)
+            size = float(corner.get("size", 0.0) or 0.0)
         if shape not in core.RELIEF_SHAPES or size <= 0:
             continue
         centre = core.relief_centre(
@@ -353,7 +358,7 @@ def check_face(body, face):
     try:
         unfolder.unfold(body.Shape, face, sheetmetal_flat.k_factor(body))
     except unfolder.UnfoldError as exc:
-        raise FlatPatternError(str(exc))
+        raise FlatPatternError(sheetmetal_flat.why_not_flat(body, str(exc)))
 
 
 def create(body, face, name="FlatPattern"):

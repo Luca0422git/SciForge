@@ -6,7 +6,7 @@ Metal, and the flat pattern in drawings (a view of it, a Bend Table). Spec and g
 `docs/sciforge/parity/sheet-metal-flat.md`. sm-forming's and sm-more's branches were merged
 in (their Flange, Bend and Hem make the sheet metal bodies this area lays flat; the one
 conflict, the MODIFY menu lines of `ribbon_config.py` next to Corner Closure, was resolved
-keeping both), last at sm-forming ca79f2b and sm-more 8095fc3 (clean merges).
+keeping both), last at sm-forming ca79f2b and sm-more 0d6f795 (clean merges).
 
 **What Luca can do now (plain words).** Make a part of even thickness (a shelled box with
 rounded corners, or a Flange), then SHEET METAL > MODIFY > Convert to Sheet Metal and click a
@@ -15,9 +15,10 @@ Flat Pattern, click a big flat face: the part is shown laid flat (the length eve
 is worked out from the rule's K-factor) and the ribbon shows only FLAT PATTERN. Export DXF
 writes the outline, the holes, the corner reliefs, the bend lines (up and down on separate
 layers) and a note per bend for a laser cutter; the green Finish Flat Pattern goes back.
-The corner reliefs (the round or square holes where two bends meet) follow the rule, or
-the Flange's own Corner Relief setting when it has one; a corner closed with Corner
-Closure keeps the closure's own relief. The
+The corner reliefs (the round or square holes where two flanges meet) follow the rule,
+or the Flange's own Corner Relief setting when it has one; a corner closed with
+Corner Closure keeps the closure's own relief, and a part folded with Bend lines
+lays flat as the sheet it was bent from. The
 Flat Pattern stays in the browser (double-click to open it again, hover for its size) and
 follows changes to the part. File > New Drawing with Contents Select can draw the flat
 pattern; DRAWING > TABLES > Bend Table lists its bends, and DRAWING > TEXT > Bend Note
@@ -55,11 +56,13 @@ Rip (a face, along an edge, or between two points).
   sm_refold, sm_rip, sm_convert, fp_export_dxf, fp_finish.
 - Corner reliefs on the flat: the edge Flange's own Corner Relief override (shape, size,
   placement; sm-forming's `corner_reliefs(step)`) wins over the rule; Intersection and
-  Tangent placement; a corner closed by sm-more's Corner Closure gets no rule relief (the
-  closure's own relief is in the folded part already). Corners are matched in the folded
-  part, where the two bend axes meet.
+  Tangent placement; only corners an edge Flange mitred get one: a corner closed by
+  sm-more's Corner Closure keeps the closure's relief, corners of sm-more's Bend lines
+  and Hems keep what the folded part has. Corners are matched in the folded part, where
+  the two bend axes meet. A Die Form lofted flange is refused naming the step
+  (`Developable`); an OpenCASCADE failure inside the unfolder is said as a reason.
 - Golden ops `sf_sm_convert`, `sf_flat_pattern` (measures the flat), `sf_unfold`, `sf_refold`,
-  `sf_rip`; 17 golden models `sm_flat_*` (6 on sm-forming's Flange, 5 on sm-more's Bend,
+  `sf_rip`; 18 golden models `sm_flat_*` (6 on sm-forming's Flange, 6 on sm-more's Bend,
   Hem and Corner Closure); unit tests `test_flatpattern_core.py`; 11 scenarios
   `flatpattern_*`.
 

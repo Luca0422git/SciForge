@@ -51,7 +51,7 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | One flat pattern per component; a second fails | Refused in the dialog ("this component already has a flat pattern ... delete it first"), OK waits | A[R35] |
 | A Flat Pattern node under the component; double-click / Activate opens it | A "Flat Pattern" row under its component (or the design); double-click or right-click > Edit Flat Pattern opens it | G, A[R48] |
 | The flat pattern is modal; the FLAT PATTERN contextual tab; Finish Flat Pattern (green check, Export DXF left of it) | The design's tabs hide, FLAT PATTERN (INSPECT, SELECT, EXPORT > Export DXF, FINISH FLAT PATTERN) is the only tab; the folded part is hidden and the flat shown from the top; Finish goes back to the tab and the camera you had | A[R48], F[F13], F[F14] |
-| 2-bend corner relief on the flat (Round / Square) where two bends meet, at the Relief Placement; the flange's own Corner Relief override wins over the rule; a Corner Closure decides its own corner | Same on the flat pattern (and so in the DXF): Round = a hole of the Size's diameter (sm-forming's reading of Size), Square = a square of that side along the first bend; Intersection = centred where the two bend centre lines cross, Tangent = moved so the relief reaches the far side of both bend zones (sm-more's Corner Closure reading); the relief is the edge Flange's own (Override Corner Relief: shape, size, placement, read with sm-forming's `corner_reliefs(step)`) else the rule's; a corner a Corner Closure step closed gets no rule relief (its Tear / Trim To Bend / Round / Square is already in the folded part); "Corner Reliefs" property to switch it off; Tear / Trim To Bend / weld shapes add nothing. The folded part keeps its corner as the Flange made it | A[R1], A[R24], research 4.6, G |
+| 2-bend corner relief on the flat (Round / Square) where two bends meet, at the Relief Placement; the flange's own Corner Relief override wins over the rule; a Corner Closure decides its own corner | Same on the flat pattern (and so in the DXF): Round = a hole of the Size's diameter (sm-forming's reading of Size), Square = a square of that side along the first bend; Intersection = centred where the two bend centre lines cross, Tangent = moved so the relief reaches the far side of both bend zones (sm-more's Corner Closure reading); a relief goes at the corners an edge Flange mitres (sm-forming's `corner_reliefs(step)`), the Flange's own (Override Corner Relief: shape, size, placement) else the rule's; a corner a Corner Closure step closed gets none (its Tear / Trim To Bend / Round / Square is already in the folded part), nor do corners made by sm-more's Bend lines or Hems or by Convert (the flat keeps what the folded part has); "Corner Reliefs" property to switch it off; Tear / Trim To Bend / weld shapes add nothing. The folded part keeps its corner as the Flange made it | A[R1], A[R24], research 4.6, G |
 | Bend lines (centre) and bend extents (tangent lines); up / down; up bends red in drawings | Shown on the flat: centre lines red (up) / blue (down), extent lines grey; right-click > Show/Hide Bend Lines / Bend Extents | A[R36], A[R37], F[F9] |
 | The flat pattern follows edits of the folded model | Same: it recomputes when the body changes; the stationary face is found again by where it was when face names change | G |
 | Timeline "FlatPattern1" | Not a timeline step (the browser row only) | F[F10], G |
@@ -119,7 +119,8 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   away 130.78584; tube ripped between points 132.04779; sm-forming's edge flange 59.26195 x
   30, its partial flange with straight reliefs, its contour L, its mitred tray (bbox), the
   same edge flange with a K 0.33 rule (59.08916); sm-more's Bend (the flat is the 100 x 40
-  plate it was bent from), its open hem (BA = pi (0.25 + 0.44)) and flat hem (R 0.005);
+  plate it was bent from), its open hem (BA = pi (0.25 + 0.44)) and flat hem (R 0.005), its
+  box folded from a plus-shaped blank by four Bend lines (the 100 x 100 blank again, 8400);
   three with a hand-derived box and a measured volume: sm-more's Corner Closure (Tear) laid
   flat, 119.26195 x 79.26195 (walls 21 - (R + T) = 19), no rule relief at the closed
   corner; the same with its Round Tangent relief (sliver edges and a slit left by that
@@ -172,7 +173,8 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   sheet makes that part: both flanges need the same square of sheet next to the corner.
 - **sm-more's Brake Form lofted flange** meets in sharp folds (no bend radius): the flat
   pattern refuses it naming a sharp edge; with bends of the rule's radius between its facets
-  it would lay flat. Die Form (curved two ways) is refused as not developable.
+  it would lay flat. Die Form (curved two ways) is refused saying the step is formed by a die
+  (its `Developable` property).
 - **Along Edge between two walls** cuts symmetrically about the corner's bisector plane;
   Fusion's exact gap placement is not documented (research §5 item 6).
 - **The DXF is R12**: a SPLINE entity in an R12 file is read by FreeCAD, LibreCAD and most

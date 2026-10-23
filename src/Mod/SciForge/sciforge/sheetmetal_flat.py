@@ -39,6 +39,25 @@ def k_factor(body):
     return float(sheetmetal_core.library_rule(sheetmetal_core.DEFAULT_RULE)["k_factor"])
 
 
+def why_not_flat(body, reason):
+    """The reason an unfold failed, said better when the body has a step that cannot be laid
+    flat by its nature (sm-more's Lofted Flange made with Die Form: Developable = False)."""
+    try:
+        steps = list(body.Group) if body is not None else []
+    except Exception:
+        steps = []
+    for obj in steps:
+        try:
+            if "Developable" in obj.PropertiesList and not obj.Developable:
+                return (
+                    "%s is formed by a die (curved in two directions): it cannot be laid flat. "
+                    "Use Brake Form for a lofted flange that unfolds" % obj.Label
+                )
+        except Exception:
+            continue
+    return reason
+
+
 def _links(value):
     out = []
     for linked, subs in value or []:
@@ -92,7 +111,7 @@ def run_unfold(step, check=True):
     try:
         return unfolder.unfold(base.Shape, face, k_factor(body), bends=keys, check=check)
     except unfolder.UnfoldError as exc:
-        raise FlatError(str(exc))
+        raise FlatError(why_not_flat(body, str(exc)))
 
 
 class UnfoldFeature:

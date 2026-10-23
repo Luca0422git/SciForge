@@ -484,13 +484,24 @@ def unfold(shape, face_name, k_factor, bends=None, thickness=None, check=True, l
         return result
     slabs = []
     for fmap in order:
-        slabs.append((fmap, _slab(fmap, T)))
+        try:
+            slabs.append((fmap, _slab(fmap, T)))
+        except UnfoldError:
+            raise
+        except Exception as exc:  # an OpenCASCADE failure: said as a reason, never raw
+            raise UnfoldError(
+                "Face%d could not be laid flat (%s): the faces next to it may be cut in a way "
+                "the unfolder cannot follow" % (fmap.index + 1, exc)
+            )
     result.slabs = slabs
     shapes = [s for _m, s in slabs]
     if len(shapes) == 1:
         fused = shapes[0]
     else:
-        fused = shapes[0].fuse(shapes[1:])
+        try:
+            fused = shapes[0].fuse(shapes[1:])
+        except Exception as exc:
+            raise UnfoldError("the laid-flat pieces could not be joined (%s)" % exc)
     try:
         fused = fused.removeSplitter()
     except Exception:
