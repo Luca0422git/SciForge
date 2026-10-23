@@ -100,5 +100,17 @@ The full lists are in each parity doc's "Known gaps". The main ones:
 
 ## Tests
 
-See the session log in MEMORY.md for the numbers (scenarios, golden models, unit tests, and
-the GitHub "SciForge tests" runs).
+- **73 new click-by-click scenario tests** in real FreeCAD (sheet metal 33, plastic 12,
+  surface 28) plus **9 "journey" tests** that build whole parts across the new tools, the way
+  you would: a bent aluminium bracket with mitred flanges, a hem, a corner closure and a
+  hole, laid flat (size checked by hand against the bend maths), exported to DXF, then the
+  rule's thickness changed and everything followed; a shelled tube converted, ripped and
+  laid flat; a 4-flange tray; a two-part ABS enclosure with shells, four screw-boss pairs, a
+  snap fit, a lip, a rest and Design Advice; hybrid surface parts (a box cut by a surface,
+  patched, stitched, filleted, edited early in the timeline).
+- **144 new golden models** (parts with hand-calculated volumes), 586 pass in all; unit tests
+  1831 -> 1995, all pass.
+- The QA agents fixed **78 bugs** before merging and the journey testers **6 more** that only
+  show when tools are used together.
+- Every command on the four tabs was clicked by the ribbon sweep test (374 checks, no errors).
+- GitHub's full "SciForge tests" run on the final code: see the end of this file.
