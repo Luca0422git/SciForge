@@ -111,6 +111,29 @@ def _settings_rows(doc):
         return ()
 
 
+def _plastic_rows(doc):
+    """Rows under Document Settings: the plastic rule of the active component, once the
+    design uses plastic rules (a click opens Assign Plastic Rule). plastic-1, wave 6."""
+    try:
+        from . import plastic
+
+        if plastic.rules_object(doc) is None:
+            return ()
+        component = components.active_component(doc)
+        name = plastic.assigned_rule_name(doc, component) or "none"
+        return (
+            (
+                "settings:plastic",
+                "Plastic Rule: %s" % name,
+                "pl_assign",
+                "plastic_rule",
+                "The active component's plastic rule. Click to assign one",
+            ),
+        )
+    except Exception:
+        return ()
+
+
 def _is_surface_body(body):
     try:
         from . import surface
@@ -740,7 +763,7 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             body.Name if body is not None else None,
             saved_views(doc),
             active_component=component.Name if component is not None else None,
-            settings_extra=_settings_rows(doc),
+            settings_extra=_settings_rows(doc) + _plastic_rows(doc),
         )
 
     def refresh(self, force=False):
@@ -1074,6 +1097,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
                 _later(open_units_panel)
             elif node["kind"] == "sheet_metal_rule":
                 _later(lambda: Gui.runCommand("SciForge_SheetMetalRules"))
+            elif node["kind"] == "plastic_rule":
+                _later(lambda: Gui.runCommand("SciForge_AssignPlasticRule"))
         except Exception as exc:
             warn("browser: %s" % exc)
 
@@ -1418,6 +1443,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             "Create Sketch": lambda: self._create_sketch(obj),
             "Change Active Units": open_units_panel,
             "Sheet Metal Rules": lambda: Gui.runCommand("SciForge_SheetMetalRules"),
+            "Assign Plastic Rule": lambda: Gui.runCommand("SciForge_AssignPlasticRule"),
+            "Manage Plastic Rules": lambda: Gui.runCommand("SciForge_ManagePlasticRules"),
             "New Named View": self.new_named_view,
             "Go to View": lambda: (
                 Gui.runCommand(node["object"])

@@ -145,6 +145,24 @@ def assign_redone():
     )
 
 
+def browser_row():
+    from SciForgeTests.gui import timeline_input as tl
+
+    labels = tl.labels()
+    h.check(
+        "the browser shows the rule under Document Settings",
+        "Plastic Rule: PC 2 mm" in labels,
+        labels,
+    )
+    ps.click_row("Plastic Rule: PC 2 mm")
+
+
+def row_opens_assign():
+    p = ps.assign_panel()
+    h.check("a click on the row opens Assign Plastic Rule", p is not None)
+    ps.esc()
+
+
 def shell():
     Gui.Selection.clearSelection()
     h.ribbon("Shell")
@@ -544,6 +562,8 @@ h.run(
         assign_undone,
         redo_assign,
         assign_redone,
+        browser_row,
+        row_opens_assign,
         shell,
         shell_default,
         click_top,
