@@ -8,7 +8,7 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 - **Bend** (SHEET METAL > CREATE > Bend, Fusion's Fold): Stationary Side + Bend Lines boxes,
   Angle (round handle with value box), Bend Line Start / Center / End, Flip, Bend / Corner
   Relief, Override Bend Radius. Several lines in one step (bent farthest first), each
-  line with its own angle / position / flip through "Values For". A line across a tab bends
+  line with its own angle / position / flip / Bend Relief through "Values For". A line across a tab bends
   only the tab and cuts the rule's bend reliefs (Straight / Round, Tear as a 0.01 mm split)
   beside it.
   The zone is laid onto the bend's cylinders by mapping its outline in the cylinder's (angle,
@@ -30,7 +30,7 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
   edges through the thickness; Fillet radius sets ("+ New Set"), a radius arrow with its value
   box; on a solid body they open the SOLID commands.
 - Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 32 golden models,
-  26 unit tests, 8 scenarios (234 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
+  26 unit tests, 8 scenarios (237 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
 
 ## FreeCAD / OpenCASCADE facts found
 
@@ -74,7 +74,7 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 ## Tests run (FreeCAD 1.1.4, this sandbox)
 
 - `--only unit`: all pass. Golden models: the 32 `sheetmetal_smm_*` pass (with sm-forming's).
-- Scenarios: smmore_bend 44, smmore_bend_two 18, smmore_bend_tab 17, smmore_hem 40,
+- Scenarios: smmore_bend 44, smmore_bend_two 18, smmore_bend_tab 20, smmore_hem 40,
   smmore_join 25, smmore_corner 37, smmore_round 26, smmore_lofted 27 checks: all PASS.
 
 - sm-flat's unfolder (`sheetmetal_unfold.unfold`, a read-only copy of `sf/sm-flat`'s file in

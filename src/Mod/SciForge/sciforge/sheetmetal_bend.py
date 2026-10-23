@@ -399,7 +399,7 @@ def _bend_zone_solid(
     return list(out.Solids)
 
 
-LINE_KEYS = ("angle", "position", "flip")
+LINE_KEYS = ("angle", "position", "flip", "bend_relief")  # Fusion: per bend line
 
 
 def _extent(shape, along):

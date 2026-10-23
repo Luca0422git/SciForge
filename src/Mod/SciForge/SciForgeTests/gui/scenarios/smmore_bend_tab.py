@@ -2,8 +2,9 @@
 """SHEET METAL > Bend on a tab, the way a Fusion user bends a tab up: a plate with a 20 mm
 tab, a line drawn across the tab's root; the face, then the line: only the tab bends and the
 rule's round bend reliefs are cut into the plate beside it (volume worked out by hand); Bend
-Relief off is refused with the reason, back on; OK; the timeline's Bend 1; Ctrl+Z / Ctrl+Y;
-the flat pattern lays it flat (the plate and tab less the two reliefs)."""
+Relief off is refused with the reason, back on; the same for Line 1's own Bend Relief (Values
+For); OK; the timeline's Bend 1; Ctrl+Z / Ctrl+Y; the flat pattern lays it flat (the plate and
+tab less the two reliefs)."""
 
 import math
 
@@ -102,6 +103,45 @@ def relief_back():
     )
 
 
+def line_relief_off():
+    p = panel()
+    st.choose(p, "line", "Line 1")
+    st.toggle(p, "bend_relief")
+
+
+def line_relief_refused():
+    p = panel()
+    st.settle(p)
+    h.check(
+        "Line 1's own Bend Relief off is refused too",
+        "turn on Bend" in st.message(p),
+        st.message(p),
+    )
+    st.choose(p, "line", "All lines")
+    box = p.fields["line"]
+    h.check(
+        "All lines still shows Bend Relief on, Line 1 marked as its own",
+        p.value("bend_relief") is True and box.itemText(1) == "Line 1 *",
+        (p.value("bend_relief"), box.itemText(1)),
+    )
+
+
+def line_relief_on():
+    p = panel()
+    st.choose(p, "line", "Line 1 *")
+    st.toggle(p, "bend_relief")
+
+
+def line_relief_back():
+    p = panel()
+    st.settle(p)
+    h.check(
+        "Line 1's Bend Relief on again: the tab bends",
+        st.close(st.volume(s["body"]), TAB) and st.message(p) == "",
+        (st.volume(s["body"]), st.message(p)),
+    )
+
+
 def ok():
     st.ok()
 
@@ -162,6 +202,10 @@ h.run(
         relief_off_refused,
         relief_on,
         relief_back,
+        line_relief_off,
+        line_relief_refused,
+        line_relief_on,
+        line_relief_back,
         ok,
         after_ok,
         undo,
