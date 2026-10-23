@@ -1088,6 +1088,8 @@ class BrowserWidget(QtWidgets.QTreeWidget):
 
     def _set_visible(self, node, visible):
         targets = [n for n in core.walk(node) if n["object"] and n["visible"] is not None]
+        if node["kind"] == "component":
+            targets = self._component_eye(node, targets, visible)
         for n in targets:
             obj = self._doc.getObject(n["object"]) if self._doc else None
             if obj is None or obj.ViewObject is None:
@@ -1097,6 +1099,23 @@ class BrowserWidget(QtWidgets.QTreeWidget):
             else:
                 obj.ViewObject.Visibility = visible
         self._refresh_soon()
+
+    # what a component hid with its eye, to show again: {(document, component): {names}}
+    _eye_memory = {}
+
+    def _component_eye(self, node, targets, visible):
+        """Fusion: a component's eye hides the component and shows it again as it was; what
+        is inside keeps its own eyes. Showing every row under it turned on its origin planes
+        and the sketches its extrudes had hidden (they then took the clicks in the view)."""
+        key = (self._doc.Name if self._doc is not None else "", node["object"])
+        if not visible:
+            type(self)._eye_memory[key] = {n["object"] for n in targets if n["visible"]}
+            return targets
+        shown = type(self)._eye_memory.pop(key, None)
+        if shown is None:  # hidden some other way (or before a reopen): not the extras
+            hidden = ("origin", "sketch", "sketch_curves", "construction")
+            return [n for n in targets if n is node or n["kind"] not in hidden]
+        return [n for n in targets if n is node or n["object"] in shown]
 
     def _rename_key(self, key):
         item = self.item_for(key)
