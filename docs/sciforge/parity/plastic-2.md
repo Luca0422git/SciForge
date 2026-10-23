@@ -103,7 +103,7 @@ item 11).
 | Rule values (L9) | Lip Width = Thickness / 2, Lip Height = Reveal Height, Clearance and Clearance Height = Clearance, drafts = Draft Angle; they follow the rule until typed. |
 | Manipulators | Arrows with value boxes: Lip Height and Lip Width. |
 | Timeline | One step "Lip N" in the picked edges' body; the other body's change is a hidden follower step. Double-click edits. |
-| Refusals | A lip / groove wider than the wall ("must be less than the wall (2.00 mm) at the selected edges"), edges not on one flat face, edges that do not join, drafts that close the section, Lip And Groove with no touching body ("or use Lip alone"). |
+| Refusals | A lip / groove as wide as the wall or wider ("must be less than the wall (2.00 mm) at the selected edges": no shoulder would be left, and the groove would cut the other body's wall through), edges not on one flat face, edges that do not join, drafts that close the section, Lip And Groove with no touching body ("or use Lip alone"). |
 
 How it is built: the picked chain is offset in the rim's plane (2D offsets with sharp joins)
 to the band of the section, extruded along the pull direction; drafted sides are ruled lofts
@@ -144,12 +144,13 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
     picked, Hide Other Body, the catch-length refusal, Esc, components (a moved component),
     Hook Body picked (refused, then Flip), a point added off the part (left out with a
     note, the same one groove), an empty design.
-  - `plastic2_lip` (96): lip on a base and groove in its lid (the shoulder shown); drafts;
+  - `plastic2_lip` (98): lip on a base and groove in its lid (the shoulder shown); drafts;
     height typed and dragged; the edges' body refused as the other body; Swap; Groove; Lip;
     the wall refusal; Face Guide; a direction picked along the rim refused; OK; undo / redo;
     edit; Esc; save / reopen; a lip ring on a cone's round rim (Pull Direction exact, Face
     Guide leaning with the cone, exact); walls of different draft refused; a click on the
-    rim's flat face (its 4 inside edges, the same lip and groove), Cancel.
+    rim's flat face (its 4 inside edges, the same lip and groove), Cancel; a lip exactly as
+    wide as the wall refused (a hair less fits).
   - `plastic2_advice` (81): checks, colours, click-to-zoom, Draft unticked, Thickness display,
     a body left out and back, the pull direction picked and flipped, OK, Undo / Redo (gone,
     back and drawn), browser eye, reopen from

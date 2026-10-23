@@ -457,6 +457,21 @@ def mixed_walls():
     except plastic_lip.LipError as exc:
         text = str(exc)
     h.check("walls of different draft: Face Guide refused, saying why", "different" in text, text)
+    # a lip exactly as wide as the 2 mm wall leaves no shoulder: refused; a hair less fits
+    cup = Part.makeBox(20, 20, 10).cut(Part.makeBox(16, 16, 10, App.Vector(2, 2, 2)))
+    inside = [
+        e
+        for e in cup.Edges
+        if all(abs(v.Point.z - 10) < 1e-6 and 1.9 < v.Point.x < 18.1 for v in e.Vertexes)
+        and all(1.9 < v.Point.y < 18.1 for v in e.Vertexes)
+    ]
+    rim = plastic_lip.Rim(cup, inside)
+    opts = plastic_lip.core.defaults()
+    opts.update({"type": "lip", "lip_width": 2.0})
+    text = plastic_lip.check_fit(rim, opts)
+    h.check("a lip as wide as the wall: refused", "less than the wall" in text, (len(inside), text))
+    opts["lip_width"] = 1.95
+    h.check("a lip a hair narrower fits", plastic_lip.check_fit(rim, opts) == "")
 
 
 def rim_face_design():

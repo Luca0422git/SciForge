@@ -363,12 +363,17 @@ def tools(rim, options, pull, lean=0.0):
     return out
 
 
+SHOULDER = 0.01  # mm of rim the lip / groove must leave beside it
+
+
 def check_fit(rim, options):
     """The refusal text when the lip / groove does not lie on the rim, or ""."""
     o = options
     groove = o["type"] == "groove"
     a, b = core.groove_section(o)[0] if groove else core.lip_section(o)[0]
-    if rim.fits(a, b):
+    # strictly less: a lip as wide as the wall leaves no shoulder, and its groove would cut
+    # the other body's wall right through
+    if rim.fits(a, b + SHOULDER):
         return ""
     what, width = ("Groove Width", o["groove_width"]) if groove else ("Lip Width", o["lip_width"])
     wall = " (%.2f mm)" % rim.wall if rim.wall else ""

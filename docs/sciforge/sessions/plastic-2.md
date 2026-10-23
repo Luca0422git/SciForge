@@ -46,7 +46,7 @@ edited (this file is the session log entry).
   hand-worked volumes (they give every size, so they do not depend on the default rule).
 - Icons `pl_snap_fit`, `pl_lip`, `pl_design_advice`, `pl_snap_groove`
   (`tools/sciforge/icons_plastic2.py`); the three ribbon entries wired.
-- Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (99), `plastic2_lip` (96),
+- Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (99), `plastic2_lip` (98),
   `plastic2_advice` (81); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
   `test_plastic2_core.py` (35).
 
@@ -101,6 +101,12 @@ edited (this file is the session log entry).
   lip lengthens a rim edge): the edge is found again by the clicked point.
 - In xvfb, clicks meant for a face land on a drag arrow drawn on top when they are close on
   the screen: scenarios click away from the dialog's handles.
+- A realistic enclosure (80 x 50 x 30 box, 6 mm rounds, 2 degree draft, 2 mm shell, split at
+  20): Lip And Groove along the rounded inside rim (a tangent chain of 8 edges) works with
+  Pull Direction and Face Guide (the groove leans with the lid's drafted wall: 5 mm3 less
+  cut); a probe first made a 1 mm shell (the golden `sf_shell` op takes `inside`, not
+  `thickness`), where the 1 mm lip filled the whole wall and its groove cut the lid's wall
+  through: a lip as wide as the wall is refused now.
 
 ## Gaps (details in the parity doc)
 
