@@ -10,8 +10,9 @@ Box 40 x 30 x 10 (real input), then:
                            out: the picture shows during the moves at the dialog's radius and
                            lies on the exact round; no exact rebuild between the moves; let
                            go: the picture goes, the exact round (its volume) is shown
-  past the largest radius  dragged far: held at the limit (just under 10 mm); once the limit
-                           is known no picture shows a radius past it; at the end no picture
+  past the largest radius  dragged far: held at the limit (just under 10 mm), no picture at
+                           the end; 6 typed, dragged far again (the limit known): the
+                           picture follows up to the limit and stops there, never past it
   a typed radius           Tab out of the box: the picture at once, the exact round on the
                            rest, the picture gone
   Cancel                   a radius typed (the picture shows) then Cancel: no picture left in
@@ -240,7 +241,6 @@ def drag_far():
 
 
 def dragged_far():
-    rec = s.get("rec") or {}
     p = panel()
     if p is not None:
         try:
@@ -251,18 +251,53 @@ def dragged_far():
         h.check("dialog open after the far drag", False)
         return
     r = p.radius.value()
+    s["limit"] = r
     h.check("held just under 10 mm", 9.0 < r <= 10.0, r)
-    samples = rec.get("samples", [])
-    reached = [k for k, x in enumerate(samples) if abs(x["value"] - r) < 1e-9]
-    after = samples[reached[0] :] if reached else []
-    past = [x["live"] for x in after if x["live"] is not None and x["live"] > r + 1e-9]
-    tail = [x["value"] for x in samples][-6:]
-    h.check("the drag reached the limit while held", bool(after), tail)
-    h.check("once the limit is known, no picture past it", bool(after) and not past, past[:4])
     exact_shown("held at the limit", one_edge(r))
 
 
 dragged_far.wait_ms = 2500
+
+
+def type_six():
+    p = panel()
+    if p is not None:
+        b.type_into(p.radius.widget, "6")
+        QtTest.QTest.keyClick(p.radius.widget, QtCore.Qt.Key_Tab)
+
+
+def typed_six():
+    exact_shown("typed 6", one_edge(6.0))
+
+
+typed_six.wait_ms = 1500
+
+
+def drag_far_again():
+    """The limit is known now: a drag past it again is held there on every move."""
+    held_drag(40.0, "fillet far again", moves=30, hold_ms=300)
+
+
+def dragged_far_again():
+    rec = s.get("rec") or {}
+    p = panel()
+    if p is not None:
+        try:
+            del p._preview
+        except Exception:
+            pass
+    r = s.get("limit", 0.0)
+    samples = [x for x in rec.get("samples", []) if x["i"] > 0]
+    shown = [x for x in samples if x["live"] is not None]
+    past = [x["live"] for x in shown if x["live"] > r + 1e-9]
+    h.check("dragged past the limit again: the picture showed", len(shown) >= 10, len(shown))
+    h.check("no picture past the limit", not past, past[:4])
+    held = [x for x in shown if abs(x["live"] - r) < 1e-9]
+    h.check("the picture stopped at the limit", len(held) >= 3, len(held))
+    exact_shown("held at the limit again", one_edge(r))
+
+
+dragged_far_again.wait_ms = 1500
 
 
 def type_three():
@@ -404,6 +439,10 @@ h.run(
         dragged_out,
         drag_far,
         dragged_far,
+        type_six,
+        typed_six,
+        drag_far_again,
+        dragged_far_again,
         type_three,
         typed_three,
         type_then_cancel,

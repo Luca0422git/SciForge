@@ -2096,10 +2096,13 @@ class BlendPanel(Panel):
             self._live_key = None
             if self._live is not None:
                 self._live.hide()
-            log(
-                "%s: no live picture for these picks (%s); the preview follows on pauses"
-                % (self.title, exc)
-            )
+            if not isinstance(exc, ValueError):
+                # a picture the picks cannot have (Full Round, smooth edges) is not news:
+                # nothing goes to the Report view for it (the dialog's rule); a bug is
+                log(
+                    "%s: no live picture for these picks (%s); the preview follows on pauses"
+                    % (self.title, exc)
+                )
             return None
 
     def _live_soon(self):
