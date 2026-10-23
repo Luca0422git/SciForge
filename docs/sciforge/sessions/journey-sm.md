@@ -36,7 +36,9 @@ Flat Pattern, Export DXF, Convert to Sheet Metal, Rip), only real clicks and key
 
 **Results (FreeCAD 1.1.4, xvfb)**: `journey_sheetmetal` PASS (151 checks),
 `journey_sheetmetal_convert` PASS (44), `journey_sheetmetal_tray` PASS (46); the eleven
-`flatpattern_*` scenarios PASS after the fix; golden `sm_flat*` 19 pass; unit OK. Checked
+`flatpattern_*` scenarios PASS after the fix; golden `sm_flat*` 19 pass; unit OK. After
+merging the newer `wave6-integration` (sm-flat QA, plastic-2 QA): the three journeys PASS
+again (151, 44, 46 checks), golden `sm_flat*` 21 pass. Checked
 headless as well: the flat pattern follows the rule's K factor and Bend Radius, and an edit
 of Flange 2's height rebuilds the hem and the Corner Closure exactly as a fresh build.
 
