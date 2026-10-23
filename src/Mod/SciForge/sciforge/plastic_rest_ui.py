@@ -46,6 +46,7 @@ class RestPanel(Panel):
         self.picked_body = None  # the body picked in the Body box (else found)
         self.body = commands.find_body() if feature is None else curves.owner_body(feature)
         rule = plastic.rule_for_body(self.body)
+        self.rule_body = self.body  # the body whose rule the linked values come from
         self.options = pr.default_options(rule)
         if feature is not None:
             try:
@@ -96,6 +97,10 @@ class RestPanel(Panel):
         self.flip.setToolTip("The other side of the sketch plane is the inside of the part")
         self.flip.toggled.connect(lambda *_a: self._typed("flip"))
         form.addRow("", self.flip)
+        self.rule_label = QtWidgets.QLabel("")
+        self.rule_label.setObjectName("SciForgeRest_rule")
+        self.rule_label.setWordWrap(True)
+        form.addRow(self.rule_label)
         self.finish_layout()
         lines = self.message.fontMetrics().lineSpacing()
         self.message.setMinimumHeight(lines * 3 + 4)
@@ -108,6 +113,27 @@ class RestPanel(Panel):
             self.flip.setChecked(bool(self.options.get("flip")))
         finally:
             self._quiet = False
+        self._show_rule()
+
+    def _show_rule(self):
+        """Which plastic rule the thickness and draft come from (the library's default
+        when the body's component has none, said so)."""
+        try:
+            component = plastic.components.container_of(self.rule_body) if self.rule_body else None
+            name = plastic.assigned_rule_name(self.doc, component)
+            rule = name or ("%s (default; no rule assigned)" % plastic.default_rule_name())
+            self.rule_label.setText("Plastic rule: %s" % rule)
+        except Exception:
+            self.rule_label.setText("")
+
+    def _follow_body_rule(self, body):
+        """The rest builds in `body`: its values still linked to the rule come from that
+        body's rule (the dialog opened with the active body's)."""
+        if body is None or body is self.rule_body:
+            return
+        self.rule_body = body
+        self.options = pr.apply_rule(self.options, plastic.rule_for_body(body))
+        self._show_options()
 
     @safe
     def _typed(self, key):
@@ -312,6 +338,7 @@ class RestPanel(Panel):
             if body is None:
                 raise pr.RestError("The profile does not lie over a body.")
             self.body_label.setText(body.Label)
+            self._follow_body_rule(body)
             self.target = pr.make(body, self.refs, self.options, feature=self.target)
             self.error = ""
         except pr.RestError as exc:

@@ -119,6 +119,11 @@ def rest_drafted():
     p = ps.rest_panel()
     ps.settle(p)
     h.check("no error", p is not None and p.message.text() == "", p and p.message.text())
+    h.check(
+        "the dialog says the rule (the default: none assigned)",
+        p and p.rule_label.text() == "Plastic rule: Default (mm) (default; no rule assigned)",
+        p and p.rule_label.text(),
+    )
     cover = App.ActiveDocument.getObject(s["cover"])
     flat = [
         f
@@ -188,6 +193,11 @@ def rest_edit_shows_rule():
     p = ps.rest_panel()
     ps.settle(p)
     h.check("edit opens the Rest", p is not None)
+    h.check(
+        "the edit says the rule",
+        p and p.rule_label.text() == "Plastic rule: PMMA 2.5 mm",
+        p and p.rule_label.text(),
+    )
     h.check(
         "the edit shows the thickness it is built with (the rule's 2.5 mm)",
         p and abs(p.thickness.value() - 2.5) < 1e-9,
