@@ -1363,9 +1363,27 @@ class SurfaceModifyFeature:
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
 
+    def onChanged(self, obj, prop):
+        """Suppressed in the timeline: FreeCAD's PartDesign passes the step before through as
+        a solid, so a surface body's shell came out empty and the body (with every step
+        after it) went blank. The step then shows the surface before it (QA)."""
+        if prop != "Shape" or getattr(self, "_passing", False):
+            return
+        try:
+            if not getattr(obj, "Suppressed", False) or not obj.Shape.isNull():
+                return
+            base = effective_base(obj)
+            if base is not None and has_faces(base.Shape):
+                self._passing = True
+                obj.Shape = base.Shape.copy()
+        except Exception:
+            pass
+        finally:
+            self._passing = False
+
     def execute(self, obj):
         try:
-            base = obj.BaseFeature
+            base = effective_base(obj) or obj.BaseFeature
             if base is None or base.Shape.isNull() or not base.Shape.Faces:
                 raise SurfaceModifyError("There is no body before this step.")
             obj.Shape = compute(obj, base.Shape)
@@ -1382,6 +1400,20 @@ class SurfaceModifyFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def effective_base(obj):
+    """The step this one builds on: its BaseFeature, or, when that is suppressed in the
+    timeline and holds nothing (a surface step suppressed by FreeCAD's PartDesign comes out
+    empty), the first step before it that holds the surface."""
+    base = getattr(obj, "BaseFeature", None)
+    seen = set()
+    while base is not None and base.Name not in seen:
+        seen.add(base.Name)
+        if has_faces(base.Shape) or not bodies.is_suppressed(base):
+            return base
+        base = getattr(base, "BaseFeature", None)
+    return getattr(obj, "BaseFeature", None)
 
 
 def kind_of(obj):

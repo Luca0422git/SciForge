@@ -14,7 +14,9 @@ edit, Distance 2, Esc: unchanged. Click the right wall, Del: a Delete Face step.
 click another wall (two picked), Esc: still one face deleted. Delete the Fillet in the
 timeline: the Press Pull and the Delete Face go on without it (the floor and the right wall
 found again where they were: before, the Press Pull lost its floor and the Delete Face took
-the left wall); Ctrl+Z. MODIFY > Merge of the strip's
+the left wall); Ctrl+Z. Suppress Features on the Press Pull: the body shows the filleted box
+(before, a suppressed surface step came out empty and the body went blank); Unsuppress.
+MODIFY > Merge of the strip's
 two faces in one plane, OK. Save, close, reopen: every step computes, the areas and the
 timeline are the same; the Fillet edits again (Radius 3 reads back); Esc.
 """
@@ -329,8 +331,52 @@ def fillet_deleted():
 
 
 def fillet_back():
+    from SciForgeTests.gui import timeline_input as tl
+
     h.idle_step()()
     h.check("Ctrl+Z: the fillet is back", s4.near(st.area(s["box"]), s["area"]), st.area(s["box"]))
+    tl.menu(s["pull"], "Suppress Features")
+
+
+def suppressed():
+    from sciforge import bodies, surfmod
+
+    h.idle_step()()
+    steps = [o for o in s["box"].Group if surfmod.is_step(o)]
+    off = [surfmod.kind_of(o) for o in steps if bodies.is_suppressed(o)]
+    h.check("the Press Pull is off (and the Delete Face on it)", "surface_press_pull" in off, off)
+    h.check(
+        "the body is not blank: the filleted box shows",
+        s4.near(st.area(s["box"]), fillet_area(3), 1e-5),
+        st.area(s["box"]),
+    )
+    h.check(
+        "no step is red",
+        all("Invalid" not in list(o.State) for o in steps),
+        [(o.Label, o.State) for o in steps],
+    )
+    h.check("no error popup", not h.popups(), h.popups())
+
+
+def unsuppress():
+    from SciForgeTests.gui import timeline_input as tl
+
+    tl.menu(s["pull"], "Unsuppress Features")
+
+
+def unsuppress_rest():
+    from sciforge import bodies, surfmod
+    from SciForgeTests.gui import timeline_input as tl
+
+    h.idle_step()()
+    step = next((o for o in s["box"].Group if surfmod.kind_of(o) == "surface_delete_face"), None)
+    if step is not None and bodies.is_suppressed(step):
+        tl.menu(s["delete"], "Unsuppress Features")
+
+
+def unsuppressed():
+    h.idle_step()()
+    h.check("all back on", s4.near(st.area(s["box"]), s["area"]), (st.area(s["box"]), s["area"]))
     Gui.Selection.clearSelection()
     h.fit()
     st.menu("MODIFY", "Merge")
@@ -453,6 +499,10 @@ h.run(
         delete_cancelled,
         fillet_deleted,
         fillet_back,
+        suppressed,
+        unsuppress,
+        unsuppress_rest,
+        unsuppressed,
         merge_first,
         merge_second,
         merge_ok,
