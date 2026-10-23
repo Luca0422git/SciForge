@@ -1,0 +1,109 @@
+{
+  "id": "surface3_extend_natural_strip",
+  "title": "Surface Extend Natural on a lofted (free-form) strip: carried on 5 past its upper edge",
+  "tags": [
+    "surface",
+    "extend",
+    "surface3"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "a",
+      "plane": "XY",
+      "curves": [
+        {
+          "line": [
+            20,
+            -5,
+            30,
+            -5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_curves",
+      "id": "b",
+      "plane": "XY",
+      "offset": 10,
+      "curves": [
+        {
+          "line": [
+            20,
+            0,
+            30,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "l1",
+      "kind": "loft",
+      "refs": [
+        {
+          "sketch": "a",
+          "at": [
+            25,
+            -5
+          ]
+        },
+        {
+          "sketch": "b",
+          "at": [
+            25,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 111.80339887498948,
+        "faces": 1,
+        "solids": 0,
+        "source": "analytic",
+        "note": "a flat strip 10 wide, sqrt(5^2 + 10^2) long"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "x1",
+      "kind": "extend",
+      "refs": [
+        {
+          "step": "l1",
+          "edges": {
+            "at": {
+              "axis": "z",
+              "value": "max"
+            },
+            "count": 1
+          }
+        }
+      ],
+      "options": {
+        "distance": 5,
+        "extend_type": "natural"
+      }
+    }
+  ],
+  "expect": {
+    "area": 161.80339887498948,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      20,
+      -5,
+      0,
+      30,
+      2.23606797749979,
+      14.47213595499958
+    ],
+    "source": "analytic",
+    "note": "the loft's own (B-spline) surface carried on 5 along the strip past its upper edge: one face, 10 x (sqrt(125) + 5)"
+  }
+}

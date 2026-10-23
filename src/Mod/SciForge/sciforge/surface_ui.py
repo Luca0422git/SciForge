@@ -1462,6 +1462,11 @@ class RevolvePanel(SurfacePanel):
             return []
         try:
             point, axis = surface.axis_of_ref(self.picks["axis"][0])
+            if self.options.get("project_axis"):  # the handle turns about the axis used
+                from . import surface_geom as g
+
+                plane = surface.profile_plane(self.picks["profile"])
+                point, axis = g.project_axis(edges, point, axis, plane)
         except Exception:
             return []
         centre, _size = _centre(edges)
