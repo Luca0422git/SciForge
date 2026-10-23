@@ -1,0 +1,188 @@
+{
+  "id": "plastic2_lip_root_radius",
+  "title": "Lip And Groove with a 0.3 mm Root Radius: the lip's root blended, the groove's mouth rounded to keep the clearance",
+  "tags": [
+    "plastic",
+    "lip"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "shell",
+      "id": "sh2",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          -1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sf_lip",
+      "id": "l1",
+      "of": "sh1",
+      "edges": {
+        "any_of": [
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 38
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 58
+              }
+            ],
+            "count": 1
+          }
+        ],
+        "count": 4
+      },
+      "options": {
+        "inner_draft": 0,
+        "outer_draft": 0,
+        "root_radius": 0.3
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e2": {
+          "volume": 7640.3018749345665,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11903.718673733198,
+    "solids": 1,
+    "source": "analytic",
+    "note": "As plastic2_lip_and_groove, plus the root round: the corner r^2 (1 - pi/4) (r = 0.3) swept round the lip's outer foot (58 x 38), its centroid d = r (10 - 3 pi) / (12 - 3 pi) outside it: A (2 (58 + 38) + 8 d). The groove's mouth (58.2 x 38.2) loses the same corner: A (2 (58.2 + 38.2) + 8 d). Mitred corners: the sweep's volume is its section times the centroid's path."
+  }
+}

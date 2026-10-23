@@ -44,6 +44,7 @@ LIP_NUMBERS = {
     "inner_draft",
     "outer_draft",
     "tip_radius",
+    "root_radius",
 }
 
 schema.STEP_KEYS["sf_snap_fit"] = (

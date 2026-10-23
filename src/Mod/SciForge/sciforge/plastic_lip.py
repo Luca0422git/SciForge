@@ -49,6 +49,7 @@ PROPS = [
     ("InnerDraft", "inner_draft", "angle", "Draft of the side at the edges"),
     ("OuterDraft", "outer_draft", "angle", "Draft of the side away from the edges"),
     ("TipRadius", "tip_radius", "length", "Round on the lip's top edges"),
+    ("RootRadius", "root_radius", "length", "Blend where the lip meets the rim"),
 ]
 PROP_OF = {key: prop for prop, key, _k, _d in PROPS}
 
@@ -626,22 +627,78 @@ def build_own(obj, options, base):
         raise LipError(refusal)
     pull = pull_of(rim, options)
     made = tools(rim, options, pull, lean_of(rim, options))
-    shape = bodies.global_shape(base)
+    result, note = apply(bodies.global_shape(base), rim, options, made, own=True)
+    if not result.Solids:
+        raise LipError("The lip could not be joined to the part.")
+    return bodies.to_local(result, bodies.body_of(obj)), note
+
+
+def apply(shape, rim, options, made, own):
+    """`shape` (design coordinates) with its share of the lip and groove: the picked body's
+    (own) or the touching body's; then the Root Radius on a lip's root and, on a groove's
+    mouth, the round that keeps the clearance to it. (shape, note)."""
     result = shape
     note = ""
+    roles = []
     for role, (solid, sign, extra) in made.items():
-        mine = sign > 0 if role == "lip" else sign < 0
+        mine = (
+            (sign > 0 if role == "lip" else sign < 0)
+            if own
+            else (sign < 0 if role == "lip" else sign > 0)
+        )
         if not mine:
             continue
         result = result.fuse(solid) if role == "lip" else result.cut(solid)
         note = extra or note
+        roles.append(role)
     try:
         result = result.removeSplitter()
     except Exception:
         pass
-    if not result.Solids:
-        raise LipError("The lip could not be joined to the part.")
-    return bodies.to_local(result, bodies.body_of(obj)), note
+    r = options.get("root_radius", 0.0)
+    if r > 1e-9 and options["type"] != "groove":
+        b = options["lip_width"]
+        if "lip" in roles:
+            result, extra = _round_at(result, rim, b, r, "the root radius")
+            note = extra or note
+        if "groove" in roles:
+            result, extra = _round_at(
+                result, rim, b + options["clearance"], r, "the groove's mouth"
+            )
+            note = extra or note
+    return result, note
+
+
+def _round_at(shape, rim, offset, radius, what):
+    """Round the edges of `shape` lying in the rim's plane `offset` mm from the picked chain
+    (the lip's root, a groove's mouth); (shape, note)."""
+    import Part
+
+    base = rim.wire.Vertexes[0].Point
+    n = rim.normal
+    edges = []
+    for edge in shape.Edges:
+        try:
+            mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
+            points = [v.Point for v in edge.Vertexes] + [mid]
+            if any(abs((q - base).dot(n)) > 1e-5 for q in points):
+                continue
+            # the middle at that offset; the ends at least that far (a sharp corner of the
+            # offset loop lies offset / sin(half its angle) from the chain's corner)
+            far = [rim.wire.distToShape(Part.Vertex(q))[0] for q in points]
+            if abs(far[-1] - offset) < 1e-4 and all(f > offset - 1e-4 for f in far[:-1]):
+                edges.append(edge)
+        except Exception:
+            continue
+    if not edges:
+        return shape, ""
+    try:
+        out = shape.makeFillet(radius, edges)
+        if out.isValid() and out.Solids:
+            return out, ""
+    except Exception:
+        pass
+    return shape, "%s could not be rounded: try a smaller Root Radius" % what
 
 
 class LipGrooveFollower(modify_bodies._Follower):
@@ -668,16 +725,8 @@ class LipGrooveFollower(modify_bodies._Follower):
         shape = bodies.baked(base_shape)
         if not place.isIdentity():
             shape.transformShape(place.toMatrix(), True)
-        result = shape
-        for role, (solid, sign, _extra) in made.items():
-            theirs = sign < 0 if role == "lip" else sign > 0
-            if not theirs:
-                continue
-            result = result.fuse(solid) if role == "lip" else result.cut(solid)
-        try:
-            result = result.removeSplitter()
-        except Exception:
-            pass
+        result, note = apply(shape, rim, options, made, own=False)
+        modify_bodies._set_note(obj, note)
         if not place.isIdentity():
             result = result.copy()
             result.transformShape(place.inverse().toMatrix(), True)

@@ -36,6 +36,7 @@ FIELDS = [
     ("groove_width", "mm"),
     ("groove_depth", "mm"),
     ("tip_radius", "mm"),
+    ("root_radius", "mm"),
 ]
 EDGE_COLOR = (0.35, 0.75, 1.0)
 
@@ -172,6 +173,7 @@ class LipPanel(Panel):
             "lip_width": lip,
             "lip_height": lip,
             "tip_radius": lip,
+            "root_radius": lip,
             "clearance": kind == "lip_and_groove",
             "clearance_height": kind == "lip_and_groove",
             "groove_width": groove_only,
@@ -452,9 +454,15 @@ class LipPanel(Panel):
             return
         text = preview.failure(self.target)
         if not text and self.target is not None:
-            note = getattr(self.target, "SciForgeWarning", "")
-            if note:
-                self.message.setText("Note: " + note)
+            from . import modify_bodies
+
+            notes = [getattr(self.target, "SciForgeWarning", "")]
+            notes += [
+                getattr(f, "SciForgeWarning", "") for f in modify_bodies.followers_of(self.target)
+            ]
+            notes = [n for n in notes if n]
+            if notes:
+                self.message.setText("Note: " + "; ".join(notes))
                 return
         self.message.setText("⚠ " + text if text else "")
 

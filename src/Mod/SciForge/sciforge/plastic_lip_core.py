@@ -31,6 +31,7 @@ LENGTHS = (
     "groove_width",
     "groove_depth",
     "tip_radius",
+    "root_radius",
 )
 ANGLES = ("inner_draft", "outer_draft")
 LABELS = {
@@ -41,6 +42,7 @@ LABELS = {
     "groove_width": "Groove Width",
     "groove_depth": "Groove Depth",
     "tip_radius": "Tip Radius",
+    "root_radius": "Root Radius",
     "inner_draft": "Inner Draft",
     "outer_draft": "Outer Draft",
 }
@@ -74,6 +76,7 @@ def defaults(rule=None):
         "inner_draft": float(rule["draft_angle"]),
         "outer_draft": float(rule["draft_angle"]),
         "tip_radius": 0.0,
+        "root_radius": 0.0,
         "linked": sorted(RULE_FIELDS),
     }
 
@@ -107,7 +110,7 @@ def validate(options):
     for key in needed:
         if not o.get(key, 0) > 0:
             problems.append("%s must be more than 0." % LABELS[key])
-    for key in ("clearance", "clearance_height", "tip_radius"):
+    for key in ("clearance", "clearance_height", "tip_radius", "root_radius"):
         if o.get(key, 0) < 0:
             problems.append("%s cannot be negative." % LABELS[key])
     for key in ANGLES:
@@ -123,6 +126,8 @@ def validate(options):
             )
         if o["tip_radius"] > 0 and 2 * o["tip_radius"] >= top[1] - top[0]:
             problems.append("Tip Radius must be less than half the lip's top width.")
+        if o.get("root_radius", 0) + o["tip_radius"] >= o["lip_height"]:
+            problems.append("Root Radius and Tip Radius together must be less than Lip Height.")
     else:
         bottom = groove_section(o)[1]
         if bottom[1] - bottom[0] <= 0.05 * o["groove_width"]:
