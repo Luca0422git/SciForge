@@ -75,4 +75,9 @@ when that property is non-empty. To keep SciForge's workbench active:
 * `--only base` at 8af46ba (before any change): everything passes except the headless
   "docs examples" check `get_drawing#1` (a number -22 is now -23): already failing at
   8af46ba, unrelated to sketches.
-* Results of the runs after the change: see the report at the end of the session (below).
+* After the change: `--only base` same as before (only `get_drawing#1` fails, as at 8af46ba).
+  67 of 68 scenarios PASS: every sketch*, fixsketch*, sketch2_*, sketch_tools_*, sketch_qa*
+  and modeling2_sketch scenario, plus ribbon_sweep, keys, marking_menu_command, doc_tabs_top,
+  overlay_title, extrude_edit_sketch_shown, extrude_from_edited_sketch, sketch_enter_perf.
+  `ribbon_customize` FAILS (the question box / pins checks), and it fails the same way with
+  8af46ba's shell.py, so that is not from this change (it does not open a sketch).
