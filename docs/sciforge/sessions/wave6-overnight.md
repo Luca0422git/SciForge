@@ -113,4 +113,8 @@ The full lists are in each parity doc's "Known gaps". The main ones:
 - The QA agents fixed **78 bugs** before merging and the journey testers **6 more** that only
   show when tools are used together.
 - Every command on the four tabs was clicked by the ribbon sweep test (374 checks, no errors).
+- Three more fixes at the end, each proven by a test that fails on the old code: suppressing
+  a surface step no longer blanks its body; Shell with Sharp corners no longer hands back an
+  unshelled part without a word on some shapes (it now says to choose Rounded); Join by Bend
+  keeps working when the joined body is deleted later.
 - GitHub's full "SciForge tests" run on the final code: see the end of this file.

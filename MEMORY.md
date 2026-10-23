@@ -1533,6 +1533,15 @@ breakdown for him: `docs/sciforge/sessions/wave6-overnight.md`.
   eye showing everything under it, deleting a Snap Fit breaking the Lip after it.
 - `extrude_multibody_edit` path E (drag timing on a 144-hole plate, 11-13 s against 8 s)
   fails locally under load, also on develop before wave 6.
+- Follow-up fixes after the journeys (branches `sf/fix-*`, each with a test that fails on
+  the old code): suppressing an older SURFACE step no longer empties its body
+  (`surface.py` SurfaceFeature.onChanged puts the surface before it back; golden
+  `surface_suppress_patch_trim`); Shell Sharp that OpenCASCADE gives back unshelled is
+  refused with "choose Shell Type Rounded" instead of a silent wrong part (`shelling.py`
+  Unshelled; scenario `shell_draft_qa_sharp`; a native PartDesign Thickness made earlier can
+  still fall back silently after an upstream edit: needs a core patch, in the parity doc);
+  Join by Bend keeps a frozen copy of the used-up body (deleting it no longer breaks the
+  step); Design Advice names bodies Component/Body. Unit 1995, golden 587 + 2 xfail.
 
 #### FreeCAD / OpenCASCADE facts found (more in the area session logs)
 - One OpenCASCADE solid cannot hold two touching layers: a flat hem and a Tear relief keep a
@@ -1545,8 +1554,8 @@ breakdown for him: `docs/sciforge/sessions/wave6-overnight.md`.
   suppressed surface step leaves its body empty (fixed for surface-4 steps; still open for
   the older surface.py steps).
 - PartDesign Thickness with Join=Intersection (SciForge's Shell Sharp) returns a half pipe
-  unshelled but "valid" with no error (found by plastic-1; pre-existing, not fixed: a silent
-  wrong result in Shell).
+  unshelled but "valid" with no error (found by plastic-1; the dialog now refuses it, see
+  the follow-up fixes).
 
 #### Open
 - Not checked by Luca. Quick update zip with WHATS_NEW.txt made at the end of the session.
@@ -1556,8 +1565,8 @@ breakdown for him: `docs/sciforge/sessions/wave6-overnight.md`.
   unknown; Design Advice is sampled and slow on big parts; Rib / Web without draft; Patch
   Tangency Weight and Loft Align Edges greyed (kernel); Extrude Match Shape; some Press Pull
   face combinations on surfaces refused.
-- Pre-existing problems seen: Shell Sharp half pipe (above); `sketch_draw`'s "sketch palette
-  shown" check failed locally under load, also on develop before wave 6.
+- Pre-existing problems seen: `sketch_draw`'s "sketch palette shown" check failed locally
+  under load, also on develop before wave 6.
 
 #### Results
 (filled in at the end of the session)
