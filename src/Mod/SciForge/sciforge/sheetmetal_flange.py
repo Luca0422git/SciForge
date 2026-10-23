@@ -592,6 +592,12 @@ def discard(step):
         setattr(body, sheetmetal.RULE_PROP, "")
 
 
+def made_body(step):
+    """True when the step made its body a sheet metal body (a base or contour flange made
+    as New Body / New Component)."""
+    return bodies.load_meta(step, META).get("body") in ("new", "marked")
+
+
 def _empty(body):
     """True when a body has no solid step yet (only sketches / planes)."""
     for obj in bodies.solid_steps(body):

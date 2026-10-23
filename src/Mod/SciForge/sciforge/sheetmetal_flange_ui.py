@@ -71,6 +71,7 @@ class FlangePanel(Panel):
         self.overlay = None
         self._quiet = False
         self.rows = {}
+        self.owns_body = False
         if feature is not None:
             try:
                 self.options = flange.options_of(feature)
@@ -81,6 +82,9 @@ class FlangePanel(Panel):
                     self.to_object = (feature.Target[0], subs[0] if subs else "")
                 self.rule_name = sheetmetal.body_rule_name(self.body) or self.rule_name
                 self.made_with = (self.kind, "existing", self.rule_name)
+                # the flange that made its body: its Rule box swaps the body's rule (Fusion
+                # swaps rules, never detaches them)
+                self.owns_body = flange.made_body(feature)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self._build_form()
@@ -250,6 +254,8 @@ class FlangePanel(Panel):
                 keys |= {"operation"}
                 if self.operation_box.currentData() != "join":
                     keys.add("rule")
+            elif self.owns_body:
+                keys.add("rule")
         if self.kind == "contour":
             keys |= {"distance", "direction", "flip", "override_bend_radius"}
             if o["direction"] == "two_sides":
@@ -611,6 +617,12 @@ class FlangePanel(Panel):
                 )
                 self.made_with = made_with
             else:
+                if self.editing and self.owns_body:
+                    body = flange.owner_body(self.target)
+                    if sheetmetal.body_rule_name(body) != self.rule_name:
+                        from . import sheetmetal_rules
+
+                        sheetmetal_rules.set_body_rule(body, self.rule_name)
                 flange.update(self.target, refs=self.refs, options=options, target=self.to_object)
                 if not self.to_object:
                     self.target.Target = None

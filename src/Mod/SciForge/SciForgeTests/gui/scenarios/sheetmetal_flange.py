@@ -90,6 +90,26 @@ def plate():
     h.shot("2-plate")
 
 
+def rule_aluminum():
+    sm.choose("rule", "Aluminum (mm) (Library)")
+
+
+def thicker():
+    sm.settle()
+    h.check(
+        "Aluminum (mm): a 1.5 mm plate", sm.near(sm.volume(s["body"]), 2250.0), sm.volume(s["body"])
+    )
+
+
+def rule_steel():
+    sm.choose("rule", "Steel (mm)")
+
+
+def steel_again():
+    sm.settle()
+    h.check("Steel (mm): 1 mm again", sm.near(sm.volume(s["body"]), 1500.0), sm.volume(s["body"]))
+
+
 def side_2():
     sm.choose("orientation", "Side 2")
 
@@ -289,7 +309,65 @@ def done_135():
     box = s["body"].Shape.BoundBox
     h.check("135: the wall leans back over the plate", box.XMax <= 50 + 1e-6 and box.ZMax < 11, box)
     h.check("one valid solid", s["body"].Shape.isValid() and len(s["body"].Shape.Solids) == 1)
+    s["v135"] = sm.volume(s["body"])
     h.shot("5-135")
+
+
+def edit_base():
+    sm.double_click_timeline("Flange 1")
+
+
+def base_rule_shown():
+    p = sm.panel()
+    h.check("the base flange's dialog", p is not None and p.kind == "base" and p.editing)
+    h.check("its Rule box (it made the body)", sm.shown("rule"))
+    h.check("no Operation when editing", not sm.shown("operation"))
+
+
+def swap_rule():
+    sm.choose("rule", "Aluminum (mm)")
+
+
+def swapped():
+    sm.settle()
+    from sciforge import sheetmetal
+
+    h.check(
+        "the body follows Aluminum (mm)", sheetmetal.body_rule_name(s["body"]) == "Aluminum (mm)"
+    )
+    box = s["body"].Shape.BoundBox
+    h.check("the whole part 1.5 mm now", abs(box.ZMin) < 1e-6 and s["body"].Shape.isValid(), box)
+    h.check("bigger than in 1 mm", sm.volume(s["body"]) > s["v135"] * 1.3, sm.volume(s["body"]))
+
+
+def ok_swap():
+    sm.ok()
+
+
+def swap_done():
+    h.check("dialog closed", sm.panel() is None)
+    from sciforge import sheetmetal
+
+    h.check("kept after OK", sheetmetal.body_rule_name(s["body"]) == "Aluminum (mm)")
+    node = sm.browser_node("body:" + s["body"].Name)
+    h.check(
+        "the browser's tooltip names the rule",
+        node is not None and "Aluminum (mm)" in node["tip"],
+        node and node["tip"],
+    )
+
+
+def undo_swap():
+    sm.undo()
+
+
+def swap_undone():
+    from sciforge import sheetmetal
+
+    h.check("undo: Steel (mm) again", sheetmetal.body_rule_name(s["body"]) == "Steel (mm)")
+    h.check(
+        "undo: the 1 mm part", sm.near(sm.volume(s["body"]), s["v135"], 1e-7), sm.volume(s["body"])
+    )
 
 
 h.run(
@@ -305,6 +383,10 @@ h.run(
         dialog_waits,
         click_profile,
         plate,
+        rule_aluminum,
+        thicker,
+        rule_steel,
+        steel_again,
         side_2,
         under_sketch,
         side_1,
@@ -338,5 +420,13 @@ h.run(
         angle_135,
         ok_135,
         done_135,
+        edit_base,
+        base_rule_shown,
+        swap_rule,
+        swapped,
+        ok_swap,
+        swap_done,
+        undo_swap,
+        swap_undone,
     ],
 )
