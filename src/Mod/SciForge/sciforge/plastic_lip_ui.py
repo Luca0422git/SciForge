@@ -3,9 +3,10 @@
 
 Click the edges where the two halves of an enclosure meet (the inside edge of the rim, so
 the reveal shows on the outside; Tangent Chain takes the edges joined smoothly to the one
-clicked). Lip stands a lip on the rim; Groove cuts a groove into it; Lip And Groove puts the
-lip on this body and the matching groove (the lip grown by the clearance) in the body that
-touches it, Swap the other way round. Guide Type: Pull Direction (the rim's normal, the
+clicked; a click on the rim's flat face takes its inside edge). Lip stands a lip on the rim;
+Groove cuts a groove into it; Lip And Groove puts the lip on this body and the matching
+groove (the lip grown by the clearance) in the body that touches it, Swap the other way
+round. Guide Type: Pull Direction (the rim's normal, the
 section kept upright) or Face Guide. The Advanced sizes start from the component's plastic
 rule (lip width = Thickness / 2, lip height = Reveal Height, Clearance, Draft Angle) and
 follow it until a value is typed. The blue arrows drag the lip's height and width. One
@@ -290,7 +291,9 @@ class LipPanel(Panel):
         if self.names:
             self._picks_changed()
         else:
-            self.message.setText("Click the inside edges of the rim where the halves meet.")
+            self.message.setText(
+                "Click the inside edges of the rim where the halves meet (or the rim's flat face)."
+            )
 
     def _watch(self):
         panel = self
