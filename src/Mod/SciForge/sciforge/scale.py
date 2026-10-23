@@ -102,8 +102,9 @@ def _keep_names(shape, result):
 def scaled(shape, point, factors):
     """A scaled copy of `shape` about `point` (body coordinates). Raises ScaleError."""
     sx, sy, sz = factors
-    if shape is None or shape.isNull() or not shape.Solids:
-        raise ScaleError("Make a solid first (Create Sketch, then Extrude).")
+    if shape is None or shape.isNull() or not shape.Faces:
+        raise ScaleError("Make a solid or a surface first (Create Sketch, then Extrude).")
+    open_body = not shape.Solids  # a surface body scales too (SURFACE > MODIFY, surface-4)
     try:
         if abs(sx - sy) < 1e-12 and abs(sx - sz) < 1e-12:
             result = shape.copy()
@@ -113,7 +114,7 @@ def scaled(shape, point, factors):
         _keep_names(shape, result)
     except Exception as exc:
         raise ScaleError("The part could not be scaled: %s" % exc)
-    if result.isNull() or not result.Solids or not result.isValid():
+    if result.isNull() or not result.isValid() or not (result.Faces if open_body else result.Solids):
         raise ScaleError("Scaling made an invalid part. Try other factors.")
     return result
 
@@ -234,8 +235,8 @@ class ScaleFeature:
 
     def execute(self, obj):
         base = obj.BaseFeature
-        if base is None or base.Shape.isNull() or not base.Shape.Solids:
-            raise ScaleError("Scale needs a solid before it in the timeline.")
+        if base is None or base.Shape.isNull() or not base.Shape.Faces:
+            raise ScaleError("Scale needs a solid or a surface before it in the timeline.")
         options = read_options(obj)
         factors = factors_of(options)
         check_factors(factors, options["uniform"])
@@ -320,8 +321,8 @@ def apply(feature, base, point_ref, options, formulas=None):
 
 def make(body, base, point_ref, options, name="Scale", formulas=None):
     """A new Scale at the end of `body`, on `base` (normally body.Tip). Not recomputed."""
-    if base is None or base.Shape.isNull() or not base.Shape.Solids:
-        raise ScaleError("Make a solid first (Create Sketch, then Extrude).")
+    if base is None or base.Shape.isNull() or not base.Shape.Faces:
+        raise ScaleError("Make a solid or a surface first (Create Sketch, then Extrude).")
     obj = body.newObject(TYPE, name)
     ScaleFeature(obj)
     _attach_view_provider(obj)
