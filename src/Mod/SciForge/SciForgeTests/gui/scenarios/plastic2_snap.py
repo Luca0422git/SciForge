@@ -74,7 +74,11 @@ def hook_and_groove():
     h.shot("plastic2_snap_hook")
     h.check("the strain is shown", "Strain" in p.strain.text(), p.strain.text())
     h.check("no error", not p.error and "⚠" not in ps.message(p), ps.message(p))
-    h.check("two arrows (length, catch depth)", set(p.arrows) == {"length", "catch_depth"})
+    h.check(
+        "arrows (length, catch depth) and the rotation handle",
+        set(p.arrows) == {"length", "catch_depth", "angle"},
+        sorted(p.arrows),
+    )
     ps.type_field(p, "length", "14")
 
 

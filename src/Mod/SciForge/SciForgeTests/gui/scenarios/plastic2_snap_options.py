@@ -23,6 +23,7 @@ from PySide6 import QtTest
 
 from SciForgeTests.gui import harness as h
 from SciForgeTests.gui import plastic2_steps as ps
+from SciForgeTests.gui import revolve_input as ri
 
 V = App.Vector
 s = {}
@@ -132,6 +133,26 @@ def independent_angles():
     h.check("the angles taken", p.options["angles"] == [0.0, 180.0, 90.0], p.options["angles"])
     cut = -base_change()
     h.check("Independent 0 / 180: the same two grooves", ps.near(cut, 2 * ps.GROOVE, 1e-6), cut)
+    turns = sorted(k for k in p.arrows if k.startswith("angle"))
+    h.check("a rotation handle per snap fit", turns == ["angle1", "angle2", "angle3"], turns)
+    handle = p.arrows.get("angle1")
+    if handle is not None:
+        h.fit()
+        ri.drag_handle(p.arrows["angle1"], 90.0)
+
+
+independent_angles.wait_ms = 1200
+
+
+def turned_one():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    first = p.options["angles"][0]
+    h.check("its handle turned the first snap fit only", 60.0 < first < 120.0, p.options["angles"])
+    h.check("the others kept their angles", p.options["angles"][1:] == [180.0, 90.0])
+    h.check("the Angles field follows", p.angles.text().startswith("%g" % first), p.angles.text())
+    cut = -base_change()
+    h.check("the right groove changed", not ps.near(cut, 2 * ps.GROOVE, 1e-6), cut)
     ps.choose(p.rotation, "Aligned")
 
 
@@ -341,6 +362,7 @@ h.run(
         aligned,
         independent,
         independent_angles,
+        turned_one,
         align_box,
         click_right_face,
         aligned_to_face,

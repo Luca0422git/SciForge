@@ -45,6 +45,7 @@ HOOK_FIELDS = [
 ]
 OTHER_FIELDS = [("clearance", "mm"), ("loop_thickness", "mm")]
 OTHER_TITLES = {"parallel": "Groove", "perpendicular": "Hook Undercut", "loop": "Loop"}
+MAX_TURN_HANDLES = 12  # Independent: a rotation handle for each of the first 12 snap fits
 
 
 def point_index(sketch, short):
@@ -699,8 +700,92 @@ class SnapFitPanel(Panel):
                 on_release=self._dragged("catch_depth"),
             )
             self._attach_box("catch_depth")
+            self._make_turn_handles(placed)
         except Exception as exc:
             warn("Snap Fit arrows unavailable: %s" % exc)
+
+    def _make_turn_handles(self, placed):
+        """Fusion's rotation manipulators: one for Uniform (the first snap fit's), one per
+        snap fit for Independent; none for Aligned (the reference sets the turn)."""
+        from . import handles3d
+
+        rotation = self.options["rotation"]
+        if rotation == "aligned":
+            return
+        normal, x_axis = plastic_snap.sketch_axes(self.sketch)
+        radius = max(4.0, 0.9 * self.options["width"])
+        count = 1 if rotation == "uniform" else min(len(placed), MAX_TURN_HANDLES)
+        angles = core.angles_for(self.options, len(placed))
+        for i in range(count):
+            origin = placed[i][0]
+            key = "angle" if rotation == "uniform" else "angle%d" % (i + 1)
+            self.arrows[key] = handles3d.angle_handle(
+                origin,
+                normal,
+                x_axis,
+                radius,
+                angles[i],
+                2.0,
+                on_drag=self._turned(i),
+                on_release=self._turned(i),
+            )
+            if rotation == "uniform":
+                field = self.angle
+                self.value_boxes.attach(
+                    self.arrows[key],
+                    key,
+                    lambda: field.widget.text(),
+                    lambda text: self._angle_box_typed(None, text),
+                )
+            else:
+                self.value_boxes.attach(
+                    self.arrows[key],
+                    key,
+                    (lambda i=i: "%.2f°" % core.angles_for(self.options, i + 1)[i]),
+                    (lambda text, i=i: self._angle_box_typed(i, text)),
+                )
+
+    def _turned(self, index):
+        @safe
+        def turned(value):
+            value = round(float(value), 2)
+            if self.options["rotation"] == "uniform":
+                self._quiet = True
+                try:
+                    self.angle.set_value(value)
+                finally:
+                    self._quiet = False
+                self.options["angle"] = value
+            else:
+                self._set_angle(index, value)
+            self._changed()
+
+        return turned
+
+    def _set_angle(self, index, value):
+        count = len(plastic_snap.chosen_points(self.sketch, self.indices)) if self.sketch else 0
+        angles = core.angles_for(self.options, max(count, index + 1))
+        angles[index] = float(value)
+        self.options["angles"] = angles
+        self._quiet = True
+        try:
+            self.angles.setText(", ".join("%g" % a for a in angles))
+        finally:
+            self._quiet = False
+
+    def _angle_box_typed(self, index, text):
+        if self._closed:
+            return
+        try:
+            value = self.angle.parse(text.strip().lstrip("="))
+        except ValueError as exc:
+            self.message.setText("⚠ " + str(exc))
+            return
+        if index is None:
+            self.angle.take(value)
+            return
+        self._set_angle(index, value)
+        self._changed()
 
     def _attach_box(self, key):
         field = self.fields[key]
@@ -824,6 +909,8 @@ def _followers(feature):
 
 def _dragging(arrow):
     try:
+        if getattr(arrow, "_drag", False):
+            return True  # an angle handle being turned
         return bool(arrow.dragger.isActive.getValue())
     except Exception:
         return False
