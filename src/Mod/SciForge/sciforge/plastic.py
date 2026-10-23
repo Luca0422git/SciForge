@@ -25,6 +25,17 @@ The contract of the PLASTIC builders (wave 6; extend it, never rename or remove)
     rule_for_component(doc, component, fallback=False)
     rule_for_body(body, fallback=True)
     default_for(body, field)
+
+Added by plastic-1 (wave 6):
+
+    library_rules(), library_rule(name)  the built-in library plus the user's own rules
+    save_library_rule(rule), delete_library_rule(name)
+    default_rule_name(), set_default_rule(name)   Fusion's "Set As Default" (library only)
+    is_used(doc, name)                   a design rule assigned to a component
+    unique_name(doc, base)               "ABS 2 mm (2)" for a copy
+    material_key(rule)                   the rule's physical material in material.LIBRARY
+    apply_material(doc, component)       give the component's bodies the rule's material
+    plastic_components(doc)              [(component or None, rule name)] with a rule
 """
 
 import json
@@ -33,6 +44,128 @@ from . import bodies, components, log, plastic_core as core, warn
 
 STORE_NAME = "PlasticRules"
 RULE_PROP = "SciForgePlasticRule"
+PREF = "User parameter:BaseApp/Preferences/Mod/SciForge/Plastic"
+
+
+# -- the library (built in + the user's own, kept in the user's settings) ------------------------
+def _pref():
+    import FreeCAD as App
+
+    return App.ParamGet(PREF)
+
+
+def _user_library():
+    try:
+        rules = json.loads(_pref().GetString("Library", "") or "[]")
+        return [r for r in rules if isinstance(r, dict) and r.get("name")]
+    except Exception as exc:
+        warn("plastic rule library unreadable: %s" % exc)
+        return []
+
+
+def library_rules():
+    """Every library rule: the built-in ones (a user's edited copy replaces one), then the
+    user's own."""
+    user = {r["name"]: r for r in _user_library()}
+    found = []
+    for rule in core.LIBRARY:
+        found.append(dict(user.pop(rule["name"], rule)))
+    found += [dict(r) for r in user.values()]
+    return found
+
+
+def library_rule(name):
+    for rule in library_rules():
+        if rule["name"] == name:
+            full = dict(core.make_rule(name))
+            full.update(rule)
+            return full
+    return None
+
+
+def save_library_rule(rule):
+    problems = core.validate(rule)
+    if problems:
+        raise ValueError(problems[0])
+    rules = [r for r in _user_library() if r["name"] != rule["name"]]
+    rules.append(dict(rule))
+    _pref().SetString("Library", json.dumps(rules))
+    log("plastic library rule '%s' saved" % rule["name"])
+
+
+def delete_library_rule(name):
+    if name == default_rule_name():
+        raise ValueError("'%s' is the default rule: set another rule as default first" % name)
+    if core.library_rule(name) is not None and not any(r["name"] == name for r in _user_library()):
+        raise ValueError("'%s' is one of SciForge's own library rules: it cannot be deleted" % name)
+    _pref().SetString("Library", json.dumps([r for r in _user_library() if r["name"] != name]))
+
+
+def default_rule_name():
+    name = ""
+    try:
+        name = _pref().GetString("Default", "")
+    except Exception:
+        pass
+    if name and library_rule(name) is not None:
+        return name
+    return core.DEFAULT_RULE
+
+
+def set_default_rule(name):
+    if library_rule(name) is None:
+        raise ValueError("no library rule named '%s'" % name)
+    _pref().SetString("Default", name)
+
+
+def is_used(doc, name):
+    return bool(_components_using(doc, name))
+
+
+def unique_name(doc, base, library=False):
+    taken = {r["name"] for r in (library_rules() if library else design_rules(doc))}
+    if base not in taken:
+        return base
+    i = 2
+    while "%s (%d)" % (base, i) in taken:
+        i += 1
+    return "%s (%d)" % (base, i)
+
+
+def material_key(rule):
+    """The material.LIBRARY key of the rule's material, or None (SciForge has none)."""
+    return core.MATERIAL_KEYS.get((rule or {}).get("material", ""))
+
+
+def apply_material(doc, component=None):
+    """Give every body of the component (None: the root's own bodies) the physical material
+    of its rule, like Fusion's rule controls the component's material. Returns the
+    material key, or None when SciForge's library has no such material."""
+    name = assigned_rule_name(doc, component)
+    rule = (find_rule(doc, name) or library_rule(name)) if name else None
+    key = material_key(rule) if rule else None
+    if key is None:
+        return None
+    from . import material
+
+    for body in components.bodies_in(doc, component, recursive=component is not None):
+        try:
+            material.assign(body, key)
+        except Exception as exc:
+            warn("plastic rule material on %s: %s" % (body.Label, exc))
+    return key
+
+
+def plastic_components(doc):
+    found = []
+    name = assigned_rule_name(doc, None)
+    if name:
+        found.append((None, name))
+    for component in components.list_components(doc):
+        name = getattr(component, RULE_PROP, "") or ""
+        if name:
+            found.append((component, name))
+    return found
 
 
 def rules_object(doc, create=False):
@@ -134,7 +267,7 @@ def assign_rule(doc, name, component=None):
     """Assign the rule to the component (None: the root). A library rule is copied into the
     design first; "" removes the assignment."""
     if name and find_rule(doc, name) is None:
-        rule = core.library_rule(name)
+        rule = library_rule(name)
         if rule is None:
             raise ValueError("no plastic rule named '%s'" % name)
         save_rule(doc, rule)
@@ -152,20 +285,24 @@ def rule_for_component(doc, component=None, fallback=False):
     """The evaluated rule (plastic_core.evaluated) assigned to the component, or None; with
     fallback=True the library's default rule when none is assigned."""
     name = assigned_rule_name(doc, component)
-    rule = (find_rule(doc, name) or core.library_rule(name)) if name else None
+    rule = (find_rule(doc, name) or library_rule(name)) if name else None
     if name and rule is None:
         warn("plastic rule '%s' not found; using the default" % name)
     if rule is None:
         if not fallback:
             return None
-        rule = core.library_rule(core.DEFAULT_RULE)
+        rule = library_rule(default_rule_name()) or core.library_rule(core.DEFAULT_RULE)
     return core.evaluated(rule)
 
 
 def rule_for_body(body, fallback=True):
     """The rule of the body's component (see rule_for_component)."""
     if not bodies.is_body(body):
-        return core.evaluated(core.library_rule(core.DEFAULT_RULE)) if fallback else None
+        if not fallback:
+            return None
+        return core.evaluated(
+            library_rule(default_rule_name()) or core.library_rule(core.DEFAULT_RULE)
+        )
     return rule_for_component(body.Document, components.container_of(body), fallback)
 
 
@@ -178,3 +315,36 @@ def default_for(body, field):
         warn("plastic rule: %s" % exc)
         return None
     return None if rule is None else rule.get(field)
+
+
+# The existing SOLID tools' fields that take a plastic rule's value (plastic-1; research
+# fusion-plastic.md 1.3): tool -> {option: (rule field, factor)}. Rib / Web 0.6 x the wall
+# (generic plastics guidance, G).
+TOOL_DEFAULTS = {
+    "shell": {"inside": ("thickness", 1.0), "outside": ("thickness", 1.0)},
+    "draft": {"angle": ("draft_angle", 1.0), "angle2": ("draft_angle", 1.0)},
+    "rib": {"thickness": ("thickness", 0.6)},
+    "extrude": {"wall_thickness": ("thickness", 1.0), "wall_thickness2": ("thickness", 1.0)},
+    "fillet": {"radius": ("nominal_radius", 1.0)},
+}
+
+
+def apply_defaults(options, body, tool):
+    """Put the body's component's rule values into a new dialog's options (in place) for the
+    fields of TOOL_DEFAULTS[tool]; nothing for a body whose component has no rule. Returns
+    the option names it set. Never raises (a dialog must open whatever happens here)."""
+    done = []
+    try:
+        if body is None or not plastic_components(body.Document):
+            return done
+        for key, (field, factor) in TOOL_DEFAULTS.get(tool, {}).items():
+            value = default_for(body, field)
+            if value is None or key not in options:
+                continue
+            options[key] = round(float(value) * factor, 4)
+            done.append(key)
+        if done:
+            log("plastic rule defaults for %s: %s" % (tool, ", ".join(done)))
+    except Exception as exc:
+        warn("plastic rule defaults for %s: %s" % (tool, exc))
+    return done

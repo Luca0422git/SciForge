@@ -124,8 +124,6 @@ def inward_direction(base, origin, normal, flip=False):
 
 def rest_shape(base, faces, origin, normal, options):
     """The body (global) with the rest made on the profile faces (global, on the plane)."""
-    import Part
-
     # removeSplitter() on a result can corrupt the shapes it was made from (FreeCAD 1.1.4,
     # shared sub-shapes): work on a copy
     base = base.copy()
@@ -196,7 +194,7 @@ def rest_shape(base, faces, origin, normal, options):
     return result
 
 
-# -- the step ---------------------------------------------------------------------------------------
+# -- the step --------------------------------------------------------------------------------------
 def is_rest(obj):
     return bodies.alive(obj) and getattr(obj, "SciForgeType", "") == TYPE
 

@@ -15,6 +15,7 @@ import FreeCADGui as Gui
 
 from . import commands, curve_pick, curves, extrude, log, preview, profile_pick, rib
 from . import ui_icon_path, warn
+from . import plastic  # plastic rule defaults (plastic-1)
 from .compat import QtCore, QtWidgets
 from .hole_common import SelectionField
 from .taskui import ArrowDragger, DistanceField, Panel, ValueBoxes
@@ -60,6 +61,9 @@ class RibPanel(Panel):
         self.refs = []
         self.options = dict(rib.DEFAULTS)
         self.options["kind"] = kind
+        if feature is None:
+            # SCIFORGE (plastic-1): a component with a plastic rule: 0.6 x its wall
+            plastic.apply_defaults(self.options, self.body, "rib")
         self.error = ""
         self.dirty = False
         self.arrows = {}

@@ -39,6 +39,7 @@ from . import (
     ui_icon_path,
     warn,
 )
+from . import plastic  # plastic rule defaults (plastic-1)
 from .compat import QtCore, QtWidgets
 from .taskui import DistanceField, ValueBoxes
 
@@ -180,6 +181,8 @@ class DraftPanel(pickpanel.PickPanel):
             from . import shell_ui
 
             self.body, self.base = shell_ui.start_body(body)
+            # SCIFORGE (plastic-1): a component with a plastic rule drafts by its angle
+            plastic.apply_defaults(self.options, self.body, "draft")
         self._build()
         self.finish_layout()
         self._rows()

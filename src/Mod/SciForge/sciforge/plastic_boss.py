@@ -368,7 +368,6 @@ class Frame:
 def side_shapes(base, frame, s, label="Side"):
     """(shapes to add, shapes to cut, root info) of one side at one point. `base` is the
     side's body (global), `s` the side's resolved settings. Raises BossError."""
-    import Part
 
     reach = reach_of(base)
     hits = segments(base, frame.a, frame.d, reach)
@@ -666,7 +665,7 @@ def _root_fillet(result, base, roots, radius, s, label):
         )
 
 
-# -- points of a sketch -----------------------------------------------------------------------------
+# -- points of a sketch ----------------------------------------------------------------------------
 def sketch_frame(sketch):
     """(origin, normal, x axis) of the sketch, global."""
     placement = sketch.getGlobalPlacement()
@@ -724,7 +723,7 @@ def check_refs(refs):
     return obj
 
 
-# -- finding the two bodies -------------------------------------------------------------------------
+# -- finding the two bodies ------------------------------------------------------------------------
 def candidate_bodies(doc, skip=()):
     """Solid bodies that can take a boss: shown, not used up, not sheet metal."""
     used = set()
@@ -768,7 +767,7 @@ def find_participants(doc, points, normal, offset=0.0):
     return out
 
 
-# -- the step ------------------------------------------------------------------------------------------
+# -- the step --------------------------------------------------------------------------------------
 def load_meta(obj):
     return bodies.load_meta(obj, META)
 

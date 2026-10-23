@@ -112,6 +112,59 @@ ALLOWABLE_STRAIN = {
 }
 
 
+# The rule's material -> SciForge's physical material (material.LIBRARY key); a material
+# SciForge's library does not have is None (the bodies keep theirs). Added by plastic-1.
+MATERIAL_KEYS = {
+    "ABS": "abs",
+    "Polycarbonate": "polycarbonate",
+    "Polypropylene": "polypropylene",
+    "Nylon 6/6": "nylon",
+    "Acetal": "acetal",
+    "Acrylic": "acrylic",
+    "PLA": "pla",
+    "PETG": "pet",
+}
+MATERIALS = tuple(ALLOWABLE_STRAIN)
+LABELS = {
+    "name": "Name",
+    "units": "Units",
+    "material": "Material",
+    "thickness": "Thickness",
+    "draft_angle": "Draft Angle",
+    "nominal_radius": "Nominal Radius",
+    "reveal_height": "Reveal Height",
+    "clearance": "Clearance",
+    "minimum_thickness": "Minimum Thickness",
+    "maximum_thickness": "Maximum Thickness",
+    "thickness_variation": "Thickness Variation (%)",
+    "minimum_draft_angle": "Minimum Draft Angle",
+    "knife_edge_threshold": "Knife Edge Threshold",
+}
+
+
+def describe(rule):
+    """[(label, text)] of a rule's values for the dialogs (expressions as typed, units)."""
+    rows = []
+    unit = rule.get("units", "mm")
+    for key in FIELDS:
+        if key == "name":
+            continue
+        kind = FIELDS[key][0]
+        value = str(rule.get(key, ""))
+        if kind == "length":
+            try:
+                float(value)
+                value = "%s %s" % (value, unit)
+            except ValueError:
+                pass
+        elif kind == "angle":
+            value = "%s deg" % value
+        elif kind == "percent":
+            value = "%s %%" % value
+        rows.append((LABELS[key], value))
+    return rows
+
+
 def library_rule(name):
     """A copy of the library rule with this name, or None."""
     for rule in LIBRARY:
