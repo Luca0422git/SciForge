@@ -4,7 +4,8 @@ view source), real input only: a U channel with a hole and its Flat Pattern (set
 New Drawing; Contents Select lists "Flat Pattern / Body" (not ticked); tick it, untick the
 body; OK: the drawing opens and its Base View shows the flat pattern from the top (the flat
 lies on XY): the outline, the hole and the bend lines are its 11 visible edges; a click places
-it; OK."""
+it; OK. TABLES > Bend Table: a table of the two bends (B1, B2: UP, 90 degrees, R 1.00, K 0.44)
+and an identifier balloon on each bend centre line; Ctrl+Z takes it away."""
 
 import FreeCAD as App
 from PySide import QtCore, QtWidgets
@@ -107,6 +108,62 @@ def done():
     h.check("dialog closed", d.panel() is None)
 
 
+def bend_table():
+    d.group_menu("TABLES", "Bend Table")
+
+
+bend_table.wait_ms = 1500
+
+
+def table_made():
+    from sciforge import drawing, flatpattern_drawing as fpd
+
+    page = d.page()
+    table = fpd.bend_table_of(page) if page is not None else None
+    h.check("a bend table on the drawing", table is not None)
+    if table is None:
+        return
+    rows = drawing.table_rows(table)
+    h.check("two bends: B1, B2", [r["Item"] for r in rows] == ["B1", "B2"], rows)
+    h.check(
+        "both up, 90 degrees, R 1.00, K 0.44",
+        all(
+            r["Direction"] == "UP"
+            and r["Angle"] == "90\u00b0"
+            and r["Radius"] == "1.00"
+            and r["KFactor"] == "0.44"
+            for r in rows
+        ),
+        rows,
+    )
+    balloons = [b for b in d.of_type("TechDraw::DrawViewBalloon")]
+    h.check(
+        "an identifier on each bend",
+        sorted(b.Text for b in balloons) == ["B1", "B2"],
+        [b.Text for b in balloons],
+    )
+    for b in balloons:
+        ox, oy = b.OriginX.Value, b.OriginY.Value
+        # the U's bend centre lines are 28 + BA/2 from each end: 29.131 from the middle
+        h.check(
+            "%s points at the middle of its bend centre line" % b.Text,
+            abs(abs(ox) - (58.26195 - 28 - fs.BA / 2)) < 0.01 and abs(oy) < 0.01,
+            (ox, oy),
+        )
+        h.check("%s sits above the flat" % b.Text, b.Y.Value > 10.0, b.Y.Value)
+    h.shot("2-bend-table")
+
+
+def undo_table():
+    d.undo()
+
+
+def table_undone():
+    from sciforge import flatpattern_drawing as fpd
+
+    h.check("undo takes the bend table away", fpd.bend_table_of(d.page()) is None)
+
+
 h.run(
     "flatpattern_drawing",
     [
@@ -121,5 +178,9 @@ h.run(
         placed,
         view_ok,
         done,
+        bend_table,
+        table_made,
+        undo_table,
+        table_undone,
     ],
 )

@@ -1300,6 +1300,12 @@ DRAWING_TABLES = group(
             note="A parts list of the components a view shows, with balloons.",
         ),
         item(
+            "Bend Table",
+            "SciForge_DrawingBendTable",
+            "dw_table",
+            note="The bends of a flat pattern view, with their identifiers.",
+        ),  # owner: sm-flat
+        item(
             "Balloon",
             "SciForge_DrawingBalloon",
             "dw_balloon",

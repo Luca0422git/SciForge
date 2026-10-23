@@ -18,7 +18,8 @@ Shared files changed (lines of this area only): `ribbon_config.py` (the five SHE
 entries and the FLAT PATTERN tab), `ribbon_ui.py` (the contextual FLAT PATTERN tab:
 `set_flat_pattern_mode`, `CONTEXTUAL`), `browser_core.py` / `browser_ui.py` (the Flat
 Pattern node, its menu and double-click), `drawing_ui.py` / `drawing.py` (a flat pattern in
-the Create Drawing list; its base view from the top). No FreeCAD core change.
+the Create Drawing list; its base view from the top; DRAWING > TABLES > Bend Table in
+`flatpattern_drawing*.py` and one ribbon line). No FreeCAD core change.
 
 Fusion's behaviour comes from `docs/sciforge/dev/research/fusion-sheet-metal.md` (sections 2.6
 to 2.12, 4.2, 4.8 and the critic pass; **A** = Autodesk help / API, **F** = forum or
@@ -60,6 +61,7 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | Fusion | SciForge | Src |
 |---|---|---|
 | Drawing > From Design, the flat pattern as the view source | File > New Drawing, Contents Select lists "Flat Pattern / <body>" (unticked); its Base View defaults to Top (the flat lies on XY); outline, holes and bend lines are drawn | F[F9], A[R37] |
+| Tables > Bend Table, pick a flat pattern view: a table of the bends, identifiers added to the view | DRAWING > TABLES > Bend Table: the picked (or only) flat pattern view gets balloons B1, B2 ... on its bend centre lines (left to right) and a table BEND ID / DIRECTION / ANGLE / RADIUS / K-FACTOR at the top left of the sheet; one undo step; one per drawing | A[R17], G (columns, balloons) |
 
 ### Export DXF (FLAT PATTERN > EXPORT, or right-click the Flat Pattern)
 
@@ -135,10 +137,10 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 - **FLAT PATTERN tab contents**: only INSPECT, SELECT, EXPORT (Export DXF) and FINISH; no
   sketches or construction geometry on the flat (Fusion allows them, A[R35]). The flat
   pattern is a shape beside the body, not a component of its own.
-- **Flat pattern STEP export, a drawing's Bend Table and bend notes** (Fusion: A[R36]
-  preview, A[R17]): not built (the DXF carries the bend notes as text instead). A drawing
-  *can* show the flat pattern (File > New Drawing > Contents Select > "Flat Pattern / ...",
-  its Base View defaults to Top, bend lines drawn as lines), without up / down styles.
+- **Flat pattern STEP export and drawing bend notes** (Fusion: A[R36] preview, "Create and
+  modify bend notes"): not built (the DXF carries the bend notes as text; the drawing has
+  the Bend Table). The drawing's bend lines have no up / down styles; the Bend Table does not
+  follow later edits of the flat (make it again).
 - **Side faces cut at an angle through the thickness** (sm-forming's mitres are bevelled
   along the corner's bisector plane): the flat takes the stationary side's outline, so its
   volume differs a little from the folded part's; a real (square) mitre cut has no such
