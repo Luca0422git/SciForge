@@ -61,9 +61,25 @@ def _box(body, kind, name, size, at):
     return obj
 
 
+PLASTIC_PREFS = "User parameter:BaseApp/Preferences/Mod/SciForge/Plastic"
+
+
+def clear_plastic_prefs():
+    """The user's own plastic library and default rule (kept in the settings by Manage
+    Plastic Rules) back to none: the sizes these scenarios check come from SciForge's own
+    default rule, whatever a scenario before them left there."""
+    try:
+        grp = App.ParamGet(PLASTIC_PREFS)
+        grp.SetString("Library", "")
+        grp.SetString("Default", "")
+    except Exception:
+        pass
+
+
 def enclosure(name, lid="plate"):
     """A new design with the base (60 x 40 x 20, 2 mm walls, open top) and a lid on it:
     "plate" (2 mm) or "shell" (60 x 40 x 10, 2 mm walls, open bottom)."""
+    clear_plastic_prefs()
     Gui.activateWorkbench("SciForgeWorkbench")
     d = App.newDocument(name)
     base = d.addObject("PartDesign::Body", "Base")
