@@ -222,3 +222,62 @@ What was wrong and what changed, in plain language:
   ~0.03 s, but could miss a broken shell; running the trials on another thread is not possible
   with FreeCAD's documents. The disc and the live picture stay free meanwhile, and letting go or
   OK gives the result.
+
+### The trade-off Luca should know about (2-F3 / 2-F5)
+
+While the mouse button stays down, a heavy dialog now waits a little longer before it builds
+the exact result (1.5 times its last rebuild, at most 0.45 s, instead of 0.2 s), so that a short
+stop to look does not freeze the next moves. Letting go builds at once. So on the 179-face part
+the exact result comes ~0.25 s later than before **if you stop and keep holding the button**
+(Fillet ~1.0 s instead of ~0.6-0.7 s), and immediately when you let go. Draft shows its live
+picture meanwhile. If this feels slow on your PC, `taskui.Panel.HELD_REST_MAX_MS` is the knob.
+
+### Measured after the fixes (reviewers' rv_feel, same cases, sandbox, software OpenGL)
+
+ms; "old" = c59634a, "review" = 5314634 (before these fixes), "now" = this branch. Freezes over
+100 ms are counted between the press and the release (the rebuild at rest while the button is
+held counts too).
+
+| Case | freezes >100 ms old / review / now | exact result after the last move old / review / now |
+|---|---|---|
+| Draft box, steady | 0 / 0 / 0 | 99 / 239 / 227 |
+| Draft 179-face part, steady | 16 / 3 / 2 | 594 / 663 / 842 |
+| Draft part, hesitant (0.32 s stops) | 14 / 10 / 2 | 558 / 437 / 706 |
+| Draft part, past the limit and back | 44 / 13 / 5 | 643 / 471 / 753 |
+| Draft part, past the limit, quickly back (2-F1) | 23 / 10 / 3 (longest 577 / 403 / 202) | 629 / 342 / 795 |
+| Draft 270-face part, hesitant | 15 / 8 / 2 | 1096 / 654 / 879 |
+| Draft hole walls, past the limit (2-F4) | 15 / 2 / 2 | 1326 / 3676 / 2863 |
+| Draft hole walls, held at 1.5 deg and dragged on (2-F7) | 39 / 0 / 0 | stays at 1.5 deg (was 1.5 / 0 / 0 ...) |
+| Press Pull part, steady (2-F2) | 21 / 3 / 1 (no rebuild while moving; was 1.3 s at the press) | 1193 / 1418 / 1490 |
+| Press Pull part, hesitant | 29 / 9 / 1 | 3050 / 1437 / 1746 |
+| Extrude part, steady | 13 / 10 / 5 | 1284 / 1497 / 693 |
+| Fillet part, hesitant | 33 / 15 / 2 | 611 / 700 / 1006 |
+| Chamfer part, hesitant | 33 / 14 / 2 | 641 / 773 / 996 |
+
+Other numbers: OK right after typing 15 deg on the part closes at once at 7.9 deg in 4-5 s (wait
+cursor; before: 0.6 s and the dialog stayed open); typing 3 during a search: exact preview after
+0.7 s (was 3.4 s); the limit on the part is 7.9 deg in every run; the wedge picture is 0.000 mm
+off (was 0.35 / 1.29 mm). perf_draft: box exact after the mouse stops 218 ms (baseline 235); part
+816 ms (627, the longer held rest); part past the limit 4.8 s (3.6 s: the held rest plus a search
+that now runs to its end); longest freeze while moving 41 / 57 / 86 ms.
+
+Still open (seen, not part of the review): Extrude's arrow on the 179-face part still stalls
+0.27-0.32 s on some moves without any rebuild (its snap to faces under the mouse, a pick per
+move); a Draft of a box's front face whose top edge is chamfered is refused at every angle
+(FreeCAD's Draft next to a sloping face; c59634a showed a broken solid instead); the docs runner
+compares the drawing title block's date, so `get_drawing#1` fails on any day after the recording
+day (2026-10-23: "-22 is now -23"), unrelated to Draft.
+
+### Tests run for the fixes (all passing)
+
+- Unit: 2198 (9 skipped), including `test_value_limits` (40) and `test_draft_live_core` (26).
+- `--only base`: golden 451 + 2 known xfail, headless AI 282 calls, MCP agent 81 checks, smoke,
+  journey, restarts; docs runner 140 / 141 (the date one above, not related).
+- The whole GUI suite (427 scenarios, 3 parallel shards): 409 passed in the shards; the 18 that
+  failed (17 in one shard whose clicks landed off target from the first sketch scenario on:
+  sketch_*, primitives_box, misc_decal...; and limits_extrude_other, a real one, fixed: a
+  release that rebuilds nothing still shows the limit hint) all pass when run again. Then every
+  extrude*, presspull, limits* scenario again on the final code (34): pass.
+- `draft_live_fixes` (23 checks), `drag_rest` (11), `draft_live` (125), `perf_draft` (19),
+  `perf_benchmark` (no measurement over 2x its baseline), `limits_shell_draft`, `draft_curved`,
+  `shell_draft_qa_draft`.
