@@ -11,11 +11,12 @@ draft 1 deg, nominal radius 1 mm, clearance 0.1 mm), for an enclosure 60 x 40 x 
 on the parting plane z = 20:
 
   thread side (enclosure, Side 2): a frustum r 3.75 at the tip (z 19.95, clearance 0.05)
-  widening by tan 1 deg down to the floor (z 2), a spigot r 2.9 (base r 2.9 + 0.9 tan 1)
-  0.9 high on the tip, a 1 mm root fillet, minus the pilot hole r 1.2 from the spigot's top
+  widening by tan 1 deg down to the floor (z 2), its tip carried on 0.9 into the lid's
+  recess (r 3.75, base r 3.75 + 0.9 tan 1), a 1 mm root fillet, minus the pilot hole r 1.2 from the spigot's top
   down to 1 mm above the outside (floor 1 mm);
-  head side (lid, Side 1): a frustum r 4.5 from z 20.05 up to the lid's inside (z 28), a 1 mm
-  root fillet, minus the alignment recess r 3 (drafted 1 deg) 1 mm deep, the clearance hole
+  head side (lid, Side 1): a frustum r 5 from z 20.05 up to the lid's inside (z 28), a 1 mm
+  root fillet, minus the alignment recess r 3.85 (the mate's 7.5 + 2 x 0.1 clearance,
+  drafted 1 deg) 1 mm deep, the clearance hole
   r 1.7 and the counterbore r 3.25 from 2 mm above the tip to the outside.
   A concave fillet ring of radius R around a cylinder of radius r adds
   (1 - pi/4) R^2 * 2 pi (r + R (10 - 3 pi) / (12 - 3 pi)) (Pappus).
@@ -53,7 +54,7 @@ def fillet_ring(r, R):
 def thread_side_boss():
     """Volume one default Side 2 boss adds to the enclosure."""
     shank = frustum(17.95, 3.75, 3.75 + 17.95 * TAN1)
-    spigot = frustum(0.9, 2.9 + 0.9 * TAN1, 2.9)
+    spigot = frustum(0.9, 3.75 + 0.9 * TAN1, 3.75)
     root = fillet_ring(3.75 + 17.95 * TAN1, 1.0)
     hole = math.pi * 1.2**2 * (0.9 + 17.95 + 1.0)
     return shank + spigot + root - hole
@@ -61,10 +62,10 @@ def thread_side_boss():
 
 def head_side_boss():
     """Volume one default Side 1 boss adds to the lid."""
-    r2 = 4.5 + 7.95 * TAN1
-    shank = frustum(7.95, 4.5, r2)
+    r2 = 5.0 + 7.95 * TAN1
+    shank = frustum(7.95, 5.0, r2)
     root = fillet_ring(r2, 1.0)
-    recess = frustum(1.0, 3.0 - 0.02 * TAN1, 3.0 - 1.02 * TAN1)
+    recess = frustum(1.0, 3.85 - 0.02 * TAN1, 3.85 - 1.02 * TAN1)
     hole = math.pi * 1.7**2 * 1.0
     cbore = math.pi * 3.25**2 * 7.95
     return shank + root - recess - hole - cbore

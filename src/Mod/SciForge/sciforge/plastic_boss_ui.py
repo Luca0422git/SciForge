@@ -24,12 +24,14 @@ safe = curve_pick.safe("boss")
 SHAPE_LABELS = [
     ("Blank (no hole)", "blank"),
     ("Constant Diameter", "constant_diameter"),
-    ("Constant Thickness", "constant_thickness"),
+    ("Constant Thickness (SciForge extra)", "constant_thickness"),
 ]
 HOLE_LABELS = [("Simple", "simple"), ("Counterbore", "counterbore"), ("Countersink", "countersink")]
 EXTENT_LABELS = [("Through", "through"), ("From Top", "from_top"), ("From Bottom", "from_bottom")]
 STEP_LABELS = [("None", "none"), ("In", "in"), ("Out", "out")]
-RIB_PROFILE_LABELS = [("None", "none"), ("Chamfer", "chamfer"), ("Fillet", "fillet")]
+# Fusion's rib shapes: chamfered or filleted top corner (its None means no ribs: the Side
+# check boxes here)
+RIB_PROFILE_LABELS = [("Chamfer", "chamfer"), ("Fillet", "fillet")]
 RIB_EXTENT_LABELS = [("Length", "length"), ("To Next", "to_next")]
 
 SIDE_FIELDS = [

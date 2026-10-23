@@ -117,7 +117,10 @@ class BossSettingsTest(unittest.TestCase):
         self.assertEqual((s2["hole"], s2["extent"], s2["step"]), ("simple", "from_bottom", "out"))
         self.assertAlmostEqual(s1["hole_diameter"], 3.4)  # clearance d + 0.4
         self.assertAlmostEqual(s2["hole_diameter"], 2.4)  # pilot 0.8 d
-        self.assertAlmostEqual(s1["diameter"], 9.0)
+        self.assertAlmostEqual(s1["diameter"], 10.0)
+        # Side 1's recess takes Side 2's tip with the clearance all round (critic C8)
+        self.assertAlmostEqual(s1["step_diameter"], s2["diameter"] + 2 * 0.1)
+        self.assertAlmostEqual(s2["step_diameter"], s2["diameter"])
         self.assertAlmostEqual(s2["diameter"], 7.5)
         self.assertAlmostEqual(s1["major_diameter"], 6.5)
         # the spigot fits the recess with the rule's clearance all round
@@ -160,6 +163,7 @@ class BossSettingsTest(unittest.TestCase):
         self.assertIn("0-30 degrees", self.refused(2, draft=40))
         self.assertIn("unknown shape", self.refused(1, shape="square"))
         self.assertIn("recess must be narrower", self.refused(1, step_diameter=12))
+        self.assertIn("spigot must be wider", self.refused(2, step_diameter=2.0))
         self.assertIn("countersink angle", self.refused(1, hole="countersink", countersink_angle=5))
         self.assertIn("cannot be negative", self.refused(2, clearance=-1))
 
@@ -181,7 +185,7 @@ class BossSettingsTest(unittest.TestCase):
 
     def test_summary(self):
         text = boss.summary(boss.default_options(rule(), 3.0))
-        self.assertIn("side 1: dia 9.00, counterbore", text)
+        self.assertIn("side 1: dia 10.00, counterbore", text)
         self.assertIn("side 2: dia 7.50, simple", text)
 
 

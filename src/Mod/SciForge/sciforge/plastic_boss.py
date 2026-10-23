@@ -212,7 +212,8 @@ def side_shapes(base, frame, s, label="Side"):
                     )
                 a0, a1 = found[0]
                 length = od / 2.0 + 1e-3 + a0 + (a1 - a0) / 2.0
-            adds.append(_rib(frame, e, s, s_top, root, length, od, label))
+            rib_settings = s if s["rib_extent"] == "length" else dict(s, rib_profile="none")
+            adds.append(_rib(frame, e, rib_settings, s_top, root, length, od, label))
             rib_info.append((angle, length))
     # the hole
     if hole:

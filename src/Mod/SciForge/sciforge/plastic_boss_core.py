@@ -102,7 +102,7 @@ def side_defaults(side, rule, screw=3.0):
     }
     if side == 1:
         out.update(
-            diameter=_r(3.0 * d),
+            diameter=_r(2.5 * d + 2.5),
             hole="counterbore",
             extent="through",
             hole_diameter=_r(d + 0.4),
@@ -110,7 +110,7 @@ def side_defaults(side, rule, screw=3.0):
             major_diameter=_r(2.0 * d + 0.5),
             major_depth=_r(t),
             step="in",
-            step_diameter=_r(2.0 * d),
+            step_diameter=_r(2.5 * d + 2.0 * c),
             step_depth=1.0,
             rib_length=_r(1.5 * d + 2.0 * t),
         )
@@ -124,7 +124,7 @@ def side_defaults(side, rule, screw=3.0):
             major_diameter=_r(d + 0.5),
             major_depth=1.0,
             step="out",
-            step_diameter=_r(2.0 * d - 2.0 * c),
+            step_diameter=_r(2.5 * d),
             step_depth=_r(1.0 - c),
             rib_length=_r(1.25 * d + 2.0 * t),
         )

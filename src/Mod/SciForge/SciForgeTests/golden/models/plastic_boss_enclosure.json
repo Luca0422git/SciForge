@@ -109,18 +109,18 @@
       "op": "expect_bodies",
       "bodies": {
         "e1": {
-          "volume": 13165.972277,
+          "volume": 13197.936411,
           "solids": 1
         },
         "e2": {
-          "volume": 8281.19637,
+          "volume": 8481.881309,
           "solids": 1
         }
       }
     }
   ],
   "expect": {
-    "volume": 8281.19637,
+    "volume": 8481.881309,
     "solids": 1,
     "bbox": [
       0,
@@ -131,6 +131,6 @@
       30
     ],
     "source": "analytic",
-    "note": "Enclosure 60x40x20 shelled 2 (top open) = 48000 - 56*36*18 = 11712; lid 60x40x10 shelled 2 (bottom open) = 24000 - 56*36*8 = 7872. Per point, thread side (enclosure, clearance 0.05): shank r 3.75 from z 19.95 to the floor z 2 (17.95), spigot r 2.9 0.9 high, minus the pilot r 1.2 from the spigot top to 1 mm above the outside (0.9 + 17.95 + 1): pi (3.75^2 17.95 + 2.9^2 0.9 - 1.2^2 19.85) = 726.986138. Head side (lid): shank r 4.5 from z 20.05 to the lid's inside z 28 (7.95), minus the recess r 3 1 deep, the hole r 1.7 for 1 mm, the counterbore r 3.25 from z 22.05 to the outside (7.95): pi (4.5^2 7.95 - 9 - 1.7^2 - 3.25^2 7.95) = 204.598185. Two points. The expect is the lid (the head side's body)."
+    "note": "Enclosure 60x40x20 shelled 2 (top open) = 48000 - 56*36*18 = 11712; lid 60x40x10 shelled 2 (bottom open) = 24000 - 56*36*8 = 7872. Per point, thread side (enclosure, clearance 0.05): shank r 3.75 from z 19.95 to the floor z 2 (17.95), its tip carried on 0.9 into the lid's recess, minus the pilot r 1.2 from the spigot top to 1 mm above the outside (0.9 + 17.95 + 1): pi (3.75^2 17.95 + 3.75^2 0.9 - 1.2^2 19.85) = 742.968206. Head side (lid): shank r 5 from z 20.05 to the lid's inside z 28 (7.95), minus the recess r 3.85 (the mate's 7.5 + 2 x 0.1) 1 deep, the hole r 1.7 for 1 mm, the counterbore r 3.25 from z 22.05 to the outside (7.95): pi (5^2 7.95 - 3.85^2 - 1.7^2 - 3.25^2 7.95) = 304.940654. Two points. The expect is the lid (the head side's body)."
   }
 }
