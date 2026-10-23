@@ -12,7 +12,7 @@ new (all in one undo step, a timeline step with edit, saved with the design):
 |---|---|
 | Split Body | a surface body as the Splitting Tool (a click on its face takes the whole body; Extend Splitting Tool carries its open edges on so a smaller surface still cuts the solid in two); a surface body can be split (its pieces are surface bodies) |
 | Delete | on the SURFACE tab faces go without healing (step `SurfaceDeleteFace`; a solid becomes a surface body); SOLID heals as before; faces of a surface body never heal |
-| Fillet / Chamfer | new steps `SurfaceFillet` / `SurfaceChamfer` (Radius; Equal / Two Distances / Distance and Angle + Flip; Tangent Chain; drag arrow + value box); F and SOLID's Fillet / Chamfer hand over when the picks are on a surface body (or nothing is picked on the SURFACE tab) |
+| Fillet / Chamfer | new steps `SurfaceFillet` / `SurfaceChamfer` (Radius Type Constant / Variable; Equal / Two Distances / Distance and Angle + Flip; Tangent Chain; drag arrow + value box); F and SOLID's Fillet / Chamfer hand over when the picks are on a surface body (or nothing is picked on the SURFACE tab) |
 | Press Pull (Q) | a flat face of a surface body moves along its normal: among flat polygons its corners slide along the edges leaving them (slanted walls follow exactly), else the faces running along the move grow or are cut back (step `SurfacePressPull`); an edge of a surface body opens its Fillet; a surface fillet's face opens that fillet |
 | Move/Copy, Align, Scale | the steps accept a body with faces (no solid needed) |
 | Pattern (Rect / Circ / Path), Mirror | bodies of type Bodies; a surface pick switches Pattern Type to Bodies; Mirror Join stitches the copy on with a Stitch Tolerance (dialog row, default 1 mm, kept on edit) |
@@ -58,7 +58,7 @@ change.
 
 ## Tests (all with FreeCAD 1.1.4 in the sandbox)
 
-- Scenarios: surface4_fillet PASS (36), surface4_split PASS (25), surface4_delete_merge PASS
+- Scenarios: surface4_fillet PASS (45), surface4_split PASS (25), surface4_delete_merge PASS
   (41), surface4_presspull PASS (30), surface4_move_mirror PASS (41), surface4_pattern PASS
   (27), surface4_misc PASS (28), surface4_component PASS (24).
 - Regression (scenarios of the tools touched, all PASS): bodies_combine, bodies_delete,
@@ -66,7 +66,7 @@ change.
   fillet, fillet_chamfer, fillet2_chamfer, patterns_rect, patterns_circ, patterns_mirror,
   fixpattern_mirror, shell_draft_scale, modify2_scale, modify_align, modify_silhouette,
   misc_materials, surface_stitch, surface_misc.
-- Golden: the 11 `surface4_*` models pass; the full golden run 448 pass, 2 xfail (old
+- Golden: the 12 `surface4_*` models pass; the full golden run 448 pass, 2 xfail (old
   upstream bugs) before the last two models were added.
 - Unit: all OK (16 new in test_surfmod_core.py).
 
@@ -75,4 +75,4 @@ change.
 Press Pull of a curved face, or of a flat one whose curved neighbours meet it at an angle (no
 per-face offset of an open shell in OpenCASCADE's Python API; flat polygons are handled by
 sliding the corners); Merge of faces on different surfaces (Fusion refits them); surface Fillet's Chord Length,
-Variable, G2, Setback and Rule options; Merge offered with history on (Fusion hides it).
+Variable-with-points, G2, Setback and Rule options; Merge offered with history on (Fusion hides it).

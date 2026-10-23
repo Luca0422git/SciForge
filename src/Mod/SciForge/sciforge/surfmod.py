@@ -187,7 +187,10 @@ def blend_shape(shape, names, kind, options):
     core.check_values(kind, options)
     edges = blend_edges(shape, names, bool(options.get("tangent_chain", True)))
     try:
-        if kind == "surface_fillet":
+        if kind == "surface_fillet" and options.get("radius_type") == "variable":
+            # Fusion's Variable radius: Radius at each edge's start, End Radius at its end
+            made = shape.makeFillet(float(options["radius"]), float(options["radius2"]), edges)
+        elif kind == "surface_fillet":
             made = shape.makeFillet(float(options["radius"]), edges)
         else:
             d1, d2 = core.chamfer_distances(options)
@@ -657,6 +660,10 @@ class SurfaceModifyFeature:
         if kind == "surface_fillet":
             if add("App::PropertyLength", "Radius", "Radius"):
                 obj.Radius = 1.0
+            if add("App::PropertyEnumeration", "RadiusType", "Radius Type"):
+                obj.RadiusType = [core.RADIUS_LABELS[k] for k in core.RADIUS_TYPES]
+            if add("App::PropertyLength", "Radius2", "End Radius (Variable)"):
+                obj.Radius2 = obj.Radius.Value
         if kind == "surface_chamfer":
             if add("App::PropertyEnumeration", "ChamferType", "Chamfer Type"):
                 obj.ChamferType = [core.CHAMFER_LABELS[k] for k in core.CHAMFER_TYPES]
@@ -716,6 +723,9 @@ def options_of(obj):
     o = core.with_defaults(kind, {})
     if kind == "surface_fillet":
         o["radius"] = obj.Radius.Value
+        labels = {v: k for k, v in core.RADIUS_LABELS.items()}
+        o["radius_type"] = labels.get(str(getattr(obj, "RadiusType", "Constant")), "constant")
+        o["radius2"] = obj.Radius2.Value if "Radius2" in obj.PropertiesList else o["radius"]
     if kind == "surface_chamfer":
         labels = {v: k for k, v in core.CHAMFER_LABELS.items()}
         o["chamfer_type"] = labels.get(str(obj.ChamferType), "equal")
@@ -811,6 +821,12 @@ def apply(obj, base, names, options):
     if kind == "surface_fillet":
         if abs(obj.Radius.Value - float(options["radius"])) > 1e-12:
             obj.Radius = float(options["radius"])
+        label = core.RADIUS_LABELS[options.get("radius_type", "constant")]
+        if str(obj.RadiusType) != label:
+            obj.RadiusType = label
+        radius2 = float(options.get("radius2", options["radius"]))
+        if abs(obj.Radius2.Value - radius2) > 1e-12:
+            obj.Radius2 = radius2
     if kind == "surface_chamfer":
         label = core.CHAMFER_LABELS[options["chamfer_type"]]
         if str(obj.ChamferType) != label:

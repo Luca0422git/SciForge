@@ -29,7 +29,7 @@ from .taskui import DistanceField, ValueBoxes
 
 PICKS_EDGES = ("surface_fillet", "surface_chamfer")
 # value field -> the step's property it drives (a parameter or formula typed goes on it)
-PROPS = {"radius": "Radius", "distance": "Distance", "distance2": "Distance2"}
+PROPS = {"radius": "Radius", "radius2": "Radius2", "distance": "Distance", "distance2": "Distance2"}
 HINTS = {
     "surface_fillet": "Click edges of a surface body (between two of its faces) to round.",
     "surface_chamfer": "Click edges of a surface body (between two of its faces) to bevel.",
@@ -174,7 +174,24 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
             self.tangent.toggled.connect(lambda *_: self._changed())
             self.layout.addRow("Tangent Chain", self.tangent)
         if self.kind == "surface_fillet":
+            self.radius_type = pickpanel.combo(
+                [
+                    (core.RADIUS_LABELS["constant"], "constant"),
+                    (core.RADIUS_LABELS["variable"], "variable"),
+                    (
+                        core.RADIUS_LABELS["chord"],
+                        "chord",
+                        False,
+                        "Not on surface bodies yet: OpenCASCADE has no chord-length fillet",
+                    ),
+                ],
+                self.options.get("radius_type", "constant"),
+            )
+            self.radius_type.currentIndexChanged.connect(lambda *_: self._radius_type_changed())
+            self.layout.addRow("Radius Type", self.radius_type)
             self._field("radius", "Radius", minimum=0.0)
+            self._field("radius2", "End Radius", minimum=0.0)
+            self._radius_rows()
         if self.kind == "surface_chamfer":
             self.chamfer_type = pickpanel.combo(
                 [(core.CHAMFER_LABELS[k], k) for k in core.CHAMFER_TYPES],
@@ -263,6 +280,17 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
 
     def _type_changed(self):
         self._chamfer_rows()
+        self._changed()
+
+    def _radius_rows(self):
+        variable = self.radius_type.currentData() == "variable"
+        field, caption = self.fields["radius2"]
+        for widget in (field.widget, caption):
+            widget.setVisible(variable)
+        self.fields["radius"][1].setText("Start Radius" if variable else "Radius")
+
+    def _radius_type_changed(self):
+        self._radius_rows()
         self._changed()
 
     def main_key(self):
@@ -404,6 +432,8 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
             self.options[key] = field.value()
         if self.tangent is not None:
             self.options["tangent_chain"] = self.tangent.isChecked()
+        if self.kind == "surface_fillet":
+            self.options["radius_type"] = self.radius_type.currentData() or "constant"
         if self.kind == "surface_chamfer":
             self.options["chamfer_type"] = self.chamfer_type.currentData()
             self.options["angle"] = self.angle.value()

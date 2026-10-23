@@ -8,7 +8,7 @@ from . import schema  # noqa: F401
 # --- surface-4 ---
 # SURFACE > MODIFY on surface bodies (sciforge/ai/ops/surface3_ops.py, surface-4 block).
 SURFACE4_KINDS = {
-    "surface_fillet": ("edges", {"radius", "tangent_chain"}),
+    "surface_fillet": ("edges", {"radius", "radius_type", "radius2", "tangent_chain"}),
     "surface_chamfer": (
         "edges",
         {"chamfer_type", "distance", "distance2", "angle", "flip", "tangent_chain"},
@@ -34,6 +34,9 @@ def _surface4_values(here, kind, values):
         if key == "chamfer_type":
             if value not in ("equal", "two", "angle"):
                 schema._fail(here, "'chamfer_type' must be equal, two or angle")
+        elif key == "radius_type":
+            if value not in ("constant", "variable"):
+                schema._fail(here, "'radius_type' must be constant or variable")
         elif key in ("flip", "tangent_chain"):
             if not isinstance(value, bool):
                 schema._fail(here, "%r is true or false" % key)

@@ -54,6 +54,11 @@ DIALOG_ICONS = {
     "surface_press_pull": "press_pull",
 }
 
+# Fusion's Radius Type: Constant, Chord Length, Variable. On surface bodies SciForge builds
+# Constant and Variable (Radius at the edge's start, End Radius at its end; OpenCASCADE's
+# makeFillet(r1, r2)); Chord Length is shown greyed with the reason.
+RADIUS_TYPES = ("constant", "variable")
+RADIUS_LABELS = {"constant": "Constant", "variable": "Variable", "chord": "Chord Length"}
 CHAMFER_TYPES = ("equal", "two", "angle")
 CHAMFER_LABELS = {
     "equal": "Equal Distance",
@@ -62,7 +67,12 @@ CHAMFER_LABELS = {
 }
 
 DEFAULTS = {
-    "surface_fillet": {"radius": 1.0, "tangent_chain": True},
+    "surface_fillet": {
+        "radius": 1.0,
+        "radius_type": "constant",
+        "radius2": 1.0,
+        "tangent_chain": True,
+    },
     "surface_chamfer": {
         "chamfer_type": "equal",
         "distance": 1.0,
@@ -114,6 +124,12 @@ def check_values(kind, options):
     if kind == "surface_fillet":
         if float(o["radius"]) <= 1e-7:
             raise NeedsPick("Type a radius bigger than 0, or drag the arrow.")
+        if o.get("radius_type", "constant") not in RADIUS_TYPES:
+            raise SurfaceModifyError(
+                "Chord Length fillets are not made on surface bodies: pick Constant or Variable."
+            )
+        if o.get("radius_type") == "variable" and float(o.get("radius2", 0.0)) <= 1e-7:
+            raise NeedsPick("Type the End Radius (bigger than 0).")
     elif kind == "surface_chamfer":
         if o["chamfer_type"] not in CHAMFER_TYPES:
             raise SurfaceModifyError("Pick a chamfer type.")

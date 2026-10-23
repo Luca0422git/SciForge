@@ -56,6 +56,15 @@ class Kinds(unittest.TestCase):
 
 
 class Values(unittest.TestCase):
+    def test_variable_radius(self):
+        o = core.with_defaults("surface_fillet", {"radius": 1, "radius_type": "variable"})
+        core.check_values("surface_fillet", dict(o, radius2=3))
+        with self.assertRaises(core.NeedsPick):
+            core.check_values("surface_fillet", dict(o, radius2=0))
+        with self.assertRaises(core.SurfaceModifyError):
+            core.check_values("surface_fillet", dict(o, radius_type="chord"))
+        self.assertEqual(core.with_defaults("surface_fillet")["radius_type"], "constant")
+
     def test_fillet_needs_a_radius(self):
         with self.assertRaises(core.NeedsPick):
             core.check_values("surface_fillet", core.with_defaults("surface_fillet", {"radius": 0}))

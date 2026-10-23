@@ -180,6 +180,59 @@ def unchanged():
     h.check("Esc closed it", s4.panel() is None)
     h.check("the body is as it was", s4.faces(s["box"]) == s["faces"], s4.faces(s["box"]))
     h.check("no error left", not h.popups(), h.popups())
+    s["area"] = st.area(s["box"])
+    Gui.Selection.clearSelection()
+    st.menu("MODIFY", "Fillet")
+
+
+def click_last_corner():
+    h.click_edge(V(30, 20, 5))
+
+
+def variable():
+    from SciForgeTests.gui import blend_steps as b
+
+    s4.settle()
+    p = s4.panel()
+    h.check("one edge picked", p is not None and len(p.picked) == 1, p and p.picked)
+    if p is None:
+        return
+    b.choose(p.radius_type, "Variable")
+    h.check("End Radius shown", p.fields["radius2"][0].widget.isVisible())
+    s4.type_main("1")
+
+
+def end_radius():
+    from SciForgeTests.gui import dialog_input as ui
+
+    s4.settle()
+    p = s4.panel()
+    if p is not None:
+        ui.type_into(p.fields["radius2"][0].widget, "3")
+
+
+def variable_ok():
+    s4.settle()
+    st.ok()
+
+
+def variable_made():
+    from sciforge import surfmod
+
+    h.check("dialog closed", s4.panel() is None)
+    h.check("one face more", s4.faces(s["box"]) == s["faces"] + 1, s4.faces(s["box"]))
+    step = s["box"].Tip
+    options = surfmod.options_of(step) if surfmod.is_step(step) else {}
+    h.check(
+        "a Variable fillet 1 .. 3",
+        options.get("radius_type") == "variable"
+        and s4.near(options.get("radius", 0), 1.0)
+        and s4.near(options.get("radius2", 0), 3.0),
+        options,
+    )
+    lost = s["area"] - st.area(s["box"])
+    # between a constant radius 1 and a constant radius 3 corner
+    h.check("the area lies between r 1 and r 3", 4.5 < lost < 14.9, lost)
 
 
 h.run(
@@ -206,5 +259,10 @@ h.run(
         refused,
         esc_after_refusal,
         unchanged,
+        click_last_corner,
+        variable,
+        end_radius,
+        variable_ok,
+        variable_made,
     ],
 )
