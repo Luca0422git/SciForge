@@ -101,7 +101,9 @@ saved with the design.
   `surface4_component` (fillet, press pull and delete on a surface body in a moved
   component, undo / redo),
   `surface4_direct` (a design without history, where Fusion offers Merge: Merge, Ctrl+Z /
-  Ctrl+Y, SURFACE Delete, Fillet, history turned on again).
+  Ctrl+Y, SURFACE Delete, Fillet, history turned on again),
+  `surface4_step_part` (SURFACE Delete of a face of a STEP part without history: it is taken
+  into a body and becomes a surface body; Ctrl+Z / Ctrl+Y; Fillet on it).
 - Golden models `surface4_*.json` (15): fillet + edit + reopen, variable fillet, chamfer +
   SURFACE delete, press pull + edit + reopen, press pull of a tray with slanted walls (its
   floor; two of its walls at once), press pull of a cup's round wall, merge, merge of
@@ -134,6 +136,3 @@ saved with the design.
   into one Base Feature as a solid's are (`direct.freeze` bakes solids only; that file
   belongs to the direct-modify area): they stay hidden while history is off and show in the
   timeline again when it is turned back on.
-- **Delete on the SURFACE tab of a whole solid's faces in a body without history** (a STEP
-  part): it goes through the same no-heal step after the body is adopted (as SOLID's Delete
-  does); not covered by a scenario.
