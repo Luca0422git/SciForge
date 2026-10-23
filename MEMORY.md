@@ -7,6 +7,10 @@ done, what was learned, what is next. Newest session goes at the top of the log.
 **Next (2026-10-20): the 0.1.0-beta release, brief `docs/sciforge/dev/briefs/beta-release.md`.**
 R0-R4 are built and merged on `develop` (2026-10-20, three parallel agents). What is left is R5: Luca's tests (quick update, dry-run build, Update now), then his green light for the release. Also: Luca must switch on GitHub Discussions and create the labels `idea` and `beta`.
 
+**2026-10-23 (overnight, wave 6): Fusion's SHEET METAL and PLASTIC tabs and the SURFACE tab's
+missing tools are built and merged on `develop`** (seven builders + QA; plan
+`docs/sciforge/plan-sheet-metal-plastic-surface.md`, newest session log). Waiting for Luca's test.
+
 **2026-10-23: Luca's four additions are on `develop`** (Fusion-style Data Panel, drag a design
 into an open design as a copy, Opacity Control in the browser, the 3D view's hover lighting the
 browser row), then Delete on Home and in the Data Panel: newest session logs. Waiting for his
@@ -48,6 +52,10 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | AI panel (right dock: switch, Your AIs, Chat, Activity) | `sciforge/ai_panel_ui.py`, `ai_ui.py` |
 | Light / dark look (colours, style-sheet swap, light icons) | `sciforge/theme.py`, `sciforge/__init__.py` (`ui_icon_path`) |
 | FreeCAD Tools (FreeCAD's own workbenches, Back to SciForge) | `sciforge/freecad_tools_ui.py` |
+| SHEET METAL tab (rules, Flange, Bend, Hem, Join by Bend, Corner Closure, Lofted Flange, unfolder, Flat Pattern + DXF, Unfold/Refold, Rip, Convert) | `sciforge/sheetmetal*.py`, `flatpattern*.py`; specs `docs/sciforge/parity/sheet-metal*.md` |
+| PLASTIC tab (plastic rules per component, Boss, Rest, Snap Fit, Lip, Design Advice, rule defaults) | `sciforge/plastic*.py`; specs `docs/sciforge/parity/plastic*.md` |
+| SURFACE part 3/4 (tool options; SOLID modify tools on surface bodies, Merge) | `sciforge/surface*.py`, `surfmod*.py`; specs `parity/surface.md`, `parity/surface-modify.md` |
+| Fusion research with sources (wave 6), integration map for new tabs/body kinds | `docs/sciforge/dev/research/` |
 | Every change to FreeCAD's own code (tagged `SCIFORGE:`) | `docs/sciforge/core-patches.md` |
 | CI workflows (SciForge's own) | `.github/workflows/sciforge-*.yml` |
 | Tooling scripts for CI / local runs | `tools/sciforge/` |
@@ -423,6 +431,36 @@ Quick updates come from green "SciForge tests" runs on `develop`.
       view's hover lights the browser row. Scenarios `data_panel_fusion` (59),
       `browser_opacity_hover` (46); unit `test_data_panel_core`, `test_opacity_core`,
       `test_browser_core.HoverTests`. See the session log.
+- [x] **SHEET METAL tab** (wave 6, 2026-10-23, **not yet checked by Luca**; reverses the
+      2026-10-09 "no sheet metal" decision on Luca's request). Rules (`sheetmetal_core.py`
+      / `sheetmetal.py`: library, In This Design, Thickness expressions, K-factor, reliefs;
+      Sheet Metal Rules dialog; Sheet Metal component type), Flange (base / contour / edge:
+      height datum, bend position, angle, flip, width types, To Object, mitred corners,
+      bend reliefs, overrides), Bend (Fusion's Fold), Hem (6 types), Join by Bend, Corner
+      Closure, Lofted Flange (own command), sheet metal Fillet / Chamfer, SciForge's own
+      unfolder (`sheetmetal_unfold.py`: walls rigid, bends developed by phi*(R+K*T)),
+      Create Flat Pattern with the FLAT PATTERN contextual tab and Export DXF (R12, layers,
+      bend notes), Unfold / Refold, Rip, Convert to Sheet Metal, drawing Bend Table / Bend
+      Note. Specs `parity/sheet-metal.md`, `sheet-metal-flat.md`, `sheet-metal-more.md`;
+      scenarios `sheetmetal_*`, `flatpattern_*`, `smmore_*`. Gaps: see the session log.
+- [x] **PLASTIC tab** (wave 6, **not yet checked by Luca**). Assign / Manage Plastic Rules
+      (per component, 16-rule library incl. FDM PLA/PETG, material assigned), rule defaults
+      in Shell / Draft / Rib / Web / thin Extrude (only when the component has a rule),
+      Boss (head / thread sides, ribs, blends, alignment, screws as a component), Rest,
+      Rule Fillet, Snap Fit (3 types, rotation modes, strain check), Lip (lip / groove /
+      both, guides, drafts), Design Advice (thickness, variation, draft, knife edges,
+      undercuts). Specs `parity/plastic.md`, `plastic-2.md`; scenarios `plastic_*`,
+      `plastic2_*`.
+- [x] **SURFACE tab part 3 / 4** (wave 6, **not yet checked by Luca**): Offset Type
+      Sharp/Rounded, Patch per-edge continuity + Reverse Normal, Untrim Manual / Keep Copy,
+      Revolve Partial / Project Axis / To Two Sides, Extrude of a face, Sweep Path + Guide
+      Surface and rail extents, closed-loft corner matching, Extend Natural on curved faces
+      + Align Edges, Stitch operations, Trim by one face, Ruled Corner Type, Environmental
+      Map Analysis, sketch Isoparametric Curve; and on surface bodies: Split Body by a
+      surface, Delete without healing (SURFACE tab only), Fillet / Chamfer, Press Pull,
+      Merge, Move/Copy, Align, Scale, Pattern, Mirror (Join stitches), Split / Replace
+      Face. Specs `parity/surface.md`, `parity/surface-modify.md`; scenarios `surface3_*`,
+      `surface4_*`.
 
 ## Known issues / findings
 
