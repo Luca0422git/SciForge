@@ -95,6 +95,8 @@ def move_faces(shape, faces, place):
         raise MoveFaceError("Select the faces to move.")
     if move.is_identity(place):
         return shape.copy()
+    if not shape.Solids:
+        return _move_open(shape, faces, place)  # a surface body (surface-4)
     try:
         solid, how = pattern.face_tool(shape, faces)
     except PatternError:
@@ -135,6 +137,33 @@ def move_faces(shape, faces, place):
     return _one_solid(shape, result, "the faces")
 
 
+def _move_open(shape, faces, place):
+    """Move Object Faces on a surface body (SURFACE > MODIFY > Move/Copy, surface-4): each flat
+    face is replaced by itself moved (Replace Face on a surface body: the faces round it are
+    carried on or cut back to its new plane)."""
+    from . import replace_face
+
+    if any(f.Surface.TypeId != "Part::GeomPlane" for f in faces):
+        raise MoveFaceError(
+            "On a surface body only flat faces can be moved this way. Move the whole body "
+            "(Move Object Bodies), or push a curved face with Press Pull."
+        )
+    points = [_inner_point(f) for f in faces]
+    result = shape
+    for point in points:
+        current = _face_at(result, point)
+        if current is None:
+            continue  # an earlier face's move took this one in
+        target = _moved(current, place)
+        if _same_plane(current, target):
+            continue  # moved within its own plane: nothing changes (Fusion)
+        try:
+            result = replace_face.replace(result, [current], target, refine=False)
+        except replace_face.ReplaceFaceError as exc:
+            raise MoveFaceError(str(exc))
+    return result
+
+
 # -- the step ----------------------------------------------------------------------------------
 class MoveFaceFeature:
     """The Move step of faces. Saved as "sciforge.move_face.MoveFaceFeature"."""
@@ -171,8 +200,8 @@ class MoveFaceFeature:
         from . import curves
 
         base = obj.BaseFeature
-        if base is None or base.Shape.isNull() or not base.Shape.Solids:
-            raise MoveFaceError("There is no solid before this step.")
+        if base is None or base.Shape.isNull() or not base.Shape.Faces:
+            raise MoveFaceError("There is no solid or surface before this step.")
         try:
             curves.refind(obj, ("Faces",))
         except Exception:
