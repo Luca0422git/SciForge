@@ -1,0 +1,136 @@
+{
+  "id": "surface4_replace_face_curved",
+  "title": "Replace Face of an open box of surfaces onto a curved target: its floor replaced by a cylinder's side (radius 42, axis along x): an arched floor, the walls cut back to it",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "replace-face"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "YZ",
+      "geometry": [
+        {
+          "circle": [
+            10,
+            -40,
+            42.0
+          ]
+        }
+      ],
+      "comment": "on the YZ plane: centre y = 10, z = -40"
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s0",
+      "distance": 30,
+      "comment": "a cylinder along x: its top at z = 2, under the box's middle"
+    },
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces, area 1600"
+    },
+    {
+      "op": "replace_face",
+      "id": "r1",
+      "of": "st",
+      "faces": {
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "target": {
+        "face": {
+          "type": "cylinder",
+          "count": 1
+        },
+        "of": "e2"
+      }
+    }
+  ],
+  "expect": {
+    "area": 1494.3000607972044,
+    "faces": 5,
+    "solids": 0,
+    "rel_tol": 1e-06,
+    "source": "analytic",
+    "note": "the floor: 30 x the arc 2 x 42 asin(10 / 42); the side walls 200 - the area under the arch (int of -40 + sqrt(42^2 - t^2), t -10..10); the front and back walls 30 x (10 - 0.7922)"
+  }
+}

@@ -17,7 +17,7 @@ new (all in one undo step, a timeline step with edit, saved with the design):
 | Move/Copy, Align, Scale | the steps accept a body with faces (no solid needed); Move Object Faces moves flat faces of a surface body (the faces round them follow) |
 | Pattern (Rect / Circ / Path), Mirror | bodies of type Bodies; a surface pick switches Pattern Type to Bodies; Mirror Join stitches the copy on with a Stitch Tolerance (dialog row, default 1 mm, kept on edit) |
 | Merge (ribbon entry wired) | `SciForge_SurfaceMerge`: adjacent faces on one surface become one face (`UnifySameDomain`); faces that meet smoothly are refitted as one surface (filling through their boundary and sample points, refused when it moves them more than 0.01 mm / 0.1 %); a sharp edge is refused with the reason (step `SurfaceMerge`). Works in a design without history too (where Fusion offers it) |
-| Split Face, Replace Face | the SOLID steps take a surface body: Split Face divides its faces and sews them back (Merge joins them again); Replace Face moves one face onto a flat target, the faces round it carried on or cut back |
+| Split Face, Replace Face | the SOLID steps take a surface body: Split Face divides its faces and sews them back (Merge joins them again); Replace Face moves one face onto a flat or curved target (a cylinder: an arched floor), the faces round it carried on or cut back |
 | Parameters | the surface dialogs' Radius / Distance fields take parameters and formulas (expressions on the step) |
 | Combine, Silhouette Split | a surface body refused with a clear reason (Stitch / Thicken / Split Face) |
 | Physical Material | lists surface bodies under In This Design |
@@ -26,7 +26,7 @@ New files: `sciforge/surfmod_core.py` (rules, unit tested), `sciforge/surfmod.py
 `SurfaceModifyFeature`, saved as `sciforge.surfmod.SurfaceModifyFeature`: never rename),
 `sciforge/surfmod_ui.py` (dialog on `pickpanel.PickPanel`, hand-overs, Merge command,
 `ViewProviderSurfaceModify`), `tools/sciforge/icons_surface4.py` (5 icons `surfmod_*`),
-`SciForgeTests/gui/surface4_steps.py`, 16 scenarios `surface4_*`, 20 golden models
+`SciForgeTests/gui/surface4_steps.py`, 16 scenarios `surface4_*`, 21 golden models
 `surface4_*`, `SciForgeTests/unit/test_surfmod_core.py`.
 
 Shared files touched (small, each marked "surface-4"): `split.py`, `split_ui.py`,
@@ -79,8 +79,8 @@ SCENARIO_RESULTS
 
 Press Pull of a face next to a tangent face (a floor next to a fillet: Fusion lets the
 fillet follow), of several curved faces, of a curved face with a tangent neighbour, of faces
-facing different ways that are not among flat polygons; Replace Face onto a curved target
-or of several faces at once; Merge of faces that meet at a sharp edge (faces that meet
+facing different ways that are not among flat polygons; Replace Face of several faces at
+once or onto a ball; Merge of faces that meet at a sharp edge (faces that meet
 smoothly are refitted); surface Fillet's Variable-with-points, G2, Setback and Rule options;
 Merge offered with history on (Fusion hides it); a surface body's steps are not baked into
 a Base Feature when history is off (`direct.freeze` bakes solids only).
