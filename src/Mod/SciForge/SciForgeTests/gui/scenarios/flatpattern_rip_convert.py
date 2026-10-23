@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""Convert a shelled tube to sheet metal, Rip it open, flatten it, real input only: a 40 x 30
-x 20 box with rounded vertical edges (radius 2) shelled 1 mm with its top and bottom taken
-away (setup). SHEET METAL > MODIFY > Convert to Sheet Metal with nothing picked (the dialog
-waits), a click on the front wall: Thickness 1.000 mm (read only), Template Rule, 4 bends
-found, OK: the body is sheet metal ("Convert to Sheet Metal" in the timeline). Create Flat
-Pattern on the closed tube is refused in the dialog ("closes on itself ... add a Rip"), OK
-waits, Esc closes. Rip: Type Face, a click on the outside of the back-right corner bend: the
-corner is cut away (preview), OK; undo / redo. Create Flat Pattern from the front wall now
-lays it flat: 36 + 26 + 36 + 26 + 3 BA = 130.78584 long, 20 wide. Rip edited from the timeline
-keeps its type and face; Cancel."""
+"""Convert a shelled tube to sheet metal, Rip it open, flatten it, real input only: a 40 x 30 x 20
+box with rounded vertical edges (radius 2) shelled 1 mm with its top and bottom taken away
+(setup). SHEET METAL > MODIFY > Convert to Sheet Metal with nothing picked (the dialog waits), a
+click on the front wall: Thickness 1.000 mm (read only), Template Rule, 4 bends found, the
+rule Steel (mm) (1 mm too) chosen, OK: the body is sheet metal ("Convert to Sheet Metal"
+in the timeline). Create Flat Pattern on the closed tube is refused in the dialog ("closes on
+itself ... add a Rip"), OK waits, Esc closes. Rip: Type Face, a click on the outside of the
+back-right corner bend: the corner is cut away (preview), OK; undo / redo. Create Flat Pattern
+from the front wall now lays it flat: 36 + 26 + 36 + 26 + 3 BA = 130.78584 long, 20 wide. Rip
+edited from the timeline keeps its type and face; Cancel."""
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -72,6 +72,15 @@ def thickness_shown():
     h.check("thicker rules filtered out", not any("Aluminum (mm)" in n for n in names), names)
 
 
+def choose_library_rule():
+    p = fs.sheet_panel()
+    names = [p.rule.itemText(i) for i in range(p.rule.count())] if p else []
+    steel = next((n for n in names if n.startswith("Steel (mm) (")), None)
+    h.check("Steel (mm) offered (the design's default rule)", steel is not None, names)
+    if steel:
+        h.check("Steel (mm) chosen", fs.choose(p.rule, steel))
+
+
 def convert_ok():
     fs.ok()
 
@@ -84,6 +93,11 @@ def converted():
     h.check("dialog closed", not fs.dialog_open())
     h.check("the body is sheet metal", sheetmetal.is_sheet_metal_body(body))
     h.check("its rule is 1 mm thick", fs.close(sheetmetal.rule_for_body(body)["thickness"], 1.0))
+    h.check(
+        "the chosen rule (thickness matching) is the body's rule",
+        sheetmetal.body_rule_name(body) == "Steel (mm)",
+        sheetmetal.body_rule_name(body),
+    )
     titles = fs.timeline_titles()
     h.check(
         "Convert to Sheet Metal in the timeline",
@@ -268,6 +282,7 @@ h.run(
         convert_waits,
         click_front,
         thickness_shown,
+        choose_library_rule,
         convert_ok,
         converted,
         flat_closed,

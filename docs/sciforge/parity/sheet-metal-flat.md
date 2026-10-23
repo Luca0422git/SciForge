@@ -100,15 +100,20 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 
 ## Tests
 
-- Golden models (`SciForgeTests/golden/models/sm_flat_*.json`, 10, hand-derived sizes with
+- Golden models (`SciForgeTests/golden/models/sm_flat_*.json`, 14, hand-derived sizes with
   T = R = 1, K = 0.44, BA = 2.26195): L bracket 98.26195 x 20; U channel with a hole
   116.52389 x 20 - 9 pi; one bend of a U unfolded; slot cut across a bend in the flat state
   and refolded (removes (2/1.44)(2^2 - 1^2)/2 x 10); converted tube with a corner ripped
   away 130.78584; tube ripped between points 132.04779; sm-forming's edge flange 59.26195 x
-  30, its partial flange with straight reliefs, its contour L, its mitred tray (bbox).
+  30, its partial flange with straight reliefs, its contour L, its mitred tray (bbox), the
+  same edge flange with a K 0.33 rule (59.08916); sm-more's Bend (the flat is the 100 x 40
+  plate it was bent from), its open hem (BA = pi (0.25 + 0.44)) and flat hem (R 0.005).
+- Every sm-forming / sm-more golden part was also laid flat in a probe: all flatten
+  (rolled, teardrop, rope and double hems, Join by Bend, Corner Closure, mitres) except the
+  lofted flanges (curved two ways: refused) and parts whose "lowest +Z face" is an edge face.
 - Scenarios (real clicks): `flatpattern_l_bracket`, `flatpattern_u_channel_dxf`,
   `flatpattern_unfold_refold`, `flatpattern_rip_convert`, `flatpattern_component_rip`,
-  `flatpattern_refusals`, `flatpattern_environment`.
+  `flatpattern_refusals`, `flatpattern_environment`, `flatpattern_flange`.
 - Unit tests: `SciForgeTests/unit/test_flatpattern_core.py` (DXF writer and read-back, the
   bend maths of the flat sizes, the FLAT PATTERN tab, the browser node, the golden format).
 

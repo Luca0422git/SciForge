@@ -2,8 +2,10 @@
 
 Built Fusion's flat side of sheet metal: the unfolder, Create Flat Pattern with the contextual
 FLAT PATTERN tab (Export DXF, Finish Flat Pattern), Unfold / Refold, Rip and Convert to Sheet
-Metal. Spec and gaps: `docs/sciforge/parity/sheet-metal-flat.md`. sm-forming's branch was
-merged in (its Flange makes the sheet metal bodies this area lays flat).
+Metal. Spec and gaps: `docs/sciforge/parity/sheet-metal-flat.md`. sm-forming's and sm-more's
+branches were merged in (their Flange, Bend and Hem make the sheet metal bodies this area lays
+flat; the one conflict, the MODIFY menu lines of `ribbon_config.py` next to Corner Closure,
+was resolved keeping both).
 
 **What Luca can do now (plain words).** Make a part of even thickness (a shelled box with
 rounded corners, or a Flange), then SHEET METAL > MODIFY > Convert to Sheet Metal and click a
@@ -40,7 +42,8 @@ be opened first with MODIFY > Rip (a face, along an edge, or between two points)
 - Icons (`tools/sciforge/icons_flatpattern.py`): sm_flat_pattern, flat_pattern, sm_unfold,
   sm_refold, sm_rip, sm_convert, fp_export_dxf, fp_finish.
 - Golden ops `sf_sm_convert`, `sf_flat_pattern` (measures the flat), `sf_unfold`, `sf_refold`,
-  `sf_rip`; 10 golden models `sm_flat_*` (4 of them on sm-forming's Flange); unit tests
+  `sf_rip`; 14 golden models `sm_flat_*` (5 on sm-forming's Flange, 3 on sm-more's Bend and
+  Hem); unit tests
   `test_flatpattern_core.py`; 8 scenarios `flatpattern_*`.
 
 **FreeCAD facts and traps found**
