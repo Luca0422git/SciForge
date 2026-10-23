@@ -473,6 +473,7 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
             self.show_status()
             return
         try:
+            surfmod.check_picks(self.kind, self.base.Shape, self.picked)
             core.check_values(self.kind, self.options)
             result = surfmod.preview(self.kind, self.base.Shape, self.picked, self.options)
             if self.kind == "surface_merge":

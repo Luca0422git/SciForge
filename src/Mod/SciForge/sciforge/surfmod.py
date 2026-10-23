@@ -553,6 +553,16 @@ def compute(obj, base_shape):
     raise SurfaceModifyError("Unknown step %r." % kind)
 
 
+def check_picks(kind, base_shape, names):
+    """Refuse picks the step cannot use, before its values are looked at (the dialog says
+    why at the click: a free edge, a curved face for Press Pull)."""
+    if kind in ("surface_fillet", "surface_chamfer"):
+        blend_edges(base_shape, names, False)
+    elif kind == "surface_press_pull":
+        for name in names:
+            _plane_of(element(base_shape, name))
+
+
 def preview(kind, base_shape, names, options):
     """The result without a step (the dialog's check before OK; raises with the reason)."""
     if kind in ("surface_fillet", "surface_chamfer"):

@@ -133,7 +133,7 @@ def q_again():
 
 
 def click_curved():
-    h.click(V(80, 10, 12))
+    h.click(V(80, -10, 12))
 
 
 def refused():
