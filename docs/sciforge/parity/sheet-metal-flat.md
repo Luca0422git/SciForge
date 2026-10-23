@@ -213,3 +213,12 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
   "Converted <T> mm" template rule; a bend added to the part after its Bend Table was made
   gets a table row but no identifier balloon, and a bend removed keeps its old balloon (the
   refresh runs from a timer outside an undo step, so it only moves what exists).
+
+## Journey pass (2026-10-23, `sf/journey-sm`)
+
+A whole sheet metal part was built across sm-forming, sm-more and sm-flat with real input
+(`journey_sheetmetal`, `journey_sheetmetal_convert`, `journey_sheetmetal_tray`). The one
+failure it met, the Flat Pattern turning red after the rule's Thickness changed ("the
+stationary face is gone after an edit"), is the one the QA pass fixed in parallel
+(`flatpattern._moved`, golden `sm_flat_thickness_change`); the journey's own golden
+`sm_flat_thickness_follow` (an L bracket, 1 mm then 2 mm, analytic) checks it too.

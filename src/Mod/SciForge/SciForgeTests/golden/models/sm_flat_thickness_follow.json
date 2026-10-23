@@ -1,0 +1,103 @@
+{
+  "id": "sm_flat_thickness_follow",
+  "title": "Flat pattern of an L bracket follows the rule's Thickness (1 mm, then 2 mm: the stationary top face moves up)",
+  "tags": [
+    "sheetmetal",
+    "flat-pattern",
+    "journey"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "edge",
+      "edges": [
+        [
+          50,
+          15,
+          1
+        ]
+      ],
+      "options": {
+        "height": 10
+      }
+    },
+    {
+      "op": "sf_flat_pattern",
+      "id": "fp1",
+      "face": {
+        "type": "plane",
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 1777.8584,
+        "bbox": [
+          0,
+          0,
+          -1,
+          59.26195,
+          30,
+          0
+        ],
+        "solids": 1,
+        "abs_tol": 0.001,
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "sf_sheet_rule",
+      "name": "Steel (mm)",
+      "set": {
+        "thickness": 2
+      }
+    }
+  ],
+  "expect": {
+    "volume": 3511.4336,
+    "bbox": [
+      0,
+      0,
+      -2,
+      58.52389,
+      30,
+      0
+    ],
+    "solids": 1,
+    "abs_tol": 0.001,
+    "source": "analytic",
+    "note": "1 mm: 48 + BA (pi/2 (1 + 0.44 x 1) = 2.26195) + 9 = 59.26195 x 30 x 1 = 1777.8584; the rule's Thickness 2 (R = Thickness = 2): 50 - (R + T) = 46 + BA (pi/2 (2 + 0.44 x 2) = 4.52389) + (H - R) = 8 = 58.52389 x 30 x 2 = 3511.4336. Before the fix (journey_sheetmetal) the flat pattern was refused, 'the stationary face is gone after an edit', because the top face had moved up 1 mm"
+  }
+}
