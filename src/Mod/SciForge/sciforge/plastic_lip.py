@@ -160,9 +160,12 @@ class Rim:
 
         s = self.side
         if self.closed:
-            hi, lo = (s * b, s * a) if s > 0 else (s * a, s * b)
-            outer = Part.Face(self.offset(hi))
-            inner = Part.Face(self.offset(lo))
+            # which offset is the bigger loop depends on the wire's direction (a rectangle's
+            # + offset grows, a circle's from a face's rim can shrink): the bigger face is
+            # the outside of the band
+            fa = Part.Face(self.offset(s * a))
+            fb = Part.Face(self.offset(s * b))
+            outer, inner = (fa, fb) if fa.Area > fb.Area else (fb, fa)
             return _one_face(outer.cut(inner))
         if a >= -1e-9:
             face = self._skin(s * b)
@@ -224,12 +227,10 @@ def section_solid(rim, bottom, top, height, vector):
 
     s = rim.side
     if rim.closed:
-        if s > 0:
-            outer = (s * bottom[1], s * top[1])
-            inner = (s * bottom[0], s * top[0])
-        else:
-            outer = (s * bottom[0], s * top[0])
-            inner = (s * bottom[1], s * top[1])
+        first = (s * bottom[0], s * top[0])
+        second = (s * bottom[1], s * top[1])
+        grows = Part.Face(rim.offset(second[0])).Area > Part.Face(rim.offset(first[0])).Area
+        outer, inner = (second, first) if grows else (first, second)
         try:
             big = Part.makeLoft([rim.offset(outer[0]), lifted(rim.offset(outer[1]))], True, True)
             small = Part.makeLoft([rim.offset(inner[0]), lifted(rim.offset(inner[1]))], True, True)

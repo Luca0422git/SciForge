@@ -190,11 +190,56 @@ def both_again():
     base, lid = changes()
     h.check("Lip And Groove again: +282", ps.near(base, BAND * 1.5, 1e-6), base)
     h.check("and the groove again: -331.584", ps.near(-lid, GBAND * 1.6, 1e-6), lid)
+    ps.choose(ps.lip_panel().guide, "Face Guide")
+
+
+def face_guide_square():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    base, lid = changes()
+    h.check("Face Guide on square walls: no refusal", "⚠" not in ps.message(p), ps.message(p))
+    h.check("Face Guide: the same lip", ps.near(base, BAND * 1.5, 1e-6), base)
+    h.check("no Direction box for Face Guide", not p.direction_field.widget.isVisible())
+    ps.choose(p.guide, "Pull Direction")
+
+
+def direction_box():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    h.check("the Direction box for Pull Direction", p.direction_field.widget.isVisible())
+    ps.ui.click(p.direction_field.button)
+
+
+def click_front_face():
+    h.check("the Direction box takes the clicks", ps.lip_panel().active == "direction")
+    h.fit()
+    h.click(V(30, 0, 10))
+
+
+def direction_picked():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    text = p.direction_field.button.text()
+    h.check("a direction picked", text == "Picked direction", (text, ps.message(p)))
+    h.check("the edges box takes the clicks again", p.active == "edges")
+    msg = ps.message(p)
+    h.check("the front face's normal lies along the rim: refused", "along the rim" in msg, msg)
+    ps.ui.click(p.direction_field.clear)
+
+
+def direction_cleared():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    text = p.direction_field.button.text()
+    h.check("cleared: the rim's normal again", text == "Rim normal", text)
+    h.check("no refusal now", "⚠" not in ps.message(p), ps.message(p))
+    h.check("the same lip", ps.near(changes()[0], BAND * 1.5, 1e-6), changes())
     ps.ok()
 
 
 def one_step():
-    h.check("the dialog closed", ps.lip_panel() is None)
+    p = ps.lip_panel()
+    h.check("the dialog closed", p is None, ps.message(p))
     titles = ps.titles()
     h.check("one Lip in the timeline", titles.count("Lip 1") == 1, titles)
     s["after"] = changes()
@@ -284,6 +329,70 @@ def reopened():
     h.check("one Lip step and its groove step", len(lips) == 1 and len(ps.followers(lips[0])) == 1)
     bad = [o.Name for o in ps.doc().Objects if "Invalid" in o.State or "Error" in o.State]
     h.check("every step computed", not bad, bad)
+    cone_design()
+
+
+def cone_design():
+    """A cone frustum (radius 10 at the bottom, 8 at the top, 10 high): its top face's rim
+    leans (the cone's side)."""
+    d = App.newDocument("LipCone")
+    body = d.addObject("PartDesign::Body", "Cone")
+    body.Label = "Cone"
+    cone = body.newObject("PartDesign::AdditiveCone", "ConeShape")
+    cone.Radius1, cone.Radius2, cone.Height = 10, 8, 10
+    body.Tip = cone
+    d.recompute()
+    s["cone"] = body
+    s["cone_volume"] = ps.volume(body)
+    h.fit()
+    ps.plastic_tab()
+    h.ribbon("Lip")
+
+
+def cone_lip_type():
+    p = ps.lip_panel()
+    if not h.check("the Lip dialog on the cone", p is not None):
+        return
+    ps.choose(p.type, "Lip")
+
+
+def click_cone_rim():
+    ps.settle(ps.lip_panel)
+    h.click_edge(V(0, -8, 10))
+
+
+def cone_lip():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    added = ps.volume(s["cone"]) - s["cone_volume"]
+    # a 1 x 1 ring inside the 8 mm rim: (64 - 49) pi = 47.12, a little less with 1 degree drafts
+    h.check("a lip ring on the cone's top", 45.0 < added < 47.2, (added, ps.message(p)))
+    ps.choose(p.guide, "Face Guide")
+
+
+def cone_face_guide():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    text = ps.message(p)
+    h.check("Face Guide refused on the leaning cone side, with the reason", "leans" in text, text)
+    ps.ok()
+
+
+def cone_ok_refused():
+    p = ps.lip_panel()
+    h.check("OK refused: the dialog stays", p is not None)
+    if p is not None:
+        ps.choose(p.guide, "Pull Direction")
+
+
+def cone_ok():
+    ps.settle(ps.lip_panel)
+    ps.ok()
+
+
+def cone_done():
+    h.check("Pull Direction again: OK closes it", ps.lip_panel() is None)
+    h.check("one Lip on the cone", len(ps.lip_steps()) == 1)
 
 
 h.run(
@@ -310,6 +419,11 @@ h.run(
         ok_refused,
         back_to_both,
         both_again,
+        face_guide_square,
+        direction_box,
+        click_front_face,
+        direction_picked,
+        direction_cleared,
         one_step,
         undone,
         redone,
@@ -323,5 +437,12 @@ h.run(
         describe,
         close_reopen,
         reopened,
+        cone_lip_type,
+        click_cone_rim,
+        cone_lip,
+        cone_face_guide,
+        cone_ok_refused,
+        cone_ok,
+        cone_done,
     ],
 )
