@@ -90,14 +90,15 @@ def rect_sketch(body, z, x0, y0, x1, y1, name="Sketch"):
 
 
 def face_named(feature, normal, z):
+    """The name of the flat face of `feature` lying in the plane at height z (the largest
+    one; `normal` is only a hint kept for readability)."""
+    best = None
     for i, face in enumerate(feature.Shape.Faces, start=1):
-        try:
-            n = face.normalAt(0, 0)
-        except Exception:
-            continue
-        if (n - normal).Length < 1e-6 and abs(face.BoundBox.ZMin - z) < 1e-6:
-            return "Face%d" % i
-    return None
+        box = face.BoundBox
+        if abs(box.ZMin - z) < 1e-6 and abs(box.ZMax - z) < 1e-6:
+            if best is None or face.Area > best[0]:
+                best = (face.Area, "Face%d" % i)
+    return best[1] if best else None
 
 
 def box_body(doc, label, z, height, open_side, wall=2.0, shell=True, component=None):
@@ -298,3 +299,24 @@ def clear_library_prefs():
         grp.SetString("Default", "")
     except Exception:
         pass
+
+
+def _band(a, r):
+    """Integral of sqrt(r^2 - y^2) for y in [-a, a] (a cross-section of a cylinder)."""
+    return a * math.sqrt(r * r - a * a) + r * r * math.asin(a / r)
+
+
+def rest_volume(t=2.0):
+    """What a rest adds on the half pipe R 20 / R 18 (axis along X at z 0) for the 20 x 12
+    profile at z 22 (x 20..40, |y| <= 6), wall t <= 2, no draft: the plate (z 22-t..22),
+    the ring of walls (between the profile and its offset by t) filling the air down to the
+    outer skin, minus the old wall inside the ring (outer to inner skin), so the pedestal is
+    hollow and open to the inside. Only valid while the plate stays above the crown
+    (22 - t >= 20)."""
+    a_out, a_in = 6.0, 6.0 - t
+    l_out, l_in = 20.0, 20.0 - 2 * t
+    plate = l_out * 2 * a_out * t
+    air_out = l_out * (2 * a_out * (22 - t) - _band(a_out, 20))
+    air_in = l_in * (2 * a_in * (22 - t) - _band(a_in, 20))
+    old_wall = l_in * (_band(a_in, 20) - _band(a_in, 18))
+    return plate + air_out - air_in - old_wall
