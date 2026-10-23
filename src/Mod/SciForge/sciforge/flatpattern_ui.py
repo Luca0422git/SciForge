@@ -180,16 +180,39 @@ _install_watch()
 class ViewProviderFlatPattern:
     """Saved files store "sciforge.flatpattern_ui.ViewProviderFlatPattern": never rename."""
 
+    OUTLINE = (0.1, 0.1, 0.12)
+    UP = (0.85, 0.15, 0.15)  # bend centre lines folding up (Fusion's help shows them red)
+    DOWN = (0.15, 0.35, 0.85)
+    EXTENT = (0.45, 0.45, 0.5)
+
     def __init__(self, vobj):
         vobj.Proxy = self
         try:
             vobj.Visibility = False
-            vobj.LineColor = (0.85, 0.2, 0.2)
         except Exception:
             pass
 
     def attach(self, vobj):
         self.Object = vobj.Object
+
+    def updateData(self, obj, prop):
+        """Bend centre lines red (up) / blue (down), extent lines grey, outline dark."""
+        if prop != "Shape":
+            return
+        try:
+            vobj = obj.ViewObject
+            if vobj is None or "LineColorArray" not in vobj.PropertiesList:
+                return
+            bends = flatpattern.bends(obj)
+            edges = obj.Shape.Edges
+            lines = 3 * len(bends)
+            colors = [self.OUTLINE] * max(0, len(edges) - lines)
+            for bend in bends:
+                colors += [self.EXTENT, self.UP if bend.get("up") else self.DOWN, self.EXTENT]
+            if len(colors) == len(edges) and colors:
+                vobj.LineColorArray = colors
+        except Exception as exc:
+            warn("flat pattern colours: %s" % exc)
 
     def getIcon(self):
         return ui_icon_path("flat_pattern")

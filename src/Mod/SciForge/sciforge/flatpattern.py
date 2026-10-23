@@ -155,10 +155,10 @@ class FlatPatternFeature:
                 d[key] = [_xy(a), _xy(b)]
                 lines.append(Part.makeLine(App.Vector(a.x, a.y, 0), App.Vector(b.x, b.y, 0)))
             bends.append(d)
-        obj.Shape = Part.makeCompound([flat] + lines)
         text = json.dumps(bends, sort_keys=True)
         if obj.BendsJson != text:
             obj.BendsJson = text
+        obj.Shape = Part.makeCompound([flat] + lines)  # after BendsJson: the view colours
         face = result.stationary
         obj.FaceMemo = json.dumps(face_memo(face))
         bb = flat.BoundBox
