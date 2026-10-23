@@ -607,5 +607,183 @@ class BackgroundSearch(unittest.TestCase):
         self.assertIsNone(p._limit_job)
 
 
+class PanelTimer(FakeTimer):
+    """The dialog's preview timer (taskui.Panel._timer), fired by hand."""
+
+
+class GenericPanel(FakePanel):
+    """A dialog wired the generic way (Shell, Pipe, primitives, Thicken, Press Pull, 2026-10-23):
+    limit_refuse() where it called limit_refused(), limit_waits() first in its preview,
+    limit_accept() / limit_accepted() around OK; the preview timer and the rest test of
+    taskui.Panel are faked."""
+
+    PAUSE_MS = 200
+
+    def __init__(self, edge=3.4789):
+        super().__init__(edge)
+        self._timer = PanelTimer()
+        self._closed = False
+        self.error = None
+        self.shown = []  # what show_status saw: (error, note)
+        self.previews = 0
+        self.scheduled = []
+        self.moved = -1e9
+
+    def last_moved(self):
+        return self.moved
+
+    def _rest_needed(self):
+        return 0.2
+
+    def schedule(self, settle=False):
+        self.scheduled.append(settle)
+        self._timer.start()
+
+    def show_status(self):
+        self.shown.append((self.error, self.limits.note))
+
+    def preview(self):
+        """The dialog's preview (what the timer runs)."""
+        if self.limit_waits():
+            return "waits"
+        self.previews += 1
+        if self.value > self.edge:
+            held = self.limit_refuse("A %g mm wall is too thick for this part." % self.value)
+            if held == "again":
+                return self.preview()
+            if held == "later":
+                return "later"
+            self.error = "refused"
+            return "error"
+        self.error = None
+        self.limit_good()
+        return "ok"
+
+    def run(self, ticks=1):
+        for _ in range(ticks):
+            job = self._limit_job
+            if job is None or job.done:
+                return
+            job._tick()
+
+    def accept(self):
+        self.limit_accept()
+        try:
+            return self.preview()
+        finally:
+            self.limit_accepted()
+
+
+class GenericBackground(unittest.TestCase):
+    def setUp(self):
+        self._start = vl.Background.start
+        vl.Background.start = start_by_hand
+
+    def tearDown(self):
+        vl.Background.start = self._start
+        vl._WORKING.clear()
+
+    def test_held_value_is_the_at_once_search_s(self):
+        # the same limits as the search run at once (limit_refused), on many edges
+        import random
+
+        rnd = random.Random(7)
+        for _ in range(300):
+            edge = rnd.uniform(0.05, 40.0)
+            value = edge * rnd.uniform(1.01, 30.0)
+            start = rnd.uniform(0.01, edge * 0.99)
+            old = FakePanel(edge)
+            old.edit(start, "dragged")
+            old.edit(value, "dragged")
+            new = GenericPanel(edge)
+            new.value = new.limit_edit("wall", start, "dragged")
+            self.assertEqual(new.preview(), "ok")
+            new.value = new.limit_edit("wall", value, "dragged")
+            self.assertEqual(new.preview(), "later")
+            self.assertEqual(new.limits.note, vl.SEARCHING_VALUE)
+            self.assertEqual(new.preview(), "waits")  # never a second search beside it
+            new.run(200)
+            self.assertFalse(new.limit_searching())
+            self.assertTrue(new._timer.running)  # the end asks for a preview
+            self.assertTrue(vl.working())  # ... counted until it ran
+            self.assertEqual(new.preview(), "ok")
+            self.assertFalse(vl.working())
+            self.assertAlmostEqual(new.value, old.value, places=12)
+            self.assertLessEqual(new.value, edge)  # never a value that does not work
+
+    def test_ok_during_the_search_waits_for_it(self):
+        p = GenericPanel()
+        p.value = p.limit_edit("wall", 1.0, "dragged")
+        p.preview()
+        p.value = p.limit_edit("wall", 30.0, "dragged")
+        self.assertEqual(p.preview(), "later")
+        p.run(1)
+        self.assertEqual(p.accept(), "ok")
+        self.assertEqual(p.value, 3.47)
+        self.assertFalse(p.limit_searching())
+        self.assertFalse(p._timer.running)  # OK ran the preview itself
+        self.assertFalse(p._limit_accepting)
+
+    def test_ok_on_a_new_refused_value_searches_at_once(self):
+        p = GenericPanel()
+        p.value = p.limit_edit("wall", 1.0, "typed")
+        p.preview()
+        p.value = p.limit_edit("wall", 9.0, "typed")
+        self.assertEqual(p.accept(), "ok")  # one press: held and previewed
+        self.assertEqual(p.value, 3.47)
+        self.assertIsNone(p._limit_job)
+
+    def test_the_handle_dragged_meanwhile_builds_nothing(self):
+        import time
+
+        if True:
+            p = GenericPanel()
+            p._limit_button_held = lambda: True
+            p.value = p.limit_edit("wall", 1.0, "dragged")
+            p.preview()
+            p.value = p.limit_edit("wall", 30.0, "dragged")
+            p.preview()
+            builds = p.builds
+            p.moved = time.perf_counter()
+            p.run(5)
+            self.assertEqual(p.builds, builds)
+            p.moved = -1e9  # the mouse rests
+            p.run(200)
+            self.assertFalse(p.limit_searching())
+
+    def test_back_below_cancels_and_previews_normally(self):
+        p = GenericPanel()
+        p.value = p.limit_edit("wall", 1.0, "dragged")
+        p.preview()
+        p.value = p.limit_edit("wall", 30.0, "dragged")
+        p.preview()
+        p.value = p.limit_edit("wall", 2.0, "dragged")
+        self.assertFalse(p.limit_searching())
+        self.assertEqual(p.preview(), "ok")
+        self.assertEqual(p.value, 2.0)
+
+    def test_hint_never_searches_beside_a_running_search(self):
+        p = GenericPanel()
+        p.value = p.limit_edit("wall", 1.0, "dragged")
+        p.preview()
+        p.value = p.limit_edit("wall", 30.0, "dragged")
+        p.preview()
+        builds = p.builds
+        self.assertEqual(p.limit_hint("too thick"), "too thick")
+        self.assertEqual(p.builds, builds)
+
+    def test_closing_cancels(self):
+        p = GenericPanel()
+        p.value = p.limit_edit("wall", 1.0, "dragged")
+        p.preview()
+        p.value = p.limit_edit("wall", 30.0, "dragged")
+        p.preview()
+        p._closed = True
+        p.limit_cancel()
+        vl.busy(p, False)
+        self.assertFalse(vl.working())
+        self.assertEqual(p.value, 30.0)  # nothing set after close
+
+
 if __name__ == "__main__":
     unittest.main()

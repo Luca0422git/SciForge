@@ -975,7 +975,11 @@ class LimitedValues:
             return
         what = self._limit_edit[0]
         try:
-            self._limit_good[what] = (self.limit_key(what), float(self.limit_value(what)))
+            key = self.limit_key(what)
+            # a number still being typed past the limit stands for the held value (the box
+            # shows the limit once it is left): the held value is the one that worked
+            value = self.limits.cache.clamp(key, float(self.limit_value(what)))[0]
+            self._limit_good[what] = (key, value)
         except Exception:
             pass
 
@@ -1155,13 +1159,16 @@ class LimitedValues:
         the rest time): the search builds nothing then (a trial build would freeze the handle
         for its whole length)."""
         try:
-            from . import taskui
-
-            if getattr(self, "_closed", False) or not taskui.button_held():
+            if getattr(self, "_closed", False) or not self._limit_button_held():
                 return False
             return time.perf_counter() - self.last_moved() < self.PAUSE_MS / 1000.0
         except Exception:
             return False
+
+    def _limit_button_held(self):
+        from . import taskui
+
+        return taskui.button_held()
 
     def _limit_show_searching(self):
         """The search started: the dialog says so (the error of the refused value is not
