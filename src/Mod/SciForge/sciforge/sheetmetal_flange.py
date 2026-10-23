@@ -741,6 +741,37 @@ def picks_of(step):
     return _links(step.Profiles)
 
 
+def corner_reliefs(step):
+    """The 2-bend corner reliefs an edge flange asks for, for the flat pattern to cut
+    (sheetmetal_form.mitred_corners plus the relief: the rule's, or the flange's override):
+    each dict also has shape, placement, size (mm; Round: the diameter), bend_radius,
+    thickness, k_factor and angle. [] for other flanges."""
+    options = options_of(step)
+    if options["kind"] != "edge" or step.BaseFeature is None:
+        return []
+    body = owner_body(step)
+    rule = sheetmetal.rule_for_body(body)
+    base = bodies.baked(curves.to_global(step.BaseFeature.Shape, step.BaseFeature))
+    names = [sub for _o, sub in _links(step.Edges)]
+    opts = form_options(options)
+    corners = form.mitred_corners(base, names, rule, opts)
+    eff = form.effective_rule(rule, opts)
+    override = options["override_corner_relief"]
+    for corner in corners:
+        corner.update(
+            shape=options["corner_shape"] if override else rule["corner_relief_2bend_shape"],
+            placement=(
+                options["corner_placement"] if override else rule["corner_relief_2bend_placement"]
+            ),
+            size=options["corner_size"] if override else rule["corner_relief_2bend_size"],
+            bend_radius=eff["bend_radius"],
+            thickness=rule["thickness"],
+            k_factor=rule["k_factor"],
+            angle=options["angle"],
+        )
+    return corners
+
+
 def attachment(refs, body, base_obj=None):
     """(edge name, point) when the contour chain `refs` starts at the end of a sheet edge of
     `body` (a sheet metal body: `base_obj`, else its last solid step), else None: the dialog

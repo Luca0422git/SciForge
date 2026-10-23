@@ -785,6 +785,49 @@ def edge_flange(shape, edge_names, rule, options=None):
     return result
 
 
+def mitred_corners(shape, edge_names, rule, options=None):
+    """The corners an edge flange mitres (for the flat pattern, which cuts the 2-bend corner
+    relief there: SciForge leaves the folded corner open, see parity/sheet-metal.md): one
+    dict per pair of picked edges that meet, with
+
+      point        the corner of the two bends' start (tangent) lines on the sheet's outer
+                   face, design coordinates (square corners; an approximation at others)
+      out_a, out_b the two flanges' outward directions in the sheet's plane
+      up           the side the flanges turn to
+      edges        (edge name a, edge name b)
+
+    Raises FormError like edge_flange for picks it would refuse."""
+    opts = flange_options(options)
+    eff = effective_rule(rule, opts)
+    T = rule["thickness"]
+    angle = float(opts["angle"])
+    frames = [edge_frame(shape, name, T, bool(opts["flip"])) for name in edge_names]
+    try:
+        xc = core.bend_start_x(opts["position"], angle, eff["bend_radius"], T)
+    except ValueError as exc:
+        raise FormError("Bend Position: %s." % exc)
+    found = []
+    for i in range(len(frames)):
+        for j in range(i + 1, len(frames)):
+            shared = _shared_vertex(frames[i], frames[j])
+            if shared is None:
+                continue
+            point = shared[0]
+            if (frames[j].out - frames[i].out).Length < 1e-6:
+                continue
+            corner = point + frames[i].out * xc + frames[j].out * xc
+            found.append(
+                {
+                    "point": corner,
+                    "out_a": V(frames[i].out),
+                    "out_b": V(frames[j].out),
+                    "up": V(frames[i].up),
+                    "edges": (frames[i].name, frames[j].name),
+                }
+            )
+    return found
+
+
 def _clean(shape):
     try:
         shape = shape.removeSplitter()

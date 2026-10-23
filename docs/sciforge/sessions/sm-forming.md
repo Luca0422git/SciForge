@@ -77,3 +77,6 @@ Thickness only (the Flange's own fields take user parameters).
 - sm-more: `sheetmetal_form.bend_wall(frame, t0, t1, thickness, radius, angle, length,
   position)` and `edge_frame(shape, "EdgeN", thickness, flip)`; `effective_rule(rule, opts)`.
 - sm-flat: every flange solid is walls + cylinders; a radius 0 bend has no inner cylinder.
+  `sheetmetal_flange.corner_reliefs(step)` (and `sheetmetal_form.mitred_corners`) give each
+  mitred corner and the 2-bend relief to cut in the flat pattern (the folded part leaves the
+  corner open).

@@ -111,7 +111,9 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
   bend has faces that are neither planes nor cylinders, which a planar + cylindrical unfolder
   cannot lay flat, and the default rule (Round) would put one in every mitred corner. The
   shape, placement and size (rule or override) are kept on the flange step for the flat
-  pattern to cut. The same goes for the 3-bend corner relief.
+  pattern to cut: `sheetmetal_flange.corner_reliefs(step)` lists every mitred corner (the
+  corner of the two bends' tangent lines, the two flange directions) with its relief. The
+  same goes for the 3-bend corner relief.
 - **Edge flange Operation New Body** (Fusion: single edge only) is not offered: an edge
   flange always joins its body.
 - **Contour flange attached to an edge** runs the whole edge: its width types and bend position
