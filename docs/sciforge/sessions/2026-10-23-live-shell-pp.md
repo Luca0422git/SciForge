@@ -30,6 +30,8 @@ nothing happens, right after the last exact preview).
   as the exact Press Pull does. Side quads join the old and the new outline only where they
   are really a face of the result: pulling a box top up shows the taller sides; pushing a
   hole's wall outward shows the wider floor; otherwise the quad is folded flat (invisible).
+  Pushing into the part (a negative distance) draws the slab of material taken away in red,
+  as the exact preview does (Luca's R7: the red shows while the button is still down).
 - **Shell** (`live_shapes.ShellPicture`): every kept face offset by the wall: inward for
   Inside, outward for Outside, both for Both; points at the rim stay on the opened face's
   plane, so the rim is drawn as the ring between the outer and the inner outline. Curved
@@ -93,7 +95,22 @@ value (only *when* changes during a drag: at the rest instead of between moves).
 
 ## Tests run
 
-(filled in below when the runs end)
+- `--only base`: unit 2217 (9 skipped; the new FreeCAD-backed unit test ran, not skipped),
+  golden 451 + 2 known xfail, headless AI 284 calls 0 failed, MCP agent 81 checks 0 failed,
+  smoke / journey / restarts. One failure: the documentation example `get_drawing#1` ("the
+  number -22 is now -23"). It fails the same way on 8af46ba (checked by running only that
+  example on a checkout of 8af46ba), so these changes did not cause it.
+- GUI scenarios (47, in 3 parallel shards): every `extrude*`, `extrude_presspull_*`,
+  `extrudeface_*`, `shell_draft*`, `limits_presspull`, `limits_shell_draft`, `limits_extrude*`,
+  `undo_fast`, `modify2_shell`, `modify2_presspull_type`, `gaps_thin_extrude`,
+  `gaps_extrude_taper_to`, `fixsketch_presspull`, `draft_live`, `live_shapes`: all pass.
+  Two failed on the first run and were changed: `extrude_feel` and `extrude_feel_cut` measured
+  Luca's R2 ("the part grows while the button is still down") from the solid's volume during
+  the drag. The exact solid now waits for the rest, so they now read what the view shows
+  (the live picture's values while it shows, which `live_shapes` checks against the exact
+  solid). R7 (red while pushing) counts the red live picture. Both pass now, and so do the
+  Press Pull scenarios run again after the red slab was added (`presspull`, `limits_presspull`,
+  `modify2_presspull_type`, `fixsketch_presspull`, `extrude_presspull_qa`, `_options`, `undo_fast`).
 
 ## Open
 
