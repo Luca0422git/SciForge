@@ -13,8 +13,9 @@ whole part (2 mm, still one valid solid); Undo takes it back to 1 mm, Redo to 2 
 Flange on the two plate edges next to the earlier flanges (their side faces run on into the
 flanges' end faces) is taken. New Component, Type Sheet Metal with Aluminum (mm): deleting
 that rule in Sheet Metal Rules is refused (it is the component's active rule). A second
-design: a plate made as New Component with the Rule Aluminum (mm) chosen after the pick: the
-component's active rule follows; two edges with Bend Position Outside: the walls run on to the
+design: a plate made as New Component with the Rule Copper (mm), then Aluminum (mm), chosen
+after the pick: the component's active rule follows, Copper (mm) is not left in the design;
+two edges with Bend Position Outside: the walls run on to the
 mitre and close the corner up to the gap.
 """
 
@@ -509,6 +510,11 @@ def d2_new_component():
     sm.choose("operation", "New Component")
 
 
+def d2_copper():
+    sm.settle()
+    sm.choose("rule", "Copper (mm) (Library)")
+
+
 def d2_aluminum():
     sm.settle()
     sm.choose("rule", "Aluminum (mm) (Library)")
@@ -532,6 +538,9 @@ def d2_component():
     rule = sheetmetal.active_rule_name(doc, part) if part is not None else None
     h.check("the component's active rule follows the Rule box", rule == "Aluminum (mm)", rule)
     h.check("a 1.5 mm plate", sm.near(sm.volume(body), 2250.0), sm.volume(body))
+    names = [r["name"] for r in sheetmetal.design_rules(doc)]
+    h.check("Copper (mm), tried then left, is not kept in the design", "Copper (mm)" not in names)
+    h.check("Aluminum (mm) is", "Aluminum (mm)" in names, names)
 
 
 def d2_flange_corner():
@@ -652,6 +661,7 @@ h.run(
         d2_flange,
         d2_profile,
         d2_new_component,
+        d2_copper,
         d2_aluminum,
         d2_ok,
         d2_component,

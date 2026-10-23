@@ -75,6 +75,9 @@ class FlangePanel(Panel):
         self.formula_inputs = {}
         self.formulas = {}  # field key -> formula typed ("" once a number replaced it)
         self.owns_body = False
+        # the design's rules when the dialog opened: a library rule tried in the Rule box and
+        # then left for another is taken out of the design again on OK (QA)
+        self.rules_at_start = {r["name"] for r in sheetmetal.design_rules(doc)}
         self.attached = None  # (edge, point): a contour drawn from the end of a sheet edge
         if feature is not None:
             try:
@@ -962,6 +965,7 @@ class FlangePanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
+        self._drop_tried_rules()
         flange.hide_sketches([r for r in self.refs if extrude.is_sketch(r[0])])
         self.cleanup()
         preview.end_transaction(self.doc)
@@ -969,6 +973,27 @@ class FlangePanel(Panel):
         extrude.show_tip(flange.owner_body(feature))
         log("Flange done (%s)" % self.kind)
         return True
+
+    def _drop_tried_rules(self):
+        """Library rules this dialog copied into the design for the Rule box that nothing
+        follows in the end (another rule was chosen after them) leave the design again."""
+        try:
+            from . import sheetmetal_rules
+
+            parts = [o for o in self.doc.Objects if o.TypeId == "App::Part"]
+            for rule in sheetmetal.design_rules(self.doc):
+                name = rule["name"]
+                if name in self.rules_at_start or name == self.rule_name:
+                    continue
+                if sheetmetal_rules.in_use(self.doc, name):
+                    continue
+                if name == sheetmetal.active_rule_name(self.doc):
+                    continue
+                if any(getattr(p, sheetmetal.RULE_PROP, "") == name for p in parts):
+                    continue
+                sheetmetal.delete_rule(self.doc, name)
+        except Exception as exc:
+            warn("Flange: %s" % exc)
 
     def reject(self):
         if self._closed:

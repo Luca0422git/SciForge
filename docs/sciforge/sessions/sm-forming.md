@@ -97,6 +97,7 @@ Fixed (details in `docs/sciforge/parity/sheet-metal.md`, "QA pass"):
   below 90 degrees) were left open; the flanges now run on to the mitre (research 4.7).
 - A Sheet Metal component's active rule could be deleted from the design.
 - New Component + a Rule chosen after the pick left the component's active rule behind.
+- A library rule tried in the Flange's Rule box and then left stayed In This Design.
 - Inserting a design with its own rule into one that already had sheet metal silently
   rebuilt the inserted parts in the default rule (copied rule stores were never read).
 

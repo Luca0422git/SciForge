@@ -155,6 +155,9 @@ Fixed on `sf/sm-forming-qa`:
   component pointing at a rule the design no longer had. Refused now with the reason.
 - **New Component with the Rule changed after the pick** gave the body the new rule but left
   the new component's active rule at the old one. The component follows the Rule box now.
+- **A library rule tried in the Flange's Rule box and then left for another** stayed In This
+  Design after OK (it is copied in when chosen). OK now takes it out again when nothing
+  follows it (a body, the active rule, a component's rule).
 - **Inserting a design that has its own rule** into a design that already used sheet metal
   silently rebuilt the inserted parts with the default rule (a 0.5 mm part became 1 mm, with
   only a console warning): FreeCAD copies the rule store the flanges link under another name
