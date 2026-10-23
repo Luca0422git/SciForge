@@ -1,0 +1,82 @@
+{
+  "id": "sheetmetal_smm_join_bend_overlap",
+  "title": "Join by Bend of plates whose edges overlap only in part (y 20..40): the bend and the extensions run where they overlap",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            50,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "YZ",
+      "offset": 60,
+      "geometry": [
+        {
+          "rect": [
+            20,
+            5,
+            60,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f2",
+      "kind": "base",
+      "profile": "s2"
+    },
+    {
+      "op": "sf_sm_join_bend",
+      "id": "j1",
+      "first": [
+        60,
+        40,
+        5
+      ],
+      "other": "f1",
+      "second": [
+        50,
+        20,
+        1
+      ]
+    }
+  ],
+  "expect": {
+    "volume": 3887.12389,
+    "solids": 1,
+    "bbox": [
+      0.0,
+      0.0,
+      0.0,
+      61.0,
+      60.0,
+      45.0
+    ],
+    "source": "analytic",
+    "note": "50 x 40 + 40 x 40 plates; over the 20 mm where the edges overlap: the flat one extended 9 mm, the upright 3 mm, and the bent quarter ring (pi/2 x 20 x 1.5)"
+  }
+}
