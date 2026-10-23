@@ -10,7 +10,8 @@ R3  a value box sits next to the arrow and shows exactly the dialog's distance (
     parameter), Enter: the extrude follows the parameter and is done (Enter = OK, like
     the dialog's field). No box is left over the view afterwards.
 R2  the arrow dragged with the mouse button held down, moving on every 20 ms: the part
-    grows while the button is still down, not only once the mouse stops.
+    grows while the button is still down, not only once the mouse stops (since 2026-10-23
+    as the live picture of the extrusion, the exact solid at the rest: live_shapes.py).
 R6  the sketch stays visible after E, while dragging and with the preview shown; OK
     hides it, Undo shows it again, Redo hides it. E pressed inside an open sketch keeps
     that sketch visible too, and Cancel leaves it visible.
@@ -147,6 +148,17 @@ def still_open_after_enter():
 
 
 # -- R2 / R3: a drag with the button held -----------------------------------------------------
+def shown_volume(q):
+    """The volume of what the view shows: the live picture of the extrusion while it is
+    shown (sciforge/live_shapes.py: the exact solid then waits for the mouse to rest; the
+    picture is checked against it in scenario live_shapes), else the preview solid."""
+    live = q.__dict__.get("_live_view")
+    if live is not None and live.shown and live.values and "ends" in live.values:
+        (a0, _i0), (a1, _i1) = live.values["ends"]
+        return AREA * abs(a1 - a0)
+    return h.solid_volume()
+
+
 def live_drag():
     p = panel()
     if p is None or p.dragger is None:
@@ -166,7 +178,7 @@ def live_drag():
             {
                 "i": index,
                 "active": bool(q.dragger and q.dragger.dragger.isActive.getValue()),
-                "volume": round(h.solid_volume(), 3),
+                "volume": round(shown_volume(q), 3),
                 "field": q.distance.value(),
                 "field_text": q.distance.widget.text(),
                 "box_text": box.text() if box else None,

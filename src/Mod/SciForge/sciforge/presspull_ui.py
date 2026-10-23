@@ -730,12 +730,23 @@ class PressPullPanel(Panel, value_limits.LimitedValues, live_shapes.LivePanel):
             return None
         if not self.names or self.formula_error:
             return None
-        return value_limits.make_key("presspull-live", self.base.Shape, list(self.names))
+        return value_limits.make_key(
+            "presspull-live", self.base.Shape, list(self.names), self._pushing()
+        )
+
+    def _pushing(self):
+        """A push into the part: the picture is the material taken away, in red, as the
+        exact preview shows it (R7)."""
+        return float(self.field.value()) < 0.0
 
     def live_make(self):
         body = self.base.getParentGeoFeatureGroup()
         placement = body.getGlobalPlacement() if body is not None else None
-        return [live_shapes.OffsetPicture(self.base.Shape, list(self.names), placement)]
+        return [
+            live_shapes.OffsetPicture(
+                self.base.Shape, list(self.names), placement, slab=self._pushing()
+            )
+        ]
 
     def live_values(self):
         return {"distance": float(self.field.value())}
@@ -747,6 +758,8 @@ class PressPullPanel(Panel, value_limits.LimitedValues, live_shapes.LivePanel):
         return [self.base]
 
     def live_colors(self):
+        if self._pushing():
+            return live_shapes.CUT_COLOR, (0.35, 0.05, 0.05)
         return live_shapes.colors(self.target if self.target is not None else self.base)
 
     def _hide_cut_view(self):

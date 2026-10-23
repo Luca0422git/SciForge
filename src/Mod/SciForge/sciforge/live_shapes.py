@@ -288,9 +288,12 @@ class OffsetPicture(Mesh):
     # the moved face (NEVER: a face that continues the moved one)
     MOVE, POS, NEG, NEVER = 0, 1, 2, 3
 
-    def __init__(self, shape, names, placement=None):
+    def __init__(self, shape, names, placement=None, slab=False):
         super().__init__(shape.BoundBox.DiagonalLength, placement)
         self.info = Faces(shape, self.deflection, self.tol)
+        # slab: every side quad shown: the picture is the slab between the old and the new
+        # face (Press Pull pushing in shows the material taken away so, in red)
+        self.slab = slab
         self.moved = [shape.getElement(n) for n in names]
         if not self.moved:
             raise ValueError("no faces")
@@ -371,6 +374,13 @@ class OffsetPicture(Mesh):
 
     def coefficients(self, values):
         d = float(values["distance"])
+        if self.slab:
+            return {
+                self.MOVE: (d, 0.0),
+                self.POS: (0.0, 0.0),
+                self.NEG: (0.0, 0.0),
+                self.NEVER: (0.0, 0.0),
+            }
         return {
             self.MOVE: (d, 0.0),
             self.POS: (0.0 if d > 0 else d, 0.0),

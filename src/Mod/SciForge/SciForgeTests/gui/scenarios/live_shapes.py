@@ -104,8 +104,9 @@ def global_of(obj):
     return shape
 
 
-def picture_on(label, p, exact):
-    """Every point of the picture at the dialog's values now lies on `exact` (global)."""
+def picture_on(label, p, exact, also=None):
+    """Every point of the picture at the dialog's values now lies on `exact` (global), or on
+    `also` (a push's red slab: its sides are the part's faces before the step)."""
     import Part
 
     live = live_of(p)
@@ -118,7 +119,11 @@ def picture_on(label, p, exact):
     for pic in overlay.pictures:
         faces, lines = pic.points_at(values)
         for q in faces + lines:
-            worst = max(worst, exact.distToShape(Part.Vertex(V(*q)))[0])
+            v = Part.Vertex(V(*q))
+            dist = exact.distToShape(v)[0]
+            if also is not None:
+                dist = min(dist, also.distToShape(v)[0])
+            worst = max(worst, dist)
             count += 1
     h.check(
         "%s: the picture lies on the exact solid" % label,
@@ -199,6 +204,12 @@ def after_drag(label, p, hidden=(), unghosted=()):
         )
 
 
+def live_shapes_red():
+    from sciforge import live_shapes
+
+    return live_shapes.CUT_COLOR
+
+
 def live_shapes_shown(vobj):
     from sciforge import live_shapes
 
@@ -274,7 +285,12 @@ def pp_down_done():
     after_drag("Press Pull down", p, hidden=[p.target], unghosted=[p.base])
     h.check("pushed down", d < -0.5, d)
     h.check("the exact solid: the box lower by d", close(p.target.Shape.Volume, 1200.0 * (10 + d)))
-    picture_on("Press Pull down", p, global_of(p.target))
+    picture_on("Press Pull down", p, global_of(p.target), also=global_of(p.base))
+    live = live_of(p)
+    h.check(
+        "Press Pull down: the picture is the material taken away, in red (R7)",
+        live is not None and getattr(live, "_colors", (None,))[0] == live_shapes_red(),
+    )
     h.task_button("OK")
 
 
