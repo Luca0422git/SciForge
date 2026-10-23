@@ -1,0 +1,83 @@
+{
+  "id": "sheetmetal_smm_bend_diagonal",
+  "title": "Bend a 100 x 40 plate along a diagonal line: 90 degrees Center, then edited to 45 degrees Start (once refused: the slanted zone was taken for a tab)",
+  "tags": [
+    "sheetmetal",
+    "sm-more"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            100,
+            40
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_flange",
+      "id": "f1",
+      "kind": "base",
+      "profile": "s1"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 1,
+      "geometry": [
+        {
+          "line": [
+            40,
+            -5,
+            60,
+            45
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_sm_bend",
+      "id": "b1",
+      "face": [
+        5,
+        20,
+        1
+      ],
+      "lines": "s2",
+      "options": {
+        "angle": 90,
+        "position": "center"
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "volume": 4004.060319,
+        "solids": 1,
+        "source": "analytic"
+      }
+    },
+    {
+      "op": "sf_sm_more_edit",
+      "target": "b1",
+      "set": {
+        "angle": 45,
+        "position": "start"
+      }
+    }
+  ],
+  "expect": {
+    "volume": 4002.030159,
+    "solids": 1,
+    "source": "analytic",
+    "note": "zone = BA x chord (BA = angle x (R + K T); the line crosses the 40 mm plate in a 43.081 mm chord); the bent zone holds ((R + T)^2 - R^2) / (2 (R + K T) T) = 1.041667 of its flat volume: 4000 + 0.041667 x BA x 43.081"
+  }
+}
