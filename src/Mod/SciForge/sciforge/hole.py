@@ -383,7 +383,7 @@ def moves_solid(step):
     return getattr(step, "SciForgeType", "") in MOVING_STEPS
 
 
-def earliest_face(base, face_name, point):
+def earliest_face(base, face_name, point, same_outline=False):
     """(step, 'FaceN'): the earliest step in `base`'s history that already has the flat face
     `face_name` of `base` where `point` (body coordinates) is: the step that made the face,
     not the hole drilled in it just before. A hole hangs its sketch (and its To target) on
@@ -391,6 +391,11 @@ def earliest_face(base, face_name, point):
     as in Fusion; a step that moved the face (Press Pull, a taller extrude) stops the search,
     and so does a step that moved the whole solid (Move, Align, Scale: see moves_solid) or
     the start of the body (a copied body's first step: its base lies outside the body).
+    same_outline: an earlier step's face counts only with the same outer boundary (holes
+    inside it may differ): a sketch projects the face's edges (sketch_auto_project), and a
+    later step that reshaped the face (a Draft tilting its walls, a fillet round it) left
+    the earlier face larger or another shape (Luca, 2026-10-23: the top of a drafted block
+    projected as the block before the Draft).
     Only the reference goes back to the earlier step: the design is still shown and built as
     it is now (sketch_ui.show_design_at; Luca: "sketching on an edited object will revert it
     to a previous state")."""
@@ -421,8 +426,31 @@ def earliest_face(base, face_name, point):
             break
         if face_normal_at(other, point).dot(normal) < 1.0 - 1e-9:
             break
+        if same_outline and not same_outer_boundary(face, other):
+            break
         best = (obj, name)
     return best
+
+
+def same_outer_boundary(a, b, tol=1e-6):
+    """Two flat faces in one plane bounded by the same outer wire (what lies inside may
+    differ: a hole drilled in one of them). Compared by the wire's length, its box and
+    the area it encloses."""
+    import Part
+
+    try:
+        wa, wb = a.OuterWire, b.OuterWire
+        if abs(wa.Length - wb.Length) > tol * max(1.0, wa.Length):
+            return False
+        ba, bb = wa.BoundBox, wb.BoundBox
+        box_a = (ba.XMin, ba.YMin, ba.ZMin, ba.XMax, ba.YMax, ba.ZMax)
+        box_b = (bb.XMin, bb.YMin, bb.ZMin, bb.XMax, bb.YMax, bb.ZMax)
+        if any(abs(x - y) > 1e-4 for x, y in zip(box_a, box_b)):
+            return False
+        area_a, area_b = Part.Face(wa).Area, Part.Face(wb).Area
+        return abs(area_a - area_b) <= tol * max(1.0, area_a)
+    except Exception:
+        return False
 
 
 def earliest_edge(base, edge_name):
@@ -758,21 +786,54 @@ def make_single(body, base, face_name, point, options=None, name="Hole", refs=No
 
 def sketch_targets(sketch):
     """Sub-elements of a sketch a hole can be drilled at: lone points ('VertexN', not the
-    end of a curve) and circles / arcs ('EdgeN', at their centre)."""
+    end of a curve) and circles / arcs ('EdgeN', at their centre). Not the circles of the
+    face the sketch was made on (Auto project's curves: a hole already in the face, a
+    boss standing on it); a circle projected with P counts."""
     shape = sketch.Shape
     found = []
     in_edges = set()
     for edge in shape.Edges:
         for v in edge.Vertexes:
             in_edges.add((round(v.Point.x, 7), round(v.Point.y, 7), round(v.Point.z, 7)))
+    face_circles = _auto_circles(sketch)
     for i, edge in enumerate(shape.Edges, start=1):
         if edge.Curve.TypeId == "Part::GeomCircle":
+            curve = edge.Curve
+            if any(
+                (curve.Center - c).Length < 1e-6 and abs(curve.Radius - r) < 1e-6
+                for c, r in face_circles
+            ):
+                continue
             found.append("Edge%d" % i)
     for i, v in enumerate(shape.Vertexes, start=1):
         key = (round(v.Point.x, 7), round(v.Point.y, 7), round(v.Point.z, 7))
         if key not in in_edges:
             found.append("Vertex%d" % i)
     return found
+
+
+def _auto_circles(sketch):
+    """[(centre, radius)] of the circles and arcs Auto project brought into the sketch
+    (sketch_auto_project), where the sketch's shape has them."""
+    import Part
+
+    try:
+        import Sketcher
+
+        from . import sketch_auto_project
+
+        ids = sketch_auto_project.auto_ids(sketch)
+        if not ids:
+            return []
+        found = []
+        for geo in list(sketch.ExternalGeo)[2:]:
+            if not isinstance(geo, (Part.Circle, Part.ArcOfCircle)):
+                continue
+            if Sketcher.ExternalGeometryFacade(geo).Id in ids:
+                found.append((sketch.Placement.multVec(geo.Center), geo.Radius))
+        return found
+    except Exception:
+        return []
 
 
 def pick_target(sketch, sub):

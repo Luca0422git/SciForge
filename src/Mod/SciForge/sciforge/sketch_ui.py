@@ -699,7 +699,9 @@ def create_sketch(body, target):
         # plane of the same role lies: the sketch hangs on the body's, inside the body.
         if components.is_component(components.origin_owner(target[0])):
             target = (components.same_role_plane(body, target[0]), "")
-    target = _earliest(target)
+    point = _face_point(target)
+    shown = _earliest(target, point, same_outline=True)
+    target = _earliest(target, point)
     doc = body.Document
     doc.openTransaction("Create Sketch")
     try:
@@ -708,7 +710,7 @@ def create_sketch(body, target):
         sketch.MapMode = "FlatFace"
         doc.recompute()
         if sketch_auto_project.enabled():
-            sketch_auto_project.auto_project(sketch, target)
+            sketch_auto_project.auto_project(sketch, shown, at=point)
     except Exception:
         doc.abortTransaction()
         raise
@@ -725,26 +727,41 @@ def _surface_body(body):
         return False
 
 
-def _earliest(target):
+def _earliest(target, point=None, same_outline=False):
     """A flat face clicked on the part belongs to the step that made it, not to the last
-    step that touched the part: a sketch on the top of a block with a hole drilled in it
-    hangs on the block, so suppressing or deleting the unrelated hole leaves the sketch
-    (and what is built on it) alone, as in Fusion (found by the hole QA). Only the reference
-    goes back: while the sketch is open the design is drawn as it is now (show_design_at),
-    and what is made from the sketch builds on the body's newest step."""
+    step that touched the part: a sketch on the top of a block with a hole drilled in it, or
+    with a fillet round it, hangs on the block, so suppressing or deleting the hole or the
+    fillet leaves the sketch (and what is built on it) alone, as in Fusion (found by the
+    hole QA). Only the reference goes back: while the sketch is open the design is drawn as
+    it is now (show_design_at), and what is made from the sketch builds on the body's newest
+    step. same_outline: the earliest step whose face has the same outline, the face Auto
+    project shows (a face a later Draft or fillet reshaped is projected as it is now, Luca,
+    2026-10-23; sketch_auto_project.follow keeps it so)."""
     obj, name = target
-    if not name.startswith("Face"):
+    if point is None:
+        point = _face_point(target)
+    if not name.startswith("Face") or point is None:
         return target
     try:
         from . import hole
 
-        face = obj.Shape.getElement(name)
-        point = _point_on(face)
-        if point is None:
-            return target
-        return hole.earliest_face(obj, name, point)
+        return hole.earliest_face(obj, name, point, same_outline=same_outline)
     except Exception:
         return target
+
+
+def _face_point(target):
+    """A point of the clicked flat face (body coordinates), or None."""
+    obj, name = target
+    if not name.startswith("Face"):
+        return None
+    try:
+        face = obj.Shape.getElement(name)
+        if face.Surface.TypeId != "Part::GeomPlane":
+            return None
+        return _point_on(face)
+    except Exception:
+        return None
 
 
 def _point_on(face):

@@ -855,6 +855,10 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   unrelated earlier hole no longer takes the sketch and what is built on it along.
   Scenario `sketch_earliest_face` (found by the hole QA). Dialog `_recompute` methods return
   once the dialog is closed (all but revolve_ui, which its QA pass owns).
+  **Its projected (purple) face is another matter (2026-10-23):** Auto project shows the face
+  as it is now, from the earliest step with the same outline (`same_outline=True`), and
+  `sketch_auto_project.follow` (run by `timeline_ops.settle`) keeps it so when steps before
+  the sketch are suppressed, deleted or added. Session log "Sketch on a reshaped face".
 - Open question for Luca: a Single Hole's hidden helper sketch is listed in the browser as
   "Hole 1 Sketch" (double-click opens the hole); Fusion lists no sketch for a single hole.
 - `tools/sciforge/make_icons.py` empties the icon folder before writing: the hand-drawn
@@ -1560,6 +1564,62 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   default; Ruled's default type. Each guess is marked G in the parity docs.
 
 ## Session log
+
+### Session log: Sketch on a reshaped face (`develop`, 2026-10-23, after the beta.2 release)
+
+Luca (two screenshots): "when I select a face to sketch on, It doesnt project the right face":
+Create Sketch on the top of a body with a Draft-like step; the purple outline came in larger
+and offset from the face.
+
+- **Cause** (there since 2026-10-16, so in 0.1.0-beta too): `sketch_ui._earliest` hangs the
+  sketch on the earliest step that has a flat face at the clicked point (the hole QA's rule,
+  so suppressing a later hole leaves the sketch alone), and Auto project projected *that*
+  step's face: a face a later Draft, fillet, chamfer, Press Pull or join reshaped came in as it
+  was before (a 10 deg Draft: 40 x 30 projected on a 32.95 x 22.95 top).
+- **First try, rejected:** hang the sketch on the earliest step *with the same outline*
+  (`hole.earliest_face(same_outline=True)`, `same_outer_boundary`). Right outline, but it broke
+  the rule: `fixsketch_fillet` E (suppressing the fillet took sketch and boss along),
+  `fixsketch_join` B, `fixsketch_presspull` B, `fixsketch_shell_draft` D, and `hole_qa_part`
+  P12/P13 (the face's own boss circle became a third From Sketch hole).
+- **Fix:** the sketch still hangs on the earliest step; only its projected face is the face
+  as it is now (`create_sketch`: `_earliest(..., same_outline=True)` for `auto_project`, which
+  keeps the clicked point in `SciForgeAutoProjectedAt`, sketch coordinates, hidden).
+  - FreeCAD finding (headless, `suppress_exp*.py`): a projection from a later step breaks for
+    good when a step at or before it is suppressed: the mapped element name (";#23:1;:M;FLT;...")
+    is not found, FreeCAD drops the link (`ExternalGeometry` becomes []), keeps frozen copies,
+    and does not relink on unsuppress. Same for a sketch projecting a Chamfer's face when the
+    Fillet before the Chamfer is suppressed.
+  - So `sketch_auto_project.follow(sketch)` re-derives the face after every recompute
+    (`timeline_ops.settle` -> `follow_all`): the solid step before the sketch in its body, the
+    face at the kept point, `earliest_face(same_outline=True)`; if the link is gone or the
+    outline differs, `_reproject` adds the new face, moves each constraint on an old curve to
+    the new curve standing in its place (`_pairs`: parallel lines by gap + middle distance, a
+    reversed line swaps ends 1/2, circles by centre/radius; nearest pairs first, at most half
+    the outline's size away), drops constraints on curves with no counterpart, deletes the old
+    link (once per link, FreeCAD deletes all its curves), updates the Auto-project ids. Cached
+    per sketch (`_CHECKED`: step, its shape hash, links, placement), skipped while the sketch
+    is being edited, only for sketches with the kept point (older sketches are left as they
+    were: re-create them to get the right outline).
+  - `timeline_ops.suppress`: `dependents(..., soft=sketch_auto_project.soft_links(doc))`: a
+    sketch whose only tie to the step is its Auto-projected face is not taken along (Fusion
+    keeps it); follow then projects the face without the step, and back on unsuppress.
+  - `hole.sketch_targets` leaves Auto project's circles out (a hole already in the face, a
+    boss on it); a circle projected with P still counts (`hole_qa_part` P12).
+  - Undo/redo of suppress or delete puts the old projection back (the follow runs inside the
+    operation's transaction); FreeCAD prints "Duplicated external reference" warnings while
+    undoing (transient, nothing broken, no pop-up in the scenarios).
+- **Scenario `sketch_face_reshaped`** (new; fails 7 checks on the old code): drafted block and
+  filleted block (builder), Create Sketch by clicking the top: hangs on e1, projected from the
+  Draft / fillet, outline = the face's, on the face; a line on two projected corners; Suppress
+  the fillet (timeline menu): sketch on, outline 40 x 30, the line went with the corners;
+  Unsuppress: 34 x 24, line back; Delete the fillet: 40 x 30; Ctrl+Z: 34 x 24.
+- **Luca on release speed** ("4 hours to have a build ready is abismal"): a fix in SciForge's
+  Python never needs the full build (no core change since 0.1.0-beta: Update now is the 7 MB
+  module). Proposed to him: a "patch release" workflow that, when `core_id` matches the latest
+  release, runs the tests and publishes only the quick update + `sciforge-release.json` (and
+  repacks the portable/AppImage with the new module) in minutes; and batching fixes. Not built:
+  waiting for his answer. Meanwhile every CI run on `develop` has the `quick-update` artifact
+  (docs/sciforge/quick-update.md).
 
 ### Session log: Merge for 0.1.0-beta.2 (`develop`, 2026-10-23)
 

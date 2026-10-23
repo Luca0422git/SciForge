@@ -130,12 +130,16 @@ def settle(doc):
       rolled-back marker, a step before it deleted) keeps its edges/faces: FreeCAD keeps
       their old names on the new base, which are other edges or none (red);
     - a step in error adds nothing and the steps after it build on what came before it;
-    - a body with nothing left shows nothing."""
+    - a body with nothing left shows nothing;
+    - a sketch's projected face shows the face as it is at the sketch's place
+      (sketch_auto_project.follow: a fillet before it suppressed or deleted)."""
     _settling.add(doc.Name)
     try:
         with quiet():
             repaired = repair_references(doc)
             if _resolve_patterns(doc) or repaired:
+                doc.recompute()
+            if _follow_faces(doc):
                 doc.recompute()
             _pass_through_failures(doc)
             _clear_empty_bodies(doc)
@@ -143,6 +147,15 @@ def settle(doc):
         follow_mesh_steps(doc)  # after an undo, a step added or deleted: mesh steps' sides
     finally:
         _settling.discard(doc.Name)
+
+
+def _follow_faces(doc):
+    try:
+        from . import sketch_auto_project
+
+        return bool(sketch_auto_project.follow_all(doc))
+    except Exception:
+        return False
 
 
 def _is_solid_step(obj):
@@ -1335,12 +1348,14 @@ def _picks_paused(fn):
 
 
 # -- suppress --------------------------------------------------------------------------
-def dependents(doc, names):
-    """Steps that use any of ``names``, directly or through each other."""
+def dependents(doc, names, soft=()):
+    """Steps that use any of ``names``, directly or through each other. ``soft``: (user,
+    used) links left out (a sketch's projected face that follows the design)."""
     users = {}
     for obj, _body in steps(doc):
         for dep in uses(obj):
-            users.setdefault(dep, set()).add(obj.Name)
+            if (obj.Name, dep) not in soft:
+                users.setdefault(dep, set()).add(obj.Name)
     found = set()
     todo = list(names)
     while todo:
@@ -1350,6 +1365,15 @@ def dependents(doc, names):
                 found.add(user)
                 todo.append(user)
     return found
+
+
+def _soft_links(doc):
+    try:
+        from . import sketch_auto_project
+
+        return sketch_auto_project.soft_links(doc)
+    except Exception:
+        return set()
 
 
 def _link_snapshot(doc):
@@ -1470,7 +1494,9 @@ def suppress(doc, names):
     title = ", ".join(_label(doc, n) for n in names[:3])
     _transaction(doc, "Suppress %s" % title)
     try:
-        group = set(names) | dependents(doc, names)
+        # A sketch whose projected face comes from a step being suppressed stays on (its
+        # face is projected again as it is without the step), as in Fusion.
+        group = set(names) | dependents(doc, names, _soft_links(doc))
         group |= set(followers(doc, group))  # a multi-body extrude goes off in every body
         with quiet():
             for n in group:
