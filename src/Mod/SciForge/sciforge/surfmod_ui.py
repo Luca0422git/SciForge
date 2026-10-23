@@ -331,7 +331,19 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
             return False
         if body is self.body:
             return obj is self.base or obj is body or self.base is None
+        if self._solid_handback(body):
+            return True  # an edge of a solid: the SOLID Fillet / Chamfer takes it
         return not self.picked and not self.editing and self._usable_body(body)
+
+    def _solid_handback(self, body):
+        """Fusion's Fillet / Chamfer on the SURFACE tab rounds solids too: a click on a
+        solid's edge before anything is picked goes to the SOLID dialog."""
+        return (
+            self.kind in PICKS_EDGES
+            and not self.picked
+            and not self.editing
+            and bodies.has_solid(body)
+        )
 
     def _usable_body(self, body):
         if self.kind == "surface_delete_face":
@@ -361,6 +373,9 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
         body = obj if bodies.is_body(obj) else bodies.body_of(obj)
         if body is None:
             return False
+        if body is not self.body and self._solid_handback(body):
+            QtCore.QTimer.singleShot(0, lambda: self._to_solid(obj, short))
+            return False
         if body is not self.body:
             if self.picked or self.editing or not self._usable_body(body):
                 self.help.setText("This %s works on %s." % (self.title, self.body.Label))
@@ -376,6 +391,23 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
         else:
             self.picked.append(name)
         return True
+
+    def _to_solid(self, obj, short):
+        """Close this dialog and open the SOLID Fillet / Chamfer with the solid's edge."""
+        if self._closed:
+            return
+        try:
+            from . import fillet_ui
+
+            panel_class = (
+                fillet_ui.ChamferPanel if self.kind == "surface_chamfer" else fillet_ui.FilletPanel
+            )
+            self.reject()
+            Gui.Selection.clearSelection()
+            Gui.Selection.addSelection(obj, [short])
+            fillet_ui.start(panel_class)
+        except Exception as exc:
+            warn("%s: could not hand the edge to the solid %s: %s" % (self.title, self.title, exc))
 
     def _name_on_base(self, obj, short):
         base = self.base

@@ -14,7 +14,9 @@ SOLID Delete): a box's top cannot be healed, so it is refused with the reason an
 stays. Double-click the surface Delete Face in the timeline: its floor reads back; click a
 wall to delete it too, OK: 3 faces. MODIFY > Merge: click the two faces in the plane y = 40:
 "The 2 faces become one face", OK: 2 faces, the same area. Merge again, click the merged face
-and the other one: refused (different surfaces), Esc.
+and the other one: refused (different surfaces), Esc. MODIFY > Fillet with nothing picked opens
+the surface Fillet; a click on the solid's edge hands it to the SOLID Fillet (Fusion's Fillet
+rounds solids on the SURFACE tab too); Esc.
 """
 
 import FreeCAD as App
@@ -212,6 +214,32 @@ def closed_unchanged():
     s4.settle()
     h.check("Esc closed it", s4.panel() is None)
     h.check("still 2 faces", s4.faces(s["strip"]) == 2, s4.faces(s["strip"]))
+    Gui.Selection.clearSelection()
+    h.fit()
+    st.menu("MODIFY", "Fillet")
+
+
+def click_solid_edge():
+    p = s4.panel()
+    h.check("the surface Fillet dialog (a surface body is shown)", p is not None)
+    h.click_edge(V(70, 0, 5))
+
+
+def solid_fillet_took_it():
+    from SciForgeTests.gui import blend_steps as b
+
+    h.idle_step()()
+    p = b.blend_panel()
+    h.check("the SOLID Fillet took the solid's edge", p is not None, p)
+    h.check("with that edge", p is not None and len(p.refs) == 1, p and p.refs)
+    h.check("the surface dialog closed", s4.panel() is None)
+    st.esc()
+
+
+def solid_unchanged():
+    h.idle_step()()
+    h.check("Esc closed it", not Gui.Control.activeDialog())
+    h.check("the solid unchanged", st.near(st.volume(s["solid"]), 4000.0))
 
 
 h.run(
@@ -242,5 +270,8 @@ h.run(
         merge_other,
         merge_refused,
         closed_unchanged,
+        click_solid_edge,
+        solid_fillet_took_it,
+        solid_unchanged,
     ],
 )
