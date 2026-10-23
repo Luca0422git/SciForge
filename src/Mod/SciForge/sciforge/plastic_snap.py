@@ -372,6 +372,45 @@ def _note(obj, text):
         pass
 
 
+def assign_shape(obj, shape):
+    """Give a step its solid (body coordinates, placement built in). FreeCAD puts the step's
+    own Placement on the shape it is given during a recompute (a step after a primitive
+    carries the primitive's), so the geometry goes in moved back by it."""
+    out = bodies.baked(shape)
+    place = obj.Placement
+    if not place.isIdentity():
+        out.transformShape(place.inverse().toMatrix(), True)
+        out.Placement = place
+    obj.Shape = out
+
+
+def follower_execute(proxy, obj):
+    """modify_bodies._Follower.execute with the shape put in as assign_shape does."""
+    base = obj.BaseFeature
+    body = bodies.body_of(obj)
+    label = body.Label if body is not None else "this body"
+    if base is None or base.Shape.isNull() or not base.Shape.Solids:
+        bodies.pass_through(obj)
+        raise modify_bodies.FollowerError("%s has no solid here for the step to act on." % label)
+    lead = modify_bodies.lead_of(obj)
+    if lead is None or getattr(obj, "Suppressed", False):
+        assign_shape(obj, base.Shape)
+        return
+    try:
+        shape = proxy.build(obj, lead, bodies.baked(base.Shape))
+    except Exception as exc:
+        bodies.pass_through(obj)
+        raise modify_bodies.FollowerError(
+            "%s cannot be applied to %s: %s" % (lead.Label, label, exc)
+        )
+    if bool(getattr(obj, "Refine", True)):
+        try:
+            shape = shape.removeSplitter()
+        except Exception:
+            pass
+    assign_shape(obj, shape)
+
+
 class SnapFitFeature:
     """The Snap Fit step (in the hook body). Saved documents store
     "sciforge.plastic_snap.SnapFitFeature": keep the name stable."""
@@ -425,7 +464,7 @@ class SnapFitFeature:
             bodies.pass_through(obj)
             raise
         _note(obj, note)
-        obj.Shape = shape
+        assign_shape(obj, shape)
 
     def dumps(self):
         return None
@@ -523,6 +562,9 @@ class SnapGrooveFollower(modify_bodies._Follower):
 
     KIND = FOLLOWER_KIND
 
+    def execute(self, obj):
+        follower_execute(self, obj)
+
     def build(self, obj, lead, base_shape):
         options = current_options(lead)
         problems = core.validate(options)
@@ -532,7 +574,7 @@ class SnapGrooveFollower(modify_bodies._Follower):
             return base_shape
         body = bodies.body_of(obj)
         place = body.getGlobalPlacement() if body is not None else App.Placement()
-        shape = base_shape.copy()
+        shape = bodies.baked(base_shape)
         if not place.isIdentity():
             shape.transformShape(place.toMatrix(), True)
         result, _note = other_side(lead, options, shape)
@@ -574,9 +616,20 @@ def other_side(lead, options, shape):
     return result, note
 
 
-def find_groove_body(doc, hook_body, sketch, options, indices=()):
+def _before(lead, body):
+    """`body`, or the step before `lead`'s follower in it (the body without its groove)."""
+    if lead is None:
+        return body
+    follower = modify_bodies.follower_in(lead, body)
+    if follower is not None and follower.BaseFeature is not None:
+        return follower.BaseFeature
+    return body
+
+
+def find_groove_body(doc, hook_body, sketch, options, indices=(), lead=None):
     """The body the grooves / loops go in: the one the first groove box cuts most (parallel,
-    perpendicular) or the first one under the loop (Hook and Loop); None when none."""
+    perpendicular) or the first one under the loop (Hook and Loop); None when none. A body
+    that already has `lead`'s groove is looked at as it was before it."""
     placed = frames(sketch, options, indices)
     if not placed:
         return None
@@ -586,7 +639,7 @@ def find_groove_body(doc, hook_body, sketch, options, indices=()):
         if body is hook_body:
             continue
         try:
-            shape = bodies.global_shape(body)
+            shape = bodies.global_shape(_before(lead, body))
         except Exception:
             continue
         if shape.isNull() or not shape.Solids:
@@ -707,7 +760,12 @@ def set_other_body(feature, groove_body, options=None):
     hook_body = bodies.body_of(feature)
     if groove_body is None and options.get("groove", True):
         groove_body = find_groove_body(
-            feature.Document, hook_body, feature.Sketch, options, list(feature.PointIndices)
+            feature.Document,
+            hook_body,
+            feature.Sketch,
+            options,
+            list(feature.PointIndices),
+            lead=feature,
         )
     members = [(groove_body, None)] if groove_body is not None and options.get("groove") else []
     modify_bodies.sync(feature, members, SnapGrooveFollower, feature.Name + "Groove")

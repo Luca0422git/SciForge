@@ -26,6 +26,7 @@ import FreeCAD as App
 
 from . import bodies, log, modify_bodies, plastic
 from . import plastic_lip_core as core
+from .plastic_snap import assign_shape, follower_execute
 
 V = App.Vector
 FP_TYPE = "PartDesign::FeaturePython"
@@ -82,8 +83,30 @@ class Rim:
         self.normal = V(n.x, n.y, n.z)
         self.normal.normalize()
         self.side = self._side()
-        length = sum(e.Length for e in wire.Edges)
-        self.wall = self.face.Area / length if length > TOL else None
+        self.wall = self._wall()
+
+    def _wall(self):
+        """The rim's width across from the middle of the first edge (the wall thickness
+        there), or None."""
+        import Part
+
+        try:
+            edge = self.wire.Edges[0]
+            t = 0.5 * (edge.FirstParameter + edge.LastParameter)
+            mid = edge.valueAt(t)
+            along = V(edge.tangentAt(t))
+            along.normalize()
+            across = self.normal.cross(along)
+            best = None
+            for direction in (across, across * -1.0):
+                seg = Part.LineSegment(mid, mid + direction * 1000.0).toShape()
+                for piece in self.face.common(seg).Edges:
+                    ends = [v.Point for v in piece.Vertexes]
+                    if any((q - mid).Length < 1e-6 for q in ends):
+                        best = piece.Length if best is None else max(best, piece.Length)
+            return best
+        except Exception:
+            return None
 
     @staticmethod
     def _rim_face(shape, edges):
@@ -109,7 +132,25 @@ class Rim:
         return self.wire.makeOffset2D(d, 2, False, not self.closed)
 
     def _skin(self, d):
-        return self.wire.makeOffset2D(d, 2, True, True)
+        """The flat face between the open chain and its offset by d (one side or the other
+        by the sign). A straight chain has no plane of its own for the 2D offset: its band is
+        the rectangle beside it in the rim's plane."""
+        import Part
+
+        try:
+            return self.wire.makeOffset2D(d, 2, True, True)
+        except Exception:
+            pass
+        start = self.wire.OrderedVertexes[0].Point
+        end = self.wire.OrderedVertexes[-1].Point
+        along = end - start
+        if along.Length < TOL or any(
+            type(e.Curve).__name__ not in ("Line", "LineSegment") for e in self.wire.Edges
+        ):
+            raise LipError("These edges give no flat band: pick edges of the flat rim.")
+        along.normalize()
+        side = self.normal.cross(along) * d
+        return Part.Face(Part.makePolygon([start, end, end + side, start + side, start]))
 
     def band(self, a, b):
         """The flat face between a and b mm from the edges, towards the rim (a < b)."""
@@ -120,13 +161,13 @@ class Rim:
             hi, lo = (s * b, s * a) if s > 0 else (s * a, s * b)
             outer = Part.Face(self.offset(hi))
             inner = Part.Face(self.offset(lo))
-            return outer.cut(inner)
+            return _one_face(outer.cut(inner))
         if a >= -1e-9:
             face = self._skin(s * b)
             if a > 1e-9:
                 face = face.cut(self._skin(s * a))
-            return face
-        return self._skin(s * b).fuse(self._skin(s * a))
+            return _one_face(face)
+        return _one_face(self._skin(s * b).fuse(self._skin(s * a)))
 
     def _side(self):
         """+1 when a positive offset grows towards the rim face, else -1."""
@@ -148,6 +189,21 @@ class Rim:
         """True when the band (a, b) lies on the rim face."""
         band = self.band(a, b)
         return band.common(self.face).Area >= band.Area * (1.0 - 1e-4) - 1e-6
+
+
+def _one_face(shape):
+    """A band as one face when it is one (a cut or fuse of faces gives a shell)."""
+    try:
+        if shape.ShapeType == "Face":
+            return shape
+        faces = shape.Faces
+        if len(faces) > 1:
+            faces = shape.removeSplitter().Faces
+        if len(faces) == 1:
+            return faces[0]
+    except Exception:
+        pass
+    return shape
 
 
 def section_solid(rim, bottom, top, height, vector):
@@ -255,20 +311,17 @@ def tools(rim, options, pull):
 def check_fit(rim, options):
     """The refusal text when the lip / groove does not lie on the rim, or ""."""
     o = options
-    if o["type"] == "groove":
-        a, b = core.groove_section(o)[0]
-        if not rim.fits(a, b):
-            return "Groove Width (%.2f mm) must be less than the wall (%.2f mm) at the edges." % (
-                o["groove_width"],
-                rim.wall or 0.0,
-            )
+    groove = o["type"] == "groove"
+    a, b = core.groove_section(o)[0] if groove else core.lip_section(o)[0]
+    if rim.fits(a, b):
         return ""
-    a, b = core.lip_section(o)[0]
-    if not rim.fits(a, b):
-        return core.wall_check(o["lip_width"], rim.wall) or (
-            "Lip Width (%.2f mm) does not fit on the rim at the selected edges." % o["lip_width"]
-        )
-    return ""
+    what, width = ("Groove Width", o["groove_width"]) if groove else ("Lip Width", o["lip_width"])
+    wall = " (%.2f mm)" % rim.wall if rim.wall else ""
+    return "%s (%.2f mm) must be less than the wall%s at the selected edges." % (
+        what,
+        width,
+        wall,
+    )
 
 
 def tangent_chain(shape, name):
@@ -492,7 +545,7 @@ class LipFeature:
             bodies.pass_through(obj)
             raise
         _note(obj, note)
-        obj.Shape = shape
+        assign_shape(obj, shape)
 
     def dumps(self):
         return None
@@ -539,6 +592,9 @@ class LipGrooveFollower(modify_bodies._Follower):
 
     KIND = FOLLOWER_KIND
 
+    def execute(self, obj):
+        follower_execute(self, obj)
+
     def build(self, obj, lead, base_shape):
         options = current_options(lead)
         problems = core.validate(options)
@@ -551,7 +607,7 @@ class LipGrooveFollower(modify_bodies._Follower):
         made = tools(rim, options, pull)
         body = bodies.body_of(obj)
         place = body.getGlobalPlacement() if body is not None else App.Placement()
-        shape = base_shape.copy()
+        shape = bodies.baked(base_shape)
         if not place.isIdentity():
             shape.transformShape(place.toMatrix(), True)
         result = shape
@@ -570,9 +626,10 @@ class LipGrooveFollower(modify_bodies._Follower):
         return result
 
 
-def find_mate(doc, own_body, rim, options):
+def find_mate(doc, own_body, rim, options, lead=None):
     """The body touching the rim (for Lip And Groove): the one a thin slab on the rim's band
-    on the far side cuts most, or None."""
+    on the far side cuts most, or None. A body that already has `lead`'s groove (or lip) is
+    looked at as it was before it."""
     a, b = core.lip_section(options)[0]
     probe = rim.band(a, b).extrude(rim.normal * 0.05)
     best, best_value = None, 1e-9
@@ -580,12 +637,23 @@ def find_mate(doc, own_body, rim, options):
         if body is own_body:
             continue
         try:
-            value = probe.common(bodies.global_shape(body)).Volume
+            shape = bodies.global_shape(_before(lead, body))
+            value = probe.common(shape).Volume
         except Exception:
             continue
         if value > best_value:
             best, best_value = body, value
     return best
+
+
+def _before(lead, body):
+    """`body`, or the step before `lead`'s follower in it (the body without its change)."""
+    if lead is None:
+        return body
+    follower = modify_bodies.follower_in(lead, body)
+    if follower is not None and follower.BaseFeature is not None:
+        return follower.BaseFeature
+    return body
 
 
 # -- making and editing ----------------------------------------------------------------------
@@ -693,7 +761,9 @@ def update(feature, names=None, options=None, mate=False):
         mate = mate_of(feature)
     if mate is None and merged["type"] == "lip_and_groove":
         try:
-            mate = find_mate(feature.Document, bodies.body_of(feature), rim_of(feature), merged)
+            mate = find_mate(
+                feature.Document, bodies.body_of(feature), rim_of(feature), merged, feature
+            )
         except Exception:
             mate = None
     set_mate(feature, mate, merged)

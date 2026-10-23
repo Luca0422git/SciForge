@@ -252,18 +252,18 @@ class LipPanel(Panel):
         if self._closed:
             return
         try:
-            picks = [(o, s) for o, s in profile_pick.picks() if o.Document is self.doc]
+            picks = [p for p in _picks() if p[0].Document is self.doc]
             if not picks:
                 return
             Gui.Selection.clearSelection()
             if any(_dragging(a) for a in self.arrows.values()):
                 return
-            for obj, short in picks:
-                self._picked(obj, short)
+            for obj, short, point in picks:
+                self._picked(obj, short, point=point)
         except Exception as exc:
             warn("Lip pick: %s" % exc)
 
-    def _picked(self, obj, short, refresh=True):
+    def _picked(self, obj, short, refresh=True, point=None):
         if not short.startswith("Edge"):
             self.message.setText("⚠ A lip runs along edges: click the rim's inside edges.")
             return
@@ -287,6 +287,8 @@ class LipPanel(Panel):
                     return
                 base = body.Tip
         found = curve_pick.base_element(base, obj, short)
+        if found is None:
+            found = _within(base, obj, short) or _nearest(base, point)
         if found is None:
             self.message.setText("⚠ That edge was made by the Lip itself: click the rim's edges.")
             return
@@ -534,6 +536,60 @@ class LipPanel(Panel):
         self._remove_arrows()
         self.value_boxes.discard()
         super().cleanup()
+
+
+def _picks():
+    """[(object, short element name, picked point or None)] of the selection."""
+    found = []
+    for sel in Gui.Selection.getSelectionEx():
+        names = list(sel.SubElementNames) or [""]
+        points = list(getattr(sel, "PickedPoints", []) or [])
+        for i, name in enumerate(names):
+            obj, short = profile_pick.resolve(sel.Object, name)
+            if obj is not None:
+                found.append((obj, short, points[i] if i < len(points) else None))
+    return found
+
+
+def _nearest(base, point, tol=0.05):
+    """(base, name) of the edge of `base` passing within `tol` of the clicked point (design
+    coordinates), or None."""
+    import Part
+
+    if point is None:
+        return None
+    try:
+        shape = bodies.global_shape(base)
+        probe = Part.Vertex(point)
+        best = None
+        for i, edge in enumerate(shape.Edges, start=1):
+            d = edge.distToShape(probe)[0]
+            if d < tol and (best is None or d < best[0]):
+                best = (d, i)
+        return (base, "Edge%d" % best[1]) if best is not None else None
+    except Exception:
+        return None
+
+
+def _within(base, obj, short):
+    """(base, name) of the edge of `base` that lies along the picked edge of the preview
+    (the lip standing on the rim can lengthen a rim edge: its end face is flush with the
+    wall), or None."""
+    import Part
+
+    try:
+        picked = obj.Shape.getElement(short)
+    except Exception:
+        return None
+    for i, edge in enumerate(base.Shape.Edges, start=1):
+        try:
+            mid = edge.valueAt(0.5 * (edge.FirstParameter + edge.LastParameter))
+            points = [v.Point for v in edge.Vertexes] + [mid]
+            if all(picked.distToShape(Part.Vertex(q))[0] < 1e-6 for q in points):
+                return (base, "Edge%d" % i)
+        except Exception:
+            continue
+    return None
 
 
 def _dragging(arrow):

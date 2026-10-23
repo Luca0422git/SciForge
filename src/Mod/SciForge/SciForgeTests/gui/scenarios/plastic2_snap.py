@@ -18,6 +18,7 @@ import os
 import tempfile
 
 import FreeCAD as App
+import Part
 from PySide import QtCore
 
 from SciForgeTests.gui import harness as h
@@ -65,6 +66,12 @@ def hook_and_groove():
     cut = ps.BASE - ps.volume(s["base"])
     h.check("the groove in the base wall: 21.824", ps.near(cut, ps.GROOVE, 1e-6), cut)
     h.check("the other body is the base", p.other_label.text() == "Base", p.other_label.text())
+    box = s["lid"].Shape.BoundBox
+    h.check("the hook hangs 12 below the lid", ps.near(box.ZMin, 8.0, 1e-6), box)
+    window = Part.makeBox(1.0, 6.0, 3.0, V(58.05, 17.05, 7.95))
+    left = window.common(s["base"].Shape).Volume
+    h.check("the groove is in the right wall, beside the catch", left < 1e-6, left)
+    h.shot("plastic2_snap_hook")
     h.check("the strain is shown", "Strain" in p.strain.text(), p.strain.text())
     h.check("no error", not p.error and "⚠" not in ps.message(p), ps.message(p))
     h.check("two arrows (length, catch depth)", set(p.arrows) == {"length", "catch_depth"})
