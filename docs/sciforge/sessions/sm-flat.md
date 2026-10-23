@@ -157,6 +157,9 @@ words for Luca):
 - **Convert's sharp-corner message.** It said "fillet it or Rip it", but Rip only works on a
   part that is sheet metal already, so it sent you in a circle. It now says to fillet the
   corner, then convert.
+- **DXF of a slanted hole.** Where a hole drilled at an angle meets a wall its edge is an
+  ellipse; the DXF wrote it as two or three straight pieces (0.1 mm off) although
+  Convert Splines to Polylines was off. It is now a smooth curve within 0.001 mm.
 - Smaller: Show/Hide Bend Lines always closes its undo step; the "face is gone" message
   now says to delete and recreate the flat pattern (Edit Flat Pattern cannot pick a face).
 

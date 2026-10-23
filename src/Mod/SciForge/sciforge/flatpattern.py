@@ -31,6 +31,7 @@ from . import sheetmetal, sheetmetal_flat
 from . import sheetmetal_unfold as unfolder
 
 FP_KIND = "FlatPattern"
+FINE = 1e-3  # mm: how close a DXF curve stays when no conversion to polylines is asked for
 
 
 class FlatPatternError(ValueError):
@@ -509,8 +510,17 @@ def _edge_entity(edge, opts):
             if isinstance(nurbs, Part.BSplineCurve) and not nurbs.isRational():
                 poles = [(p.x, p.y) for p in nurbs.getPoles()]
                 return ("spline", nurbs.Degree, list(nurbs.KnotSequence), poles)
+            # a rational curve (an ellipse where a slanted hole meets a wall): a plain spline
+            # within FINE of it (QA: it became a polyline at the greyed-out Tolerance, 0.1 mm,
+            # a hole's curved side cut in two or three straight pieces)
+            fit = Part.BSplineCurve()
+            fit.approximate(Points=edge.discretize(Deflection=FINE), DegMax=3, Tolerance=FINE)
+            poles = [(p.x, p.y) for p in fit.getPoles()]
+            return ("spline", fit.Degree, list(fit.KnotSequence), poles)
         except Exception:
             pass
+        pts = edge.discretize(Deflection=FINE)  # no conversion was asked for: stay close
+        return ("polyline", [(p.x, p.y) for p in pts], False)
     pts = edge.discretize(Deflection=max(float(opts["tolerance"]), 1e-4))
     return ("polyline", [(p.x, p.y) for p in pts], False)
 
