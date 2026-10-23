@@ -100,12 +100,15 @@ def face_named(feature, normal, z):
     return None
 
 
-def box_body(doc, label, z, height, open_side, wall=2.0, shell=True):
+def box_body(doc, label, z, height, open_side, wall=2.0, shell=True, component=None):
     """A 60 x 40 body from z, `height` high, shelled `wall` with its top ("top") or bottom
     ("bottom") open."""
-    from sciforge import bodies, extrude, shelling
+    from sciforge import bodies, components, extrude, shelling
 
-    body = bodies.new_body(doc, label)
+    if component is None:
+        body = bodies.new_body(doc, label)
+    else:
+        body = components.new_body_in(doc, component, label)
     sk = rect_sketch(body, z, 0, 0, 60, 40, label + "Sketch")
     doc.recompute()
     ext = extrude.make(body, sk, {"distance": height})

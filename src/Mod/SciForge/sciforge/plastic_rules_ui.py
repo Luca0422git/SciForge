@@ -555,7 +555,8 @@ def start_rule_fillet():
         return None
     try:
         if panel.mode != "rule":
-            fillet_ui._select(panel.type, "rule")  # runs the dialog's own type change
+            # the dialog's own Type change (as a click on the Type list does)
+            panel.type.setCurrentIndex(panel.type.findData("rule"))
         rule = plastic.rule_for_body(panel.body)
         radius = round(float(rule["nominal_radius"]), 4)
         panel.spec["radius"] = radius
