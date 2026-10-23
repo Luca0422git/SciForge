@@ -75,6 +75,7 @@ class FlangePanel(Panel):
         self.formula_inputs = {}
         self.formulas = {}  # field key -> formula typed ("" once a number replaced it)
         self.owns_body = False
+        self.attached = None  # (edge, point): a contour drawn from the end of a sheet edge
         if feature is not None:
             try:
                 self.options = flange.options_of(feature)
@@ -84,6 +85,7 @@ class FlangePanel(Panel):
                     subs = list(feature.Target[1]) if len(feature.Target) > 1 else []
                     self.to_object = (feature.Target[0], subs[0] if subs else "")
                 self.offset_refs = flange.offset_refs_of(feature)
+                self._check_attached()
                 self.rule_name = sheetmetal.body_rule_name(self.body) or self.rule_name
                 self.made_with = (self.kind, "existing", self.rule_name)
                 # the flange that made its body: its Rule box swaps the body's rule (Fusion
@@ -296,7 +298,10 @@ class FlangePanel(Panel):
                     keys.add("rule")
             elif self.owns_body:
                 keys.add("rule")
-        if self.kind == "contour":
+        if self.kind == "contour" and self.attached is not None:
+            keys -= {"orientation"}  # the side that carries the sheet on
+            keys.add("override_bend_radius")
+        elif self.kind == "contour":
             keys |= {"distance", "direction", "flip", "override_bend_radius"}
             if o["direction"] == "two_sides":
                 keys.add("distance2")
@@ -337,7 +342,12 @@ class FlangePanel(Panel):
             widget.setVisible(visible)
             if label is not None:
                 label.setVisible(visible)
-        self.mode.setText(MODE_TEXT[self.kind])
+        self.mode.setText(
+            "Contour flange on the edge of %s: it runs the whole edge, bent out of the sheet."
+            % (self._join_body().Label if self._join_body() is not None else "the body")
+            if self.kind == "contour" and self.attached is not None
+            else MODE_TEXT[self.kind]
+        )
         offsets = self.options.get("width_type") == "two_offsets"
         for key, word in (("distance1", 1), ("width2", 2)):
             label = self.rows[key][0]
@@ -512,7 +522,28 @@ class FlangePanel(Panel):
             self.refs = []
         else:
             self.refs = [(sketch, n) for n in names]
+        self._check_attached()
         self._picks_changed()
+
+    def _check_attached(self):
+        """A contour drawn from the end of a sheet edge joins that edge (Fusion): Operation
+        Join, the Distance options hidden (it runs the whole edge)."""
+        self.attached = None
+        if self.kind != "contour" or not self.refs:
+            return
+        body = sheetmetal.find_sheet_body(self.doc, active=self.body)
+        if body is None:
+            return
+        base_obj = None
+        if self.target is not None and flange.owner_body(self.target) is body:
+            base_obj = self.target.BaseFeature
+        self.attached = flange.attachment(self.refs, body, base_obj)
+        if self.attached is not None and not self.editing:
+            self._quiet = True
+            try:
+                curve_pick.set_combo(self.operation_box, "join")
+            finally:
+                self._quiet = False
 
     def _edge_clicked(self, obj, short):
         body = curves.owner_body(obj)
@@ -764,7 +795,7 @@ class FlangePanel(Panel):
                     )
                     self._attach_box("height")
                 self._make_angle_handle()
-            elif self.kind == "contour":
+            elif self.kind == "contour" and self.attached is None:
                 origin, direction = self._contour_arrow()
                 self.arrows["distance"] = ArrowDragger(
                     origin,

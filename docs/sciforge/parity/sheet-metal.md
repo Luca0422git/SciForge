@@ -65,6 +65,7 @@ its **diameter** (said in the tooltip).
 | Rule drop-down for the body being made | Same (design rules, then library ones, copied into the design when used) | A[R44] |
 | Contour flange: an open chain of lines and arcs; sharp corners become bends with the rule's radius | Same: every line-line corner gets the radius that makes the bend's **inside** radius the rule's (the line is the inner or outer face depending on the side and the turn); tangent arcs stay as drawn | A[R5], F[F15] |
 | Contour Distance (drag handle), Direction One Side / Symmetric / Two Sides, thickness side | Same (Flip turns One Side round); a blue arrow with its value box sets Distance | A[R2], A[R27] |
+| A contour profile drawn from the end of a sheet edge (sketch plane square to the edge) is joined along that edge | Same: the dialog finds the edge, sets Join and runs the flange along the whole edge; the corner between the sheet and the first line is bent with the rule's radius, the sheet cut back for it, the thickness on the side that carries the sheet on (the Distance options do not apply) | G (research 2.2.3) |
 | Edge flange Height Extent Distance / To Object (one edge only) | Same; To Object lights the Object box: the flange runs to the picked face's or plane's plane (+ Offset) | A[R2], A[R27] |
 | Height Datum Inner Faces / Outer Faces / Tangent To Bend | Same (research 4.3): walls H - R tan(a/2), H - (R + T) tan(a/2), H | A[R2], F[F15] |
 | Bend Position Inside / Outside / Adjacent / Tangent | Same (research 4.4): the plate is cut back (R + T) tan(a/2), R tan(a/2), 0; Tangent keeps the bend's outside on the side face from 90 degrees up (below 90 it is Inside, G) | A[R2], A[R29] |
@@ -87,13 +88,13 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
   base flange rect, Side 2 / Centered with a 0.5 mm rule, New Component, Join, L bracket, every
   Bend Position and Height Datum, mitred corner, a four-edge tray, flange on a flange, partial
   width with reliefs, Two Offsets between two planes, rule edit recomputes, contour L, contour
-  Two Sides / Side 2, angle edit, To Object, an Extrude cut through the sheet then a flange
+  Two Sides / Side 2, a contour on a sheet edge, an inside corner, angle edit, To Object, an Extrude cut through the sheet then a flange
   edit.
 - Unit tests: `SciForgeTests/unit/test_sheetmetal_flange_core.py` (flange maths, rule lists).
 - Scenarios (real clicks): `sheetmetal_flange` (base + edge, Rule drop-down, datums, positions,
   height arrow and angle handle drags, undo/redo, edit, Esc, swapping the body's rule),
   `sheetmetal_rules` (the whole rules dialog, refusals, undo of the visit), `sheetmetal_contour`
-  (contour options, drag, Cancel, save / reopen, edit after reopen), `sheetmetal_edge_options`
+  (contour options, drag, Cancel, save / reopen, edit after reopen, a contour on a sheet edge), `sheetmetal_edge_options`
   (miter, reliefs, refusals, To Object, Two Offsets, Sheet Metal component),
   `sheetmetal_parameters` (a user parameter in Height), `sheetmetal_components` (New
   Component, Extrude cut through sheet metal, Join), and `ribbon_sweep` with
@@ -110,9 +111,8 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
   for the 3-bend corner relief.
 - **Edge flange Operation New Body** (Fusion: single edge only) is not offered: an edge
   flange always joins its body.
-- **Contour flange attached to an edge** (a profile drawn at the end of an edge, its width
-  types and bend position) is not built; a contour flange makes a new body or joins one (Join
-  fuses it where it touches the body).
+- **Contour flange attached to an edge** runs the whole edge: its width types and bend position
+  (Fusion, G) are not offered.
 - **Splines in a contour flange** are refused (only lines and arcs can be bent with the rule's
   radius here); Fusion accepts them.
 - **No flip arrow** on a base flange (the Orientation box only).

@@ -354,6 +354,76 @@ def contour_flange(
     return _clean(face.extrude(n * length))
 
 
+def contour_attachment(shape, edges, plane, thickness):
+    """Where an open sketch chain starts on a sheet edge of `shape` (design coordinates):
+    (edge name, the chain's end point on it) when one end of the chain is at an end of a
+    straight sheet edge that runs square to the sketch plane, else None. Fusion runs such a
+    contour flange along that edge and bends it out of the sheet (G)."""
+    if shape is None or shape.isNull() or not shape.Solids:
+        return None
+    try:
+        segs = chain_segments(edges, plane)
+    except FormError:
+        return None
+    ends = [plane.p(seg_start(segs[0])), plane.p(seg_end(segs[-1]))]
+    for i, edge in enumerate(shape.Edges, 1):
+        if not isinstance(edge.Curve, (Part.Line, Part.LineSegment)):
+            continue
+        a, b = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
+        direction = b - a
+        if direction.Length < TOL or abs(abs(direction.normalize().dot(plane.n)) - 1.0) > 1e-7:
+            continue
+        for end in ends:
+            if (end - a).Length < 1e-5 or (end - b).Length < 1e-5:
+                try:
+                    edge_frame(shape, "Edge%d" % i, thickness)
+                except FormError:
+                    continue
+                return "Edge%d" % i, end
+    return None
+
+
+def contour_on_edge(shape, edges, plane, thickness, radius, edge_name, start):
+    """Fusion's contour flange on a sheet edge: the sketched chain (in a plane square to the
+    edge, starting at the edge's end) carries on from the sheet, the corner between the sheet
+    and its first line bent with the rule's radius, run along the whole edge and joined. The
+    thickness side is the one that continues the sheet. Returns the new solid."""
+    frame = edge_frame(shape, edge_name, thickness)
+    segs = chain_segments(edges, plane)
+    p0 = plane.q(start)
+    if not _close(seg_start(segs[0]), p0):
+        segs = [reversed_seg(s) for s in reversed(segs)]
+    out2 = _unit(_sub(plane.q(start + frame.out), p0))
+    lead = 10.0 * thickness + radius + 10.0
+    first = line(_add(p0, out2, -lead), p0)
+    left3 = plane.n.cross(frame.out)
+    # the sheet lies on the far side of its face from frame.up: the band goes that way
+    s0, s1 = (-thickness, 0.0) if left3.dot(frame.up) > 0 else (0.0, thickness)
+    bent = bend_corners([first] + segs, s0, s1, radius)
+    lead_end = seg_end(bent[0])
+    cut_back = _len(_sub(p0, lead_end))
+    bent = bent[1:]
+    if not bent:
+        raise FormError("The contour runs back along the sheet: draw it out from the edge.")
+    face = section_face(bent, s0, s1, plane)
+    edge = shape.getElement(edge_name)
+    a, b = edge.Vertexes[0].Point, edge.Vertexes[-1].Point
+    other = b if (a - start).Length < 1e-5 else a
+    solid = _clean(face.extrude(other - start))
+    base = shape
+    if cut_back > TOL:
+        base = shape.cut(frame.box(-cut_back, 0.0, 0.0, thickness, 0.0, frame.length))
+    if solid.common(base).Volume > 1e-3:
+        raise FormError(
+            "The contour flange would run into the part: draw it away from the sheet, or flip "
+            "the line's direction."
+        )
+    result = _clean(base.fuse(solid))
+    if len(result.Solids) != len(shape.Solids):
+        raise FormError("The contour flange does not join the sheet at its edge.")
+    return result
+
+
 # -- edge flange --------------------------------------------------------------------------------
 class EdgeFrame:
     """Where a sheet edge is: `origin` on the edge's line, on the sheet's outer face (the

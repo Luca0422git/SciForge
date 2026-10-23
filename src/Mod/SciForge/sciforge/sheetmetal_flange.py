@@ -434,6 +434,18 @@ def compute(obj):
             radius = rule["bend_radius"]
             if options["override_bend_radius"]:
                 radius = options["bend_radius"]
+            attached = (
+                form.contour_attachment(base, edges, plane, rule["thickness"])
+                if base is not None
+                else None
+            )
+            if attached is not None:
+                # drawn from the end of a sheet edge: it runs along that edge, bent out of
+                # the sheet, and joins it (the Distance options do not apply)
+                result = form.contour_on_edge(
+                    base, edges, plane, rule["thickness"], radius, attached[0], attached[1]
+                )
+                return bodies.to_local(result, body)
             result = form.contour_flange(
                 edges,
                 plane,
@@ -727,6 +739,26 @@ def picks_of(step):
     if options_of(step)["kind"] == "edge":
         return _links(step.Edges)
     return _links(step.Profiles)
+
+
+def attachment(refs, body, base_obj=None):
+    """(edge name, point) when the contour chain `refs` starts at the end of a sheet edge of
+    `body` (a sheet metal body: `base_obj`, else its last solid step), else None: the dialog
+    then joins the flange to that edge (sheetmetal_form.contour_attachment)."""
+    if body is None or not sheetmetal.is_sheet_metal_body(body) or not refs:
+        return None
+    tip = base_obj if base_obj is not None else body.Tip
+    if tip is None or tip.Shape.isNull() or not tip.Shape.Solids:
+        return None
+    try:
+        shape = bodies.baked(curves.to_global(tip.Shape, tip))
+        edges = curves.refs_edges(refs)
+        plane = _sketch_plane(refs[0][0])
+        return form.contour_attachment(
+            shape, edges, plane, sheetmetal.rule_for_body(body)["thickness"]
+        )
+    except Exception:
+        return None
 
 
 def thickness_of(body):
