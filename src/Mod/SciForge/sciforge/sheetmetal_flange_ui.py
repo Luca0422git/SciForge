@@ -752,6 +752,13 @@ class FlangePanel(Panel):
         if self._quiet:
             return
         self._changed(new_geometry=True)
+        # a box that waited for a To Object / Two Offsets pick lets go when that option is
+        # left: the next clicks are edges again (they were taken as a face pick, QA)
+        if (self.active == "object" and self.options["extent"] != "to_object") or (
+            self.active in ("ref1", "ref2") and self.options["width_type"] != "two_offsets"
+        ):
+            self.activate("selection")
+            self.message.setText("")
         if (
             self.kind == "edge"
             and self.options["width_type"] == "two_offsets"

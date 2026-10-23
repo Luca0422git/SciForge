@@ -61,7 +61,7 @@ its **diameter** (said in the tooltip).
 |---|---|---|
 | One command; the mode follows what is picked: a closed profile = base flange, an open profile = contour flange, edges of a sheet metal body = edge flange | Same. A click inside a shaded closed sketch area picks a profile, a click on a sketch line takes its whole joined chain, a click on an edge of a sheet metal body picks the edge. Picks of another kind start the dialog over in that mode | A[R2], A[R4], A[R5] |
 | Base flange: closed profile(s) -> a plate of the rule's thickness; Orientation Side 1 / Side 2 / Center | Same (several profiles fuse when they touch) | A[R2], A[R28] |
-| Base flange Operation New Body / Join (also New Component) | New Body (default; the sketch's own empty body becomes the sheet metal body), New Component (a new Sheet Metal component with the rule active), Join (into the active sheet metal body, in its rule) | A[R27] |
+| Base flange Operation New Body / Join (also New Component) | New Body (default; the sketch's own empty body becomes the sheet metal body), New Component (a new Sheet Metal component with the rule active), Join (into the active sheet metal body, in its rule; the new plate must carry on one of its sheets in that sheet's plane, QA) | A[R27] |
 | Rule drop-down for the body being made | Same (design rules, then library ones, copied into the design when used) | A[R44] |
 | Contour flange: an open chain of lines and arcs; sharp corners become bends with the rule's radius | Same: every line-line corner gets the radius that makes the bend's **inside** radius the rule's (the line is the inner or outer face depending on the side and the turn); tangent arcs stay as drawn | A[R5], F[F15] |
 | Contour Distance (drag handle), Direction One Side / Symmetric / Two Sides, thickness side | Same (Flip turns One Side round); a blue arrow with its value box sets Distance | A[R2], A[R27] |
@@ -191,6 +191,9 @@ Fixed on `sf/sm-forming-qa`:
   Extrude refuses that: a body holds one solid, and the flat pattern unfolds one sheet).
   Refused now with the reason (pick touching profiles, or one plate at a time; Fusion may
   make a body per plate: not checked).
+- **To Object (or Two Offsets) chosen and then left kept the dialog waiting for a face**:
+  the next edge clicked was refused as a face pick ("To Object: pick a flat face or a
+  plane"). Leaving the option hands the clicks back to the edge selection.
 - **A base or contour flange Join standing on the sheet (or across its edge)** was fused
   into a T or a sharp L: a solid no flat pattern can unfold (a corner between two sheets
   needs a bend). Join now needs the new sheet (a contour: one of its walls) to carry on a

@@ -109,6 +109,7 @@ Fixed (details in `docs/sciforge/parity/sheet-metal.md`, "QA pass"):
   mapped to the part before the flange or refused with the reason now.
 - Other units chosen for a new rule kept "1.0 mm" in the boxes (Save refused): converted now.
 - Two profiles that do not touch made one body with two plates: refused (a body holds one solid).
+- To Object / Two Offsets chosen then left: the next edge click was taken as a face pick.
 - Close in the rule editor dropped the typed values silently (hidden while editing now); an
   edge flange's override fields started at the active rule instead of the body's.
 - Inserting a design with its own rule into one that already had sheet metal silently

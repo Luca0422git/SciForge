@@ -804,6 +804,50 @@ def d3_join_escaped():
     h.check("no new body", len(sm.sheet_bodies()) == 1, [b.Label for b in sm.sheet_bodies()])
 
 
+# -- To Object chosen, then Distance again: the next click is an edge again -------------------
+def d3_flange_edge():
+    h.fit()
+    h.click_empty()
+    h.ribbon("Flange")
+
+
+def d3_first_edge():
+    h.fit()
+    h.check("clicked the 30 mm edge", h.click_edge(V(50, 15, 1)))
+
+
+def d3_to_object():
+    sm.settle()
+    sm.choose("extent", "To Object")
+
+
+def d3_distance_again():
+    sm.settle()
+    p = sm.panel()
+    h.check("To Object waits for a face", p is not None and p.active == "object")
+    sm.choose("extent", "Distance")
+
+
+def d3_second_edge():
+    sm.settle()
+    p = sm.panel()
+    h.check("back to picking edges", p is not None and p.active == "selection", p and p.active)
+    h.check("clicked the 50 mm edge", h.click_edge(V(25, 30, 1)))
+
+
+def d3_two_edges():
+    sm.settle()
+    p = sm.panel()
+    h.check("the second edge is taken", p is not None and len(p.refs) == 2, p and p.refs)
+    h.check("no face-pick message", "To Object" not in sm.message(), sm.message())
+    sm.esc()
+
+
+def d3_edges_escaped():
+    h.check("Esc closed it", sm.panel() is None)
+    h.check("the plate as it was", sm.near(sm.volume(s["body3"]), s["v_d3"], 1e-7))
+
+
 h.run(
     "sheetmetal_qa",
     [
@@ -923,5 +967,12 @@ h.run(
         d3_join_ok_refused,
         d3_join_stays,
         d3_join_escaped,
+        d3_flange_edge,
+        d3_first_edge,
+        d3_to_object,
+        d3_distance_again,
+        d3_second_edge,
+        d3_two_edges,
+        d3_edges_escaped,
     ],
 )
