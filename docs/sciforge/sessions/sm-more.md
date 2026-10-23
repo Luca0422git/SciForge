@@ -29,7 +29,7 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 - **Sheet metal Fillet / Chamfer** (MODIFY > Fillet / Chamfer of the SHEET METAL tab): only the
   edges through the thickness; Fillet radius sets ("+ New Set"), a radius arrow with its value
   box; on a solid body they open the SOLID commands.
-- Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 31 golden models,
+- Golden ops (`sheetmetal_ops.py` block `# --- sm-more ---`), schema block, 32 golden models,
   26 unit tests, 8 scenarios (234 checks), 7 icons (`tools/sciforge/icons_sheetmetal2.py`).
 
 ## FreeCAD / OpenCASCADE facts found
@@ -73,7 +73,7 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
 
 ## Tests run (FreeCAD 1.1.4, this sandbox)
 
-- `--only unit`: all pass. Golden models: the 31 `sheetmetal_smm_*` pass (with sm-forming's).
+- `--only unit`: all pass. Golden models: the 32 `sheetmetal_smm_*` pass (with sm-forming's).
 - Scenarios: smmore_bend 44, smmore_bend_two 18, smmore_bend_tab 17, smmore_hem 40,
   smmore_join 25, smmore_corner 37, smmore_round 26, smmore_lofted 27 checks: all PASS.
 
@@ -82,15 +82,29 @@ behaviour table, tests and known gaps: `docs/sciforge/parity/sheet-metal-more.md
   (100 x 40, volume 4000.0000): Bend's zone mapping is the exact inverse of the unfolder's
   development (both use R + K T). Hems, Join by Bend and the rounds unfold too.
 
-- Merged `sf/sm-forming` twice (its Flange for scenarios / golden models) and `sf/sm-flat`
-  once (its unfolder for Corner Closure reliefs); no conflicts but `ribbon_config.py`'s
-  adjacent CREATE lines (resolved keeping both builders' entries).
+- Merged `sf/sm-forming` three times (its Flange for scenarios / golden models) and
+  `sf/sm-flat` twice (its unfolder for Corner Closure reliefs); no conflicts but
+  `ribbon_config.py`'s adjacent CREATE lines the first time (resolved keeping both builders'
+  entries). After the last merges (sm-forming `ca79f2b`, sm-flat `83f16ad`) the sm-more
+  golden models still measure the same.
 - Ribbon sweep of the SHEET METAL tab (`SWEEP_TABS=sheet_metal`): every sm-more command passes;
-  the one failure is sm-forming's Sheet Metal Rules opening its window (intended; it needs an
-  `INTENDED` entry in `ribbon_sweep.py`, a shared file).
+  the one failure then was sm-forming's Sheet Metal Rules opening its window, which
+  sm-forming has since listed as intended in `ribbon_sweep.py`.
+
+## Notes for the merge into develop
+
+- sm-flat's Flat Pattern cuts the rule's 2-bend corner relief wherever two bends' centre lines
+  cross (`flatpattern.with_corner_reliefs`). At a corner closed by Corner Closure that adds a
+  relief the folded part does not have (Trim To Bend, Tear) or a second one (Square, Vertex,
+  Tangent): the flat pattern should leave out corners whose relief a `SheetMetalCornerClosure`
+  step chose.
+- `sheetmetal_unfold.unfold` can raise a raw OpenCASCADE "Wire is not closed" (not an
+  `UnfoldError`) on some cut corners; Corner Closure catches it, other callers may not.
+- Lofted Flange steps carry `Developable` (False for Die Form); the flat pattern could give
+  that reason instead of the unfolder's "sharp corner ... fillet it or Rip it".
 
 ## Open (see the parity doc's Known gaps)
 
-Crossing bend lines (corner relief), Relief Remnant, Corner Closure's weld relief shapes,
+Corner relief where bend lines meet with Center (Start / End work), Relief Remnant, Corner Closure's weld relief shapes,
 bend transitions and 3-bend corners, Lofted Flange inside the Flange dialog and with real bends
 between facets (so a Brake Form lofted flange has no flat pattern yet).

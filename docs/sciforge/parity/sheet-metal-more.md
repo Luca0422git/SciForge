@@ -108,7 +108,7 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Kind | What | Result (2026-10-23) |
 |---|---|---|
 | Unit | `SciForgeTests/unit/test_sheetmetal_bend_core.py`: bend zones (research 4.2 worked example), strips, every hem type and its refusals, the open / teardrop / rope geometry, the join fillet, closure reaches, the corner relief placements (Intersection / Vertex / Tangent) and their refusals, facet counts, the transition triangulation (corner fans), the thickness-edge test | 26 tests pass |
-| Golden | 31 models `sheetmetal_smm_*.json`: a bend on a plate that has an edge flange; a hem on a bent wall; save + reopen of a hemmed, filleted, bent plate then an edit; a hem on an edge flange; bend centre / two lines / flip-start-45 edited to 60 / hole in the zone / a tab bent on a line across its root (Center, and End on a short line: reliefs cut); the six hem types, two mitred hems, a hem edited to Rolled; join by bend; corner closure symmetric (Trim To Bend), Tear, overlap, Extend Aligned off, on an already mitred corner, with a Round relief, a Round at the Tangent placement and a Square at the Vertex placement (on the mitred corner); lofted brake, die (edited to Face Number 4) and joined to a plate; fillet + chamfer. Analytic volumes where the shape allows (bends, tabs with reliefs, hems, join, fillet); FreeCAD 1.1.4 baselines for the rest | all pass |
+| Golden | 32 models `sheetmetal_smm_*.json`: a bend on a plate that has an edge flange; a hem on a bent wall; save + reopen of a hemmed, filleted, bent plate then an edit; a hem on an edge flange; bend centre / two lines / flip-start-45 edited to 60 / hole in the zone / a tab bent on a line across its root (Center, and End on a short line: reliefs cut) / a plus-shaped blank folded into an open box by four lines in one Bend; the six hem types, two mitred hems, a hem edited to Rolled; join by bend; corner closure symmetric (Trim To Bend), Tear, overlap, Extend Aligned off, on an already mitred corner, with a Round relief, a Round at the Tangent placement and a Square at the Vertex placement (on the mitred corner); lofted brake, die (edited to Face Number 4) and joined to a plate; fillet + chamfer. Analytic volumes where the shape allows (bends, tabs with reliefs, hems, join, fillet); FreeCAD 1.1.4 baselines for the rest | all pass |
 | Cross-check with sm-flat's unfolder | `sheetmetal_unfold.unfold` (branch `sf/sm-flat`, read-only copy) run on this branch's shapes: a 90° bend, a 45° flipped Start bend, the U (two lines) and a bend with a hole in its zone all lay flat to exactly the 100 x 40 plate they were bent from (volume 4000.0000, holed 3999.2148 = less the hole); the six hems, the join and a filleted plate unfold too (flat lengths = cut-back sheet + neutral-layer length of the strip) | all unfold |
 | Scenario `smmore_bend` | ribbon Bend, waits; stationary face; line; 90° preview (hand-worked volume); type 45; Start; Flip; OK; Bend 1; Ctrl+Z / Ctrl+Y; edit from the timeline back to 90 Center; a line past the sheet refused (OK waits); Esc; save, close, reopen | PASS, 44 checks |
 | Scenario `smmore_bend_two` | Bend in an empty design (no dialog, no error); a plate in a moved component; the face, then two lines: a U; Values For Line 2 at 45 (Line 1 keeps 90; All lines shows the common value); Bend Radius override 2; OK | PASS, 18 checks |
@@ -124,10 +124,12 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 1. **Bend: per-line values through a "Values For" list.** Fusion shows a row per bend line;
    SciForge has one set of fields with a "Values For" list (All lines, Line 1, Line 2, ...):
    choose a line to give it its own angle, Bend Line position and flip (marked "*").
-2. **Bend: crossing bend lines and Corner Relief.** Lines that cross inside the sheet are not
-   supported (the second bend would cross a bend zone: refused with "The bend zone crosses
-   something that is not flat sheet"); so Fusion's corner relief where bend lines meet has no
-   case to act on yet. The checkbox is stored.
+2. **Bend: Corner Relief where bend lines meet.** Lines that meet at a corner of the sheet (a
+   box folded from a plus-shaped blank) work with Bend Line Start or End: the zones lie in the
+   arms and never overlap (golden `sheetmetal_smm_bend_box`). With Center the zones overlap at
+   the corners and the second bend is refused ("The bend zone crosses something that is not
+   flat sheet"): Fusion cuts its corner relief there first; SciForge does not yet (the checkbox
+   is stored). Lines that cross inside the sheet are refused the same way.
 3. **Bend: Bend Relief.** Built for a tab (the sheet beyond the bend narrower than the sheet
    the line crosses): Straight and Round reliefs, and Tear as a 0.01 mm hairline split (the
    Flat hem's reason, gap 5); the rule's Relief Remnant is not applied. A tongue cut inside a plate (sheet that stays
