@@ -23,8 +23,10 @@ Builder: sm-forming (rules, sheet metal bodies, Flange). Brief:
   as Fusion names them in real properties (Height, Angle, Distance... so parameters and
   Change Parameters work; unused ones hidden per kind), make / update / discard, Join checks.
 - **Dialogs**: Flange (`sheetmetal_flange_ui.py`: picks decide the mode, every option, Rule
-  box, height arrow, distance arrow, angle handle, value boxes, formulas / parameters in every
-  field), Sheet Metal Rules (`sheetmetal_rules_ui.py` + `sheetmetal_rules.py`: In This Design
+  box (and, editing the flange that made a body, the swap of that body's rule), height arrow,
+  distance arrow, angle handle on the bend, value boxes, formulas / user parameters in every
+  field, Two Offsets between two picked faces / planes, a contour drawn from the end of a
+  sheet edge joined along that edge), Sheet Metal Rules (`sheetmetal_rules_ui.py` + `sheetmetal_rules.py`: In This Design
   / Library, New / Edit / Copy / Delete / Set Active, editor page), New Component Type
   (`components_ui.py` + `sheetmetal_component.py`).
 - **Integration**: ribbon (Flange, Sheet Metal Rules wired; the SHEET METAL skeleton matched the
@@ -33,8 +35,9 @@ Builder: sm-forming (rules, sheet metal bodies, Flange). Brief:
   opens the dialog), timeline name/icon (`timeline_core.KINDS["flange"]` registered from the
   `_ui.py`), Change Parameters fields (`parameters.SCIFORGE_PROPS["Flange"]`), icons
   (`tools/sciforge/icons_sheetmetal.py`: sm_flange, sm_rules, sheet_metal_body, sm_component).
-- **Tests**: 16 golden models (hand-derived volumes), unit tests
-  (`test_sheetmetal_flange_core.py`), 5 scenarios (see the report), SHEET METAL ribbon sweep.
+- **Tests**: 19 golden models (volumes by hand, one FreeCAD baseline), unit tests
+  (`test_sheetmetal_flange_core.py`), 6 scenarios (flange 79 checks, rules 60, contour 58,
+  edge options 64, parameters 17, components 36), the SHEET METAL ribbon sweep (99).
 
 ## FreeCAD facts and traps found
 
@@ -50,6 +53,10 @@ Builder: sm-forming (rules, sheet metal bodies, Flange). Brief:
 - `Part.Plane(point, normal).toShape(u0, u1, v0, v1)` gives a bounded face; extruded it is a
   cheap half-space for mitres.
 - "h" cannot be a user parameter name (FreeCAD reads it as hours): scenarios use "lip".
+- A mitre at an **inside** corner (L-shaped plate) must keep each flange on its own edge's side:
+  the side is taken from the edge's midpoint, not from the outward normals' difference (the
+  first version cut both flanges away there and still made a valid, wrong solid; a probe
+  caught it, golden `sheetmetal_edge_flange_inner_corner` now holds it).
 - The Flange preview changes the plate (the bend cuts it back), so a second edge clicked on
   the preview is shorter than the plate's: it is matched back to the plate's edge by line and
   midpoint (`_same_edge`), not by length.
@@ -57,9 +64,9 @@ Builder: sm-forming (rules, sheet metal bodies, Flange). Brief:
 ## Gaps (also in the parity doc's Known gaps)
 
 Corner relief shapes are not cut in the folded part (needs the unfolder); edge flange New
-Body; contour flange attached to an edge with width types; Two Offsets from picked faces;
-splines in contour flanges; Tear relief is a 0.05 mm slit; rule expressions take Thickness
-only.
+Body; a contour flange on an edge always runs the whole edge (no width types / bend
+position); splines in contour flanges; Tear relief is a 0.05 mm slit; rule expressions take
+Thickness only (the Flange's own fields take user parameters).
 
 ## Notes for the integrator
 

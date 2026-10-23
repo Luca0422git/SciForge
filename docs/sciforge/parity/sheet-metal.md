@@ -107,9 +107,11 @@ a radius of 0 gives a sharp inside corner (the inner cylinder collapses to a lin
   are mitred and the plate's corner under both bends is removed (what Trim To Bend gives), but
   a Round / Square / weld relief is a hole Fusion places on the flat pattern (at the crossing
   of the two bend centre lines) and folds back with the part. Cutting it in the folded solid
-  means cutting across the bends, which needs the unfolder (sm-flat). The shape, placement
-  and size (rule or override) are kept on the flange step for the flat pattern. The same goes
-  for the 3-bend corner relief.
+  means cutting across the bends, which needs the unfolder (sm-flat): a hole wrapped round a
+  bend has faces that are neither planes nor cylinders, which a planar + cylindrical unfolder
+  cannot lay flat, and the default rule (Round) would put one in every mitred corner. The
+  shape, placement and size (rule or override) are kept on the flange step for the flat
+  pattern to cut. The same goes for the 3-bend corner relief.
 - **Edge flange Operation New Body** (Fusion: single edge only) is not offered: an edge
   flange always joins its body.
 - **Contour flange attached to an edge** runs the whole edge: its width types and bend position
