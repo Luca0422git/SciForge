@@ -97,9 +97,9 @@
     }
   ],
   "expect": {
-    "volume": 9080.7513,
+    "volume": 9075.1416,
     "bbox": [
-      -0.0,
+      0.0,
       0.0,
       -0.0,
       100.0,
@@ -107,9 +107,9 @@
       21.0
     ],
     "solids": 1,
-    "faces": 19,
+    "faces": 21,
     "source": "baseline-freecad-1.1.4",
-    "note": "measured with FreeCAD 1.1.4",
+    "note": "measured with FreeCAD 1.1.4 (Trim To Bend: the dominant's bend stops where the other bend starts)",
     "rel_tol": 1e-05,
     "abs_tol": 0.001
   }

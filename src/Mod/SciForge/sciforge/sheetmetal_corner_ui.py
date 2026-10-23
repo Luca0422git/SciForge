@@ -5,9 +5,9 @@ Click the Dominant Edge and the Submissive Edge: an edge at the end of each of t
 that meet at a corner (where they face each other). Alignment Symmetric Gap (both close to the
 corner's bisector, the Gap between them) or Overlap (the dominant runs over the other's end;
 Overlap 0..1 of the thickness, Flip Overlap swaps which), the Gap (the rule's Miter/Rip/Seam
-gap unless you set your own), Extend Aligned, and the relief: Trim To Bend, or a Round /
-Square hole of the Relief Size at its Relief Placement (Intersection, Vertex, or Tangent for a
-Round). Geometry: sheetmetal_corner.py.
+gap unless you set your own), Extend Aligned, and the relief: Trim To Bend (each bend stops
+where the other starts), Tear (no cut), or a Round / Square hole of the Relief Size at its
+Relief Placement (Intersection, Vertex, or Tangent for a Round). Geometry: sheetmetal_corner.py.
 """
 
 import FreeCAD as App
@@ -32,9 +32,10 @@ TRANSITION_ITEMS = [
     ("Straight Line", "straight_line", False, NOT_YET),
 ]
 RELIEF_ITEMS = [
-    ("Trim To Bend", "trim_to_bend", True, "The bends end where they are; the corner stays open"),
     ("Round", "round", True, "A round hole where the two bends meet (Size: its diameter)"),
     ("Square", "square", True, "A square hole where the two bends meet (Size: its side)"),
+    ("Tear", "tear", True, "No cut: the bends meet at the corner, the gap between them"),
+    ("Trim To Bend", "trim_to_bend", True, "Each bend stops where the other one starts"),
 ]
 
 
@@ -125,10 +126,10 @@ class CornerPanel(smp.SmPanel):
             raise sb.SheetMetalError(
                 "Tangent placement is for a Round relief only; use Intersection or Vertex."
             )
-        if options.get("relief") != "trim_to_bend" and options.get("alignment") == "overlap":
+        if options.get("relief") in sc.CUT_RELIEFS and options.get("alignment") == "overlap":
             raise sb.SheetMetalError(
                 "An overlapped corner lies over itself when laid flat, so a Round or Square "
-                "relief cannot be cut there: use Trim To Bend, or Symmetric Gap."
+                "relief cannot be cut there: use Trim To Bend or Tear, or Symmetric Gap."
             )
         core.closure_reach(
             options["alignment"], options["gap"] or 0.0, 1.0, float(options.get("overlap", 1.0))

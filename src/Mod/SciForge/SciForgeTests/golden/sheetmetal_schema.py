@@ -178,7 +178,7 @@ SMM_OPTIONS = {
         "overlap": "number",
         "flip_overlap": "bool",
         "extend_aligned": "bool",
-        "relief": ("round", "square", "trim_to_bend"),
+        "relief": ("round", "square", "tear", "trim_to_bend"),
         "relief_size": "number",
         "placement": ("intersection", "tangent", "vertex"),
     },

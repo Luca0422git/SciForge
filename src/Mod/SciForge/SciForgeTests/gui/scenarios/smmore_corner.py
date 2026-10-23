@@ -2,11 +2,11 @@
 """SHEET METAL > MODIFY > Corner Closure the way a Fusion user does it, only real input: a
 notched plate with two edge flanges (an open corner), the MODIFY menu's Corner Closure, click
 the dominant flange's corner edge then the submissive one's: both are taken in line to half the
-rule's gap short of the corner's bisector (Symmetric Gap); Round and Square corner reliefs;
-Relief Placement Tangent (refused for a Square, cuts more for a Round) and Vertex; Overlap with
-a relief refused with its reason, then with a 0 gap (the dominant runs over the other's end);
-OK; the timeline's Corner Closure 1; Ctrl+Z / Ctrl+Y; edit back to Symmetric Gap; Cancel keeps
-it."""
+rule's gap short of the corner's bisector (Symmetric Gap), Trim To Bend; Tear; Round and
+Square corner reliefs; Relief Placement Tangent (refused for a Square, cuts more for a Round)
+and Vertex; Overlap with a relief refused with its reason, then Trim To Bend with a 0 gap (the
+dominant runs over the other's end); OK; the timeline's Corner Closure 1; Ctrl+Z / Ctrl+Y;
+edit back to Symmetric Gap; Cancel keeps it."""
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -57,10 +57,11 @@ def waiting():
         p is not None and p.value("alignment") == "symmetric" and p.value("use_rule_gap"),
     )
     box = p.fields["relief"] if p else None
-    item = box.model().item(1) if box else None
+    item = box.model().item(0) if box else None
     h.check(
         "Round relief offered", item is not None and item.isEnabled() and item.text() == "Round"
     )
+    h.check("Trim To Bend by default", p is not None and p.value("relief") == "trim_to_bend")
 
 
 def click_dominant():
@@ -91,6 +92,23 @@ def closed():
     s["sym"] = st.volume(s["body"])
 
 
+def choose_tear():
+    st.choose(panel(), "relief", "Tear")
+
+
+def tear_result():
+    p = panel()
+    st.settle(p, 15000)
+    v = st.volume(s["body"])
+    h.check(
+        "Tear: the bends are carried into the corner (more than Trim To Bend)",
+        v > s["sym"] + 0.1,
+        (v, s["sym"]),
+    )
+    h.check("no message", st.message(p) == "", st.message(p))
+    s["tear"] = v
+
+
 def choose_round():
     st.choose(panel(), "relief", "Round")
 
@@ -100,7 +118,9 @@ def round_cut():
     st.settle(p, 15000)
     v = st.volume(s["body"])
     h.check(
-        "Round relief cut where the bends meet", s["sym"] - 40 < v < s["sym"] - 0.5, (v, s["sym"])
+        "Round relief cut where the bends meet",
+        s["tear"] - 40 < v < s["tear"] - 0.5,
+        (v, s["tear"]),
     )
     h.check(
         "relief size rows shown (rule size)",
@@ -312,6 +332,8 @@ h.run(
         click_dominant,
         click_submissive,
         closed,
+        choose_tear,
+        tear_result,
         choose_round,
         round_cut,
         choose_square,

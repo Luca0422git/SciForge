@@ -13,10 +13,12 @@ bend ends in the same plane) is taken further in line with the flange (Extend Al
   (1 - Overlap) of the thickness, Flip Overlap swaps which runs over); the submissive one
   stops the Gap short of the dominant's inside face.
 
-Relief: Trim To Bend (the bends end where they are and the corner stays open under the
-closed walls), or Round / Square (Symmetric Gap only): the closed part is laid flat with
-sm-flat's unfolder, the relief cut at its Relief Placement (Intersection, Vertex, or Tangent
-for a Round) and the cut folded back (corner_relief).
+Relief: Tear (no cut: the bends are carried to the mitre with the walls, the Gap between
+them); Trim To Bend (whatever lies inside both bend zones is cut away: each bend stops where
+the other one starts, the corner stays open under the closed walls; trim_to_bend); or, with
+Symmetric Gap, a Round / Square hole cut in the flat state at its Relief Placement
+(Intersection, Vertex, or Tangent for a Round): the closed part is laid flat with sm-flat's
+unfolder and the cut folded back (corner_relief).
 Sources: docs/sciforge/dev/research/fusion-sheet-metal.md 2.9 (geometry G).
 """
 
@@ -30,7 +32,8 @@ KIND = "SheetMetalCornerClosure"
 ALIGNMENTS = [core.CLOSURE_LABELS[k] for k in core.CLOSURE_ALIGNMENTS]
 RELIEFS = [core.CLOSURE_RELIEF_LABELS[k] for k in core.CLOSURE_RELIEFS]
 PLACEMENTS = [core.CLOSURE_PLACEMENT_LABELS[k] for k in core.CLOSURE_PLACEMENTS]
-BUILT_RELIEFS = ("trim_to_bend", "round", "square")
+BUILT_RELIEFS = ("tear", "trim_to_bend", "round", "square")
+CUT_RELIEFS = ("round", "square")
 
 
 def default_options():
@@ -40,7 +43,7 @@ def default_options():
         "overlap": 1.0,
         "flip_overlap": False,
         "extend_aligned": True,
-        "relief": "trim_to_bend",
+        "relief": "trim_to_bend",  # or tear, round, square
         "relief_size": None,  # None: the rule's 2-bend corner relief size
         "placement": "intersection",  # Round / Square: intersection, tangent or vertex
     }
@@ -174,7 +177,7 @@ def closure_shape(
     relief = options.get("relief", "trim_to_bend")
     if relief not in BUILT_RELIEFS:
         raise sb.SheetMetalError(
-            "%s corner relief is not available yet in SciForge; use Trim To Bend."
+            "%s corner relief is not available yet in SciForge; use Trim To Bend or Tear."
             % core.CLOSURE_RELIEF_LABELS.get(relief, relief)
         )
     if dominant == submissive:
@@ -256,14 +259,16 @@ def closure_shape(
         raise sb.SheetMetalError("The corner is already closed this far; nothing to add.")
     size = relief_size if relief_size is not None else options.get("relief_size")
     size = float(size or 4 * thickness)
-    if relief in ("round", "square") and alignment == "overlap":
+    if relief in CUT_RELIEFS and alignment == "overlap":
         raise sb.SheetMetalError(
             "An overlapped corner lies over itself when laid flat, so a Round or Square relief "
-            "cannot be cut there: use Trim To Bend, or Symmetric Gap."
+            "cannot be cut there: use Trim To Bend or Tear, or Symmetric Gap."
         )
     merged = sb.fuse_all(shape, pieces)
     closed = sb.one_solid(merged, "This corner closure")
-    if relief in ("round", "square") and alignment != "overlap":
+    if relief == "trim_to_bend":
+        closed = trim_to_bend(closed, fd, fs, corner, thickness)
+    if relief in CUT_RELIEFS and alignment != "overlap":
         try:
             closed = corner_relief(
                 closed,
@@ -283,6 +288,65 @@ def closure_shape(
                 "or a different Relief Size." % exc
             )
     return closed
+
+
+def _bend_wedge(shape, frame, corner, thickness):
+    """The zone of the flange's bend nearest the corner, as a solid: the sector between the
+    bend's start and end planes (both through its axis), out to three times the bend's outer
+    radius and as far along the axis either side of the corner."""
+    import Part
+
+    best = None
+    for face in shape.Faces:
+        surf = face.Surface
+        if not isinstance(surf, Part.Cylinder):
+            continue
+        axis = sb.unit(surf.Axis)
+        if abs(abs(axis.dot(frame["out"])) - 1.0) > 1e-6:
+            continue
+        rel = corner - surf.Center
+        dist = (rel - axis * rel.dot(axis)).Length
+        if best is None or dist < best[0]:
+            best = (dist, face)
+    if best is None:
+        raise sb.SheetMetalError(
+            "No bend was found at the end of a flange at this corner: nothing to trim to."
+        )
+    face = best[1]
+    surf = face.Surface
+    axis = sb.unit(surf.Axis)
+    u0, u1, v0, _v1 = face.ParameterRange
+    reach = 3.0 * (surf.Radius + thickness)
+    foot = surf.Center + axis * (corner - surf.Center).dot(axis) - axis * reach
+    rays = []
+    for u in (u0, 0.5 * (u0 + u1), u1):
+        rel = surf.value(u, v0) - surf.Center
+        rays.append(sb.unit(rel - axis * rel.dot(axis)))
+    points = [foot] + [foot + ray * reach for ray in rays]
+    sector = Part.Face(Part.makePolygon(points + points[:1]))
+    return sector.extrude(axis * (2.0 * reach))
+
+
+def trim_to_bend(solid, fd, fs, corner, thickness):
+    """Trim To Bend: cut away whatever lies inside both flanges' bend zones at the corner, so
+    each bend stops where the other one starts (in the flat state: the patch between both
+    bends' start and end lines)."""
+    try:
+        tool = _bend_wedge(solid, fd, corner, thickness).common(
+            _bend_wedge(solid, fs, corner, thickness)
+        )
+        if tool.isNull() or tool.Volume < 1e-9:
+            return solid
+        out = solid.cut(tool)
+        try:
+            out = out.removeSplitter()
+        except Exception:
+            pass
+    except sb.SheetMetalError:
+        raise
+    except Exception as exc:  # an OpenCASCADE failure: say so
+        raise sb.SheetMetalError("The corner could not be trimmed to the bends here (%s)." % exc)
+    return sb.one_solid(out, "Trimming this corner to the bends")
 
 
 def _bend_2d(bend, origin, e1, e2):
@@ -349,7 +413,7 @@ def corner_relief(
 
     if size <= 0:
         raise sb.SheetMetalError("The relief size must be more than 0.")
-    if placement == "tangent" and shape_kind != "round":
+    if placement == "tangent" and shape_kind == "square":
         raise sb.SheetMetalError(
             "Tangent placement is for a Round relief only; use Intersection or Vertex."
         )
@@ -391,21 +455,18 @@ def corner_relief(
         raise sb.SheetMetalError("The two flanges' bends do not meet at this corner.")
     _gap, crossing, da, bend_a, bend_b = best
     e2 = normal.cross(da)
+    flat_a = _bend_2d(bend_a, crossing, da, e2)
+    flat_b = _bend_2d(bend_b, crossing, da, e2)
+    reach = thickness * 4.0
     try:
-        x, y = core.relief_centre(
-            placement,
-            _bend_2d(bend_a, crossing, da, e2),
-            _bend_2d(bend_b, crossing, da, e2),
-            size,
-            shape_kind,
-        )
+        x, y = core.relief_centre(placement, flat_a, flat_b, size, shape_kind)
     except ValueError as exc:
         raise sb.SheetMetalError(str(exc))
-    centre = crossing + da * x + e2 * y
-    reach = thickness * 4.0
     if shape_kind == "round":
+        centre = crossing + da * x + e2 * y
         tool = Part.makeCylinder(size / 2.0, 2 * reach, centre - normal * reach, normal)
     else:
+        centre = crossing + da * x + e2 * y
         corner_pt = centre - da * (size / 2.0) - e2 * (size / 2.0) - normal * reach
         tool = sb.frame_box(corner_pt, da, e2, normal, 0, size, 0, size, 0, 2 * reach)
     flat_after = result.shape.cut(tool)
@@ -434,11 +495,11 @@ def corner_relief(
         )
     cut = sb.one_solid(out, "This corner relief")
     if cut.Volume > solid.Volume + 1e-6:
-        # the bends' flat shapes overlap at this corner, and the cut came back as added
+        # the boolean failed on touching geometry and the cut came back as added
         # material: refuse rather than build it
         raise sb.SheetMetalError(
-            "The corner relief could not be cut cleanly at this placement (the two bends "
-            "overlap there when laid flat): try another Relief Placement or Relief Size."
+            "The corner relief could not be cut cleanly at this placement: try another "
+            "Relief Placement or Relief Size."
         )
     # the corner must still lay flat (flat walls and round bends only)
     reason = _lays_flat(cut, line_dir, thickness, k_factor)

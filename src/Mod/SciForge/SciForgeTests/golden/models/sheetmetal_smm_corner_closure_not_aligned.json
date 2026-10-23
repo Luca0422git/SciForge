@@ -98,7 +98,7 @@
     }
   ],
   "expect": {
-    "volume": 9043.2881,
+    "volume": 9041.4421,
     "bbox": [
       0.0,
       0.0,
@@ -108,9 +108,9 @@
       21.0
     ],
     "solids": 1,
-    "faces": 18,
+    "faces": 24,
     "source": "baseline-freecad-1.1.4",
-    "note": "measured with FreeCAD 1.1.4: square to the other flange is in line with this one when the flanges meet at 90 degrees, so the volume is sheetmetal_smm_corner_closure's (9043.2881)",
+    "note": "measured with FreeCAD 1.1.4: square to the other flange is in line with this one when the flanges meet at 90 degrees, so the volume is sheetmetal_smm_corner_closure's",
     "rel_tol": 1e-05,
     "abs_tol": 0.001
   }

@@ -67,7 +67,7 @@
     }
   ],
   "expect": {
-    "volume": 9071.1926,
+    "volume": 9067.1723,
     "bbox": [
       0.0,
       0.0,
@@ -77,9 +77,9 @@
       21.0
     ],
     "solids": 1,
-    "faces": 18,
+    "faces": 24,
     "source": "baseline-freecad-1.1.4",
-    "note": "measured with FreeCAD 1.1.4: the slanted (mitred) ends are taken along their flanges to 0.1 mm either side of the bisector (the bends as true cylinders, so it lays flat)",
+    "note": "measured with FreeCAD 1.1.4: the slanted (mitred) ends are taken along their flanges to 0.1 mm either side of the bisector (the bends as true cylinders, so it lays flat), then trimmed to the bends",
     "rel_tol": 1e-05,
     "abs_tol": 0.001
   }

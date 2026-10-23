@@ -406,8 +406,13 @@ def line_intersection(p, u, q, v):
 # -- Corner Closure --------------------------------------------------------------------------------
 CLOSURE_ALIGNMENTS = ("symmetric", "overlap")
 CLOSURE_LABELS = {"symmetric": "Symmetric Gap", "overlap": "Overlap"}
-CLOSURE_RELIEFS = ("round", "square", "trim_to_bend")
-CLOSURE_RELIEF_LABELS = {"round": "Round", "square": "Square", "trim_to_bend": "Trim To Bend"}
+CLOSURE_RELIEFS = ("round", "square", "tear", "trim_to_bend")
+CLOSURE_RELIEF_LABELS = {
+    "round": "Round",
+    "square": "Square",
+    "tear": "Tear",
+    "trim_to_bend": "Trim To Bend",
+}
 CLOSURE_PLACEMENTS = ("intersection", "tangent", "vertex")
 CLOSURE_PLACEMENT_LABELS = {
     "intersection": "Intersection",
@@ -434,14 +439,21 @@ def relief_centre(placement, bend_a, bend_b, size, shape="round"):
         raise ValueError(
             "Tangent placement is for a Round relief only; use Intersection or Vertex."
         )
-    lines = []
-    for point, direction, outward, half in (bend_a, bend_b):
+    offsets = []
+    for _point, _direction, _outward, half in (bend_a, bend_b):
         if placement == "intersection":
-            offset = 0.0
+            offsets.append(0.0)
         elif placement == "vertex":
-            offset = -half
+            offsets.append(-half)
         else:
-            offset = half - size / 2.0
+            offsets.append(half - size / 2.0)
+    return _offset_meet(bend_a, offsets[0], bend_b, offsets[1])
+
+
+def _offset_meet(bend_a, off_a, bend_b, off_b):
+    """Where bend_a's centre line moved off_a across it meets bend_b's moved off_b (2D)."""
+    lines = []
+    for (point, direction, outward, _half), offset in ((bend_a, off_a), (bend_b, off_b)):
         lines.append(((point[0] + outward[0] * offset, point[1] + outward[1] * offset), direction))
     (p, u), (q, v) = lines
     meet = line_intersection(p, u, q, v)
