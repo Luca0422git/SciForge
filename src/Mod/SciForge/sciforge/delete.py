@@ -21,7 +21,6 @@ copied or split from can be deleted: its copies keep their shape.
 
 Everything is one undo step.
 """
-
 import FreeCAD as App
 
 from . import bodies
@@ -383,10 +382,8 @@ def delete_bodies(doc, targets):
         base = body.BaseFeature
         bodies.remove_body(body)
         # The hidden first step of a copied or split-off body goes with it.
-        if (
-            base is not None
-            and bodies.alive(base)
-            and (move.is_copy(base) or split.is_piece(base) or bodies.kind(base) == "DerivedSolid")
+        if base is not None and bodies.alive(base) and (
+            move.is_copy(base) or split.is_piece(base) or bodies.kind(base) == "DerivedSolid"
         ):
             try:
                 doc.removeObject(base.Name)

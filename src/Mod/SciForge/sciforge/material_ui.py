@@ -13,12 +13,12 @@ shown. OK keeps it (one undo step), Cancel / Esc puts the old materials back. Th
 is FreeCAD's own (the body's ShapeMaterial, saved in the file); Inspect and Measure read the
 mass through bodies.mass(). The document side is material.py.
 """
-
 import FreeCAD as App
 
 from . import bodies, bodies_gui, material, ui_icon_path, warn
 from .bodies_panel import BodyPanel, start as _start
 from .compat import QtCore, QtWidgets
+
 
 MIME = "application/x-sciforge-material"
 
