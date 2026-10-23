@@ -200,6 +200,15 @@ def _objects(doc):
                 "grounded": obj.Name in grounded,
             }
             _joint_row(row, obj)
+            if row["sciforge_type"] == "FlatPattern":  # sheet metal: the flat's size
+                try:
+                    row["describe"] = "Flat %.2f x %.2f mm, %d bend(s)" % (
+                        obj.FlatLength.Value,
+                        obj.FlatWidth.Value,
+                        obj.BendCount,
+                    )
+                except Exception:
+                    pass
             try:
                 from . import sketch_companions
 

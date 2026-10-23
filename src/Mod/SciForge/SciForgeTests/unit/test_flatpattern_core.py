@@ -129,6 +129,7 @@ class BrowserTest(unittest.TestCase):
                 "type_id": "Part::FeaturePython",
                 "visible": False,
                 "sciforge_type": "FlatPattern",
+                "describe": "Flat 98.26 x 20.00 mm, 1 bend(s)",
             },
         ]
         for obj in objects:
@@ -139,6 +140,7 @@ class BrowserTest(unittest.TestCase):
         self.assertIn("flat_pattern", kinds)
         node = next(n for n in folders if n["kind"] == "flat_pattern")
         self.assertEqual(node["icon"], "flat_pattern")
+        self.assertIn("98.26 x 20.00", node["tip"])
         self.assertIn("Export DXF", browser_core.MENUS["flat_pattern"])
 
 
