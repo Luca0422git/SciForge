@@ -104,14 +104,27 @@ def roll_to(obj):
 
 
 def _companions(obj):
-    """Steps the dialog of ``obj`` edits with it (a hardware part's Hole step): the marker
-    goes after them too."""
+    """Steps the dialog of ``obj`` edits with it (a hardware part's Hole step; the other
+    side of a Boss and its screws, which are steps of their own in other components): the
+    marker goes after them too, or the preview of the other half is rolled back."""
     try:
         from . import hardware
 
         if hardware.is_hardware(obj):
             own = hardware.hole_of(obj)
             return [own] if own is not None else []
+    except Exception:
+        pass
+    try:
+        from . import plastic_boss
+
+        if plastic_boss.is_boss(obj):
+            group = obj.BossGroup
+            return [
+                o
+                for o in obj.Document.Objects
+                if o is not obj and group and getattr(o, "BossGroup", None) == group
+            ]
     except Exception:
         pass
     return []
