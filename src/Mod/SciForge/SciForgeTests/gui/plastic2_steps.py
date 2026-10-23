@@ -70,6 +70,9 @@ def enclosure(name, lid="plate"):
     base.Label = "Base"
     _box(base, "Additive", "BaseBox", (60, 40, 20), (0, 0, 0))
     _box(base, "Subtractive", "BaseCavity", (56, 36, 20), (2, 2, 2))
+    if lid is None:
+        d.recompute()
+        return base, None
     top = d.addObject("PartDesign::Body", "Lid")
     top.Label = "Lid"
     if lid == "shell":
