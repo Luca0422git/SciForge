@@ -70,11 +70,17 @@ keys in `docs/sciforge/dev/research/fusion-surface.md`), **F** = Autodesk Commun
   goes and the hole stays. The same on a solid turns it into a surface body. On the SOLID tab
   Del still closes the hole (or says why it cannot).
 - **Round or bevel an edge**: click the edge between two faces of a surface body, press F
-  (or MODIFY > Fillet / Chamfer), type the radius or drag the arrow, OK.
-- **Push or pull a flat face**: press Q, click the face, type a distance (+ along the face's
-  arrow) or drag the arrow: the walls around it grow or shrink with it.
+  (or MODIFY > Fillet / Chamfer), type the radius or drag the arrow, OK. Radius Type Chord
+  Length makes the round that wide across instead.
+- **Push or pull a face**: press Q, click the face, type a distance (+ along the face's
+  arrow) or drag the arrow: the walls around it grow or shrink with it, also slanted or
+  cone-shaped walls. Click more faces (two walls of a box) to move them together, each
+  straight out of itself. A round wall on its own is moved out or in as a whole.
 - **Merge**: MODIFY > Merge, click faces that lie on one surface or run into each other
   smoothly, OK: one face.
+- **Split Face / Replace Face**: as for solids. Split Face cuts faces of a surface body into
+  pieces (Merge puts them back together); Replace Face moves one face onto a flat face or
+  plane and the walls round it follow.
 - **Move, Align, Scale, Pattern, Mirror**: exactly as for solids; Mirror with Operation Join
   stitches the mirrored half on (Stitch Tolerance closes small gaps).
 
@@ -83,43 +89,47 @@ saved with the design.
 
 ## Tests
 
-- Scenarios (real input, FreeCAD 1.1.4): `surface4_fillet` (fillet, edit with a parameter
-  that the radius then follows, chamfer with a pre-selected edge, a free-edge refusal, Esc,
-  a Variable radius fillet, edited to Chord Length),
-  `surface4_split` (a box split by a curved surface, undo / redo, save with Ctrl+S, reopen),
-  `surface4_split_loft` (a box split by a lofted surface, edit with Extend Splitting Tool
-  off, the loft itself split by the box's face, a refusal: a face that does not reach it,
-  undo / redo),
-  `surface4_delete_merge` (an empty design, SURFACE Delete of a floor, of a solid's face,
-  SOLID Delete still heals, edit from the timeline, Merge, a Merge refusal, a solid's edge
-  handed to the SOLID Fillet),
-  `surface4_presspull_faces` (two walls facing different ways pushed out together, edit,
-  undo / redo, a too-far refusal),
-  `surface4_presspull_shade` (the lid of a cone frustum pulled up and pushed down: the cone
-  carried on / cut back, edit, undo / redo, a refusal past the cone's tip),
-  `surface4_presspull` (Q hand-over, -5, edit to +3, undo / redo, Q on an edge, Q on the
-  fillet's face edits the fillet, a curved face offset, a too-far refusal, save with Ctrl+S,
-  reopen, edit after the reopen), `surface4_move_mirror` (Mirror Join
-  with stitch, edit with Stitch Tolerance, Move, Move with Create Copy, Scale),
-  `surface4_pattern` (rectangular and circular patterns of a surface body, undo / redo, Esc),
-  `surface4_misc` (Align, Combine refusal, Physical Material, Appearance),
-  `surface4_component` (fillet, press pull and delete on a surface body in a moved
-  component, undo / redo),
-  `surface4_direct` (a design without history, where Fusion offers Merge: Merge, Ctrl+Z /
-  Ctrl+Y, SURFACE Delete, Fillet, history turned on again),
-  `surface4_step_part` (SURFACE Delete of a face of a STEP part without history: it is taken
-  into a body and becomes a surface body; Ctrl+Z / Ctrl+Y; Fillet on it),
-  `surface4_split_face` (Split Face of a surface body's floor by the YZ square, then Merge
-  of the two halves, undo / redo),
-  `surface4_replace_face` (a surface box's floor replaced by a block's top: the walls cut
-  back; undo / redo; a target beyond the walls refused in the edit, Cancel).
-- Golden models `surface4_*.json` (17): fillet + edit + reopen, variable fillet, chord
-  length fillet, chamfer +
-  SURFACE delete, press pull + edit + reopen, press pull of a tray with slanted walls (its
-  floor; two of its walls at once), press pull of a cup's round wall and of a lampshade's
-  lid, merge, merge of
-  tangent faces (refit), split of a solid by a surface and by a lofted surface, split of a
-  surface, rectangular pattern and pattern on path of a surface body, mirror join + scale.
+Results and check counts: `docs/sciforge/sessions/surface-4.md`.
+
+- Scenarios (real input, FreeCAD 1.1.4), 15:
+  - `surface4_fillet`: fillet, edit with a parameter that the radius then follows, chamfer
+    with a pre-selected edge, a free-edge refusal, Esc, a Variable radius fillet, edited to
+    Chord Length.
+  - `surface4_split`: a box split by a curved surface, undo / redo, save with Ctrl+S, reopen.
+  - `surface4_split_loft`: a box split by a lofted surface, edit with Extend Splitting Tool
+    off, the loft itself split by the box's face, a refusal (a face that does not reach it),
+    undo / redo.
+  - `surface4_split_face`: Split Face of a surface body's floor by the YZ square, then Merge
+    of the two halves, undo / redo.
+  - `surface4_delete_merge`: an empty design, SURFACE Delete of a floor and of a solid's
+    face, SOLID Delete still heals, edit from the timeline, Merge, a Merge refusal, a solid's
+    edge handed to the SOLID Fillet.
+  - `surface4_presspull`: Q hand-over, -5, edit to +3, undo / redo, Q on an edge, Q on the
+    fillet's face edits the fillet, a curved face offset, a too-far refusal, save with
+    Ctrl+S, reopen, edit after the reopen.
+  - `surface4_presspull_faces`: two walls facing different ways pushed out together, edit,
+    undo / redo, a too-far refusal.
+  - `surface4_presspull_shade`: the lid of a cone frustum pulled up and pushed down (the
+    cone carried on / cut back), edit, undo / redo, a refusal past the cone's tip.
+  - `surface4_replace_face`: a surface box's floor replaced by a block's top (the walls cut
+    back), undo / redo, a target beyond the walls refused in the edit, Cancel.
+  - `surface4_move_mirror`: Mirror Join with stitch, edit with Stitch Tolerance, Move, Move
+    with Create Copy, Scale.
+  - `surface4_pattern`: rectangular and circular patterns of a surface body, undo / redo,
+    Esc.
+  - `surface4_misc`: Align, Combine refusal, Physical Material, Appearance.
+  - `surface4_component`: fillet, press pull and delete on a surface body in a moved
+    component, undo / redo.
+  - `surface4_direct`: a design without history (where Fusion offers Merge): Merge, Ctrl+Z /
+    Ctrl+Y, SURFACE Delete, Fillet, history turned on again.
+  - `surface4_step_part`: SURFACE Delete of a face of a STEP part without history (taken
+    into a body, it becomes a surface body), Ctrl+Z / Ctrl+Y, Fillet on it.
+- Golden models `surface4_*.json`, 19: fillet + edit + reopen, variable fillet, chord length
+  fillet, chamfer + SURFACE delete, press pull + edit + reopen, press pull of a tray with
+  slanted walls (its floor; two of its walls at once), of a cup's round wall, of a
+  lampshade's lid, merge, merge of tangent faces (refit), split face + merge, replace face,
+  split of a solid by a surface and by a lofted surface, split of a surface, rectangular
+  pattern and pattern on path of a surface body, mirror join + scale.
 - Unit tests: `SciForgeTests/unit/test_surfmod_core.py`.
 
 ## Known gaps

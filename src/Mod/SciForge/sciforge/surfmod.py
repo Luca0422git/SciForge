@@ -728,17 +728,9 @@ def _retrim(shape, face, origin, n, d):
             continue
         faces += rebuilt.get(i, [f.copy()])
     faces.append(top)
+    # (no UnifySameDomain here: it would also merge faces the user split on purpose; a
+    # cone's or a cylinder's neighbour is carried on as one face already, _carry_on)
     result = sew(faces)
-    try:
-        import ShapeUpgrade
-
-        unify = ShapeUpgrade.UnifySameDomain(result, True, True, False)
-        unify.build()
-        tidy = unify.shape()
-        if not tidy.isNull() and tidy.isValid() and tidy.Faces:
-            result = tidy  # a neighbour and the band carried on from it: one face again
-    except Exception:
-        pass
     if len(surface_geom.free_edges(result)) > len(surface_geom.free_edges(shape)):
         raise SurfaceModifyError(
             "The moved face no longer meets the faces around it. Try a smaller distance."
