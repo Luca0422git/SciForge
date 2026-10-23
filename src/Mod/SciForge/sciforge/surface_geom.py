@@ -960,7 +960,12 @@ def sweep_curves(profile_edges, path, options, rail=None, guide=None):
     if with_rail and rail.closed != path.closed:
         raise SurfaceError("The guide rail must be open or closed like the path.")
     if with_rail:
-        path, rail = _rail_extent(path, rail, o)
+        path, rail = _rail_extent(path, rail, o, at_end=s_p > 0.5 * path.length)
+        try:
+            point = path.wire().distToShape(Part.Vertex(centre))[1][0][0]
+        except Exception:
+            point = path.start
+        s_p = path.length_at(point)
     try:
         plan = sweep_core.Plan(
             path,
@@ -1009,11 +1014,15 @@ def sweep_curves(profile_edges, path, options, rail=None, guide=None):
 STATIONS = 9  # sections along a guide rail that does not keep a straight course
 
 
-def _rail_extent(path, rail, o):
+def _rail_extent(path, rail, o, at_end=False):
     """Path + Guide Rail: the path and rail the sweep runs along. Guide Rail Distance takes
     that share of the rail (from the end the profile sits at); Perpendicular to Path stops
     where the plane square to the path through the rail's end (or the path's, when the path
-    is the shorter) cuts the other; Full Extents runs each to its own end."""
+    is the shorter) cuts the other; Full Extents runs each to its own end. at_end: the
+    profile sits at the path's end (the sweep runs back along it)."""
+    if at_end and not path.closed:
+        back_path, back_rail = _rail_extent(path.reversed(), rail.reversed(), o)
+        return back_path.reversed(), back_rail.reversed()
     share = float(o.get("rail_distance", 1.0))
     if share < 1e-6:
         raise SurfaceError("Guide Rail Distance is 0: type a share of the rail above 0.")
