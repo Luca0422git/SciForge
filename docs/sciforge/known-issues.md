@@ -1,4 +1,4 @@
-# Known issues in SciForge 0.1.0-beta
+# Known issues in SciForge 0.1.0-beta.2
 
 This is a beta: it works, but it is not finished. These are the things you are most likely to
 run into, each with what you can do about it. The list is kept short on purpose and is updated
@@ -25,13 +25,21 @@ time you start it, but treat that as a safety net, not a plan.
   the Send button works again; press Stop to end it early.
 - **English only.** SciForge's own screens, menus and messages are in English; there are no
   translations yet.
+- **The SHEET METAL and PLASTIC tabs are new in this beta** and the least used so far. A few
+  of Fusion's options are not there yet (for example weld corner reliefs, and a flat pattern
+  for a Brake Form lofted flange), and Design Advice is slow on big parts. The details are
+  in [parity/sheet-metal.md](parity/sheet-metal.md) and [parity/plastic.md](parity/plastic.md).
+- **The AI cannot use the SHEET METAL and PLASTIC tabs yet**, nor the SURFACE tab's Fillet,
+  Chamfer, Press Pull, Delete and Merge on surface bodies. Everything else you can do, it
+  can do. *Workaround:* make those steps yourself; the AI can carry on from there. Its tools
+  for them come next.
 
 ## Not built (yet)
 
 - **Not all of Fusion's features.** SciForge covers the Design workspace: sketches, solid and
   surface modeling, patterns, components and joints, mesh, drawings, 3D printing, and more. It
   does **not** have sculpting (T-splines), simulation, rendering and animation, CAM, electronics,
-  sheet metal, plastic parts, or cloud collaboration. Some options inside the tools that do
+  or cloud collaboration. Some options inside the tools that do
   exist are shown greyed out with the reason. For example, the Fillet options Setback corners,
   Curvature (G2) continuity and Asymmetric radius, and the Chamfer corner types Miter and Blend,
   need work that OpenCASCADE (FreeCAD's geometry engine) does not do yet.

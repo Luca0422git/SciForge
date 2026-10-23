@@ -1,16 +1,21 @@
 # SPDX-License-Identifier: LGPL-2.1-or-later
-"""The version shows quietly (brief beta-release.md, R0): a small grey "SciForge 0.1.0-beta" after
+"""The version shows quietly (brief beta-release.md, R0): a small grey "SciForge 0.1.0-beta.2" after
 Home's heading, in Diagnostics' first line and in the AI connector's manifest; no banner and
 no change to the window title. What the user sees is checked on the screen, not only the text.
 """
+
+import os
 
 import FreeCAD as App
 import FreeCADGui as Gui
 from PySide import QtWidgets
 
+import sciforge
 from SciForgeTests.gui import harness as h
 
-VERSION = "0.1.0-beta"
+# The one place the version is written (src/Mod/SciForge/VERSION): what must show
+with open(os.path.join(os.path.dirname(sciforge.ROOT), "VERSION"), encoding="utf-8") as _file:
+    VERSION = _file.readline().strip()
 
 
 def home():

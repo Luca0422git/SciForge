@@ -5,6 +5,71 @@ its own section of this file (the release notes are made from it), so every rele
 section here whose heading is exactly its version number, like `## 0.1.0-beta` below. Known
 problems are in [docs/sciforge/known-issues.md](docs/sciforge/known-issues.md).
 
+## 0.1.0-beta.2
+
+**The second beta.** Two new tabs, a complete SURFACE tab, a Data Panel like Fusion's, and a big
+round of work on speed and on SciForge explaining itself. If you have 0.1.0-beta, **Update now**
+only has to replace SciForge's own part: the compiled program has not changed.
+
+### New tabs and tools
+
+- **SHEET METAL tab**: sheet metal rules (thickness, bend radius, K-factor, reliefs; a library
+  and rules kept in the design), **Flange** (one command for base, contour and edge flanges),
+  Bend, Hem (six kinds), Join by Bend, Corner Closure, Lofted Flange, sheet metal Fillet and
+  Chamfer, Convert to Sheet Metal, Rip, Unfold and Refold, and **Create Flat Pattern** with
+  **Export DXF** (bend lines on their own layers). Drawings get a Bend Table and Bend Notes.
+- **PLASTIC tab**: plastic rules for each component (a library of 16, including FDM PLA and
+  PETG) that Shell, Draft, Rib, Web and thin Extrude follow; Boss (with its screws), Rest, Rule
+  Fillet, Snap Fit, Lip and Groove, and **Design Advice**.
+- **The SURFACE tab is complete**: more of Fusion's options in Extrude, Revolve, Sweep, Loft,
+  Patch, Offset, Untrim, Extend, Stitch, Trim and Ruled; SOLID's modify tools work on surface
+  bodies (Fillet, Chamfer, Press Pull, Split Face, Merge, Replace Face, Move/Copy, Align, Scale,
+  Pattern, Mirror); Environment Map analysis; Isoparametric Curve in sketches.
+- **Draft takes curved and free-form walls** (splines, ellipses), not only flat and round ones.
+
+### Designs, files and the browser
+
+- **A Data Panel like Fusion's**: cards with pictures, search, sort, list or grid, and details
+  with a design's versions and where it is used. **Drag a design into an open design** to
+  insert a copy; drag files from your file manager onto the panel to add them.
+- **Delete a design** from Home (the **...** on a tile, or the Delete key) and from the Data
+  Panel. It goes to a trash folder in the same place, never deleted for good.
+- **Opacity Control**: right-click a body or component in the browser.
+- **Hovering over a body in the 3D view lights its row in the browser.**
+- **Export and import reports**: after an export, a short card says what that file format does
+  not keep; after an import, what did not come in.
+- **Drawing PDFs** with layers you can switch on and off and text you can search.
+
+### Faster, and it explains itself
+
+- **Dragging never waits for the model**: Draft, Fillet, Chamfer, Shell, Press Pull and Extrude
+  show a live picture while you drag; the exact result follows when the mouse rests.
+- **Editing an earlier step rolls back the later ones while you edit**, as in Fusion.
+- **Values stop at the limit**: Fillet, Chamfer, Draft, Shell, Press Pull, Thicken, a tapered or
+  thin Extrude, Revolve, Coil, Pipe, Torus, Gear and sketch fillets stop at the largest value
+  that works and say so, instead of failing.
+- **Sketches explain themselves**: a conflict names the constraints involved and rings them in
+  red; a padlock marks fully constrained sketches in the browser and the timeline, and the
+  Sketch Palette says how many are left to define.
+- **Big designs**: the browser and timeline re-read the design only after a change, and Undo /
+  Redo on big parts take about a second instead of many.
+
+### AI
+
+- **117 AI tools** (there were 16), the same for the chat panel and for AI apps you connect,
+  including tools the AI uses to check its own work (inspect the design, find geometry, check
+  for problems, render a picture, compare two states), and a documentation library it can
+  search.
+- **Not yet**: the AI cannot use the new SHEET METAL and PLASTIC tabs, nor the SURFACE tab's
+  Fillet, Chamfer, Press Pull, Delete and Merge on surface bodies. Its tools for them come
+  next.
+
+### Known problems
+
+The list is in [docs/sciforge/known-issues.md](docs/sciforge/known-issues.md). New in this beta:
+the SHEET METAL and PLASTIC tabs are the least used parts of SciForge so far, and the AI cannot
+use them yet.
+
 ## 0.1.0-beta
 
 **The first public beta.** SciForge is parametric CAD that works the way people who know Fusion

@@ -7,7 +7,7 @@
 
 **Parametric CAD that works the way Fusion users expect. Free and open source, based on FreeCAD.**
 
-![version](https://img.shields.io/badge/version-0.1.0--beta-3fa9f5) ![platforms](https://img.shields.io/badge/Windows%20%7C%20Linux-lightgrey) ![licence](https://img.shields.io/badge/licence-LGPL--2.1--or--later-lightgrey)
+![version](https://img.shields.io/badge/version-0.1.0--beta.2-3fa9f5) ![platforms](https://img.shields.io/badge/Windows%20%7C%20Linux-lightgrey) ![licence](https://img.shields.io/badge/licence-LGPL--2.1--or--later-lightgrey)
 
 [**Download**](https://github.com/Luca0422git/SciForge/releases) ·
 [What works](#what-works-and-what-does-not-yet) ·
@@ -22,12 +22,12 @@
 
 SciForge is a free CAD program for 3D design: sketches with dimensions and constraints, solid
 modeling with a timeline you can edit afterwards, Press Pull, components and joints, surfaces,
-meshes, drawings and 3D printing. If you know Fusion, you know SciForge: the ribbon, the browser,
+sheet metal, plastic parts, meshes, drawings and 3D printing. If you know Fusion, you know SciForge: the ribbon, the browser,
 the timeline, the navigation bar, `S` for command search and Fusion's keys and mouse are all
 there. It is built on [FreeCAD](https://www.freecad.org), which does the heavy geometry work, and
 adds its own interface and tools on top.
 
-**This is a beta (0.1.0-beta).** Every feature is tested automatically by driving the real
+**This is a beta (0.1.0-beta.2).** Every feature is tested automatically by driving the real
 program with clicks and keys, but SciForge has had little use by anyone except the person
 building it, so expect rough edges. Save often, and read the
 [known issues](docs/sciforge/known-issues.md) before you start. Your feedback is what makes the
@@ -42,8 +42,8 @@ next beta better.
 ## Download and install
 
 **[Go to the Releases page](https://github.com/Luca0422git/SciForge/releases)** and pick the
-newest release at the top (SciForge 0.1.0-beta is a "pre-release", which is why GitHub's
-"latest" button does not show it).
+newest release at the top (SciForge's betas are "pre-releases", which is why GitHub's
+"latest" button does not show them).
 
 ### Which file to take
 
@@ -144,9 +144,9 @@ https://github.com/Luca0422git/SciForge
 1. **Start SciForge.** It opens on the **Home** tab: your recent designs, the places they live in,
    and a **New design** button.
 2. **New design** (or `Ctrl+N`). You get an empty design with a body. The **ribbon** at the top
-   works like Fusion's: SOLID, SURFACE, MESH, UTILITIES, and SKETCH appears while you sketch. The
-   **browser** is on the left, the **timeline** at the bottom: click a step to edit it, drag the
-   marker to go back in time.
+   works like Fusion's: SOLID, SURFACE, MESH, SHEET METAL, PLASTIC, UTILITIES, and SKETCH appears
+   while you sketch. The **browser** is on the left, the **timeline** at the bottom: click a step
+   to edit it, drag the marker to go back in time.
 3. **Create Sketch**, click a plane, draw with `L` (line), `R` (rectangle), `C` (circle), dimension
    with `D`, **Finish Sketch**, then `E` for **Extrude** and `Q` for **Press Pull**.
 4. **Press `S`** to search every command by name; Enter runs the best match.
@@ -163,17 +163,19 @@ documents in [docs/sciforge/parity](docs/sciforge/parity) say so for each tool.
 **Works (and is tested by running it like a person would):** sketches (lines, rectangles, circles,
 arcs, polygons, slots, splines, text, dimensions, constraints), Extrude, Revolve, Sweep, Loft,
 Press Pull, fillets and chamfers, shell, draft, scale, holes and threads, patterns and mirrors,
-components and joints, surfaces, mesh tools, 2D drawings, 3D printing (3MF / STL / send to your
-slicer), a hardware library (screws, nuts, washers), measuring and analysis, parameters, version
-history for each design, STEP / DXF / SVG / mesh import and export, and **AI connectors** (a chat
-panel that uses your own key from Claude, ChatGPT, Gemini or a local model; and a connector so AI
-apps like Claude Desktop can build in SciForge, off until you switch it on).
+components and joints, surfaces, sheet metal (flanges, bends, hems, flat patterns with DXF export),
+plastic parts (bosses, snap fits, lips, rests, design advice), mesh tools, 2D drawings, 3D printing
+(3MF / STL / send to your slicer), a hardware library (screws, nuts, washers), measuring and
+analysis, parameters, version history for each design, STEP / DXF / SVG / mesh import and export,
+and **AI connectors** (a chat panel that uses your own key from Claude, ChatGPT, Gemini or a local
+model; and a connector so AI apps like Claude Desktop can build in SciForge, off until you switch
+it on).
 
-**Does not (yet):** sculpting, simulation, rendering and animation, CAM, electronics, sheet
-metal, cloud collaboration, macOS, other languages than English, Fusion's `.f3d` files (export
-STEP from Fusion instead), and some options inside tools that exist (shown greyed out, with the
-reason). Press Pull is still rough on complex curved shapes. The full, honest list with
-workarounds is in **[Known issues](docs/sciforge/known-issues.md)**.
+**Does not (yet):** sculpting, simulation, rendering and animation, CAM, electronics, cloud
+collaboration, macOS, other languages than English, Fusion's `.f3d` files (export STEP from Fusion
+instead), and some options inside tools that exist (shown greyed out, with the reason). Press Pull
+is still rough on complex curved shapes. The full, honest list with workarounds is
+in **[Known issues](docs/sciforge/known-issues.md)**.
 
 ## Updating
 
