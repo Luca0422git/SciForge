@@ -6,7 +6,7 @@ Metal, and the flat pattern in drawings (a view of it, a Bend Table). Spec and g
 `docs/sciforge/parity/sheet-metal-flat.md`. sm-forming's and sm-more's branches were merged
 in (their Flange, Bend and Hem make the sheet metal bodies this area lays flat; the one
 conflict, the MODIFY menu lines of `ribbon_config.py` next to Corner Closure, was resolved
-keeping both).
+keeping both), last at sm-forming ca79f2b and sm-more 8095fc3 (clean merges).
 
 **What Luca can do now (plain words).** Make a part of even thickness (a shelled box with
 rounded corners, or a Flange), then SHEET METAL > MODIFY > Convert to Sheet Metal and click a
@@ -48,9 +48,15 @@ Rip (a face, along an edge, or between two points).
   (`drawing.py` 2 lines + the Bend Table refresh hook, `drawing_ui.py`).
 - Icons (`tools/sciforge/icons_flatpattern.py`): sm_flat_pattern, flat_pattern, sm_unfold,
   sm_refold, sm_rip, sm_convert, fp_export_dxf, fp_finish.
+- Corner reliefs on the flat: the edge Flange's own Corner Relief override (shape, size,
+  placement; sm-forming's `corner_reliefs(step)`) wins over the rule; Intersection and
+  Tangent placement; a corner closed by sm-more's Corner Closure gets no rule relief (the
+  closure's own relief is in the folded part already). Corners are matched in the folded
+  part, where the two bend axes meet.
 - Golden ops `sf_sm_convert`, `sf_flat_pattern` (measures the flat), `sf_unfold`, `sf_refold`,
-  `sf_rip`; 14 golden models `sm_flat_*` (5 on sm-forming's Flange, 3 on sm-more's Bend and
-  Hem); unit tests `test_flatpattern_core.py`; 10 scenarios `flatpattern_*`.
+  `sf_rip`; 16 golden models `sm_flat_*` (6 on sm-forming's Flange, 4 on sm-more's Bend,
+  Hem and Corner Closure); unit tests `test_flatpattern_core.py`; 11 scenarios
+  `flatpattern_*`.
 
 **FreeCAD facts and traps found**
 
@@ -84,6 +90,8 @@ Rip (a face, along an edge, or between two points).
 - A TechDraw balloon's OriginX / OriginY are offsets in the view's own (unscaled) units, and
   `getVisibleEdges(True)` is in another frame (y differs): compute anchors from the model with
   `drawing_core.to_view`.
+- A FeaturePython's `PropertyLength` reads back as a Quantity: `radius + fp.Thickness` fails
+  (`float()` it first).
 - The scratchpad folder is shared with other sessions: another builder overwrote probe files
   with the same names (p5.py, p6.py). Use names with the area in them.
 
@@ -96,6 +104,6 @@ Metal Rules window (needs an INTENDED entry in `ribbon_sweep.py`).
 **Gaps** (details in the parity doc): Refold has no inputs (folds back everything its Unfold
 laid flat); material added across a bend in the flat state is refused at the Refold; the
 FLAT PATTERN tab has no sketch / construction tools; no STEP export of the flat; corner
-reliefs are on the flat only (Round / Square, Intersection placement); bevelled mitres are
+reliefs are on the flat only (Round / Square; no weld shapes); bevelled mitres are
 laid flat by the stationary side's outline; sm-more's Brake Form lofted flange has sharp
 folds (no bend radius) and is refused naming the sharp edge.

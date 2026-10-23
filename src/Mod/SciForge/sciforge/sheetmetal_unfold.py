@@ -275,7 +275,21 @@ def _map_edge(edge, fn, lines_stay=True):
     else:
         span = abs(edge.LastParameter - edge.FirstParameter)
         count = max(12, min(96, int(edge.Length / 0.5) + 4, int(span * 24) + 12))
-    pts = [fn(p) for p in _samples(edge, count)]
+    raw = _samples(edge, count)
+    # the curve's ends can lie a vertex tolerance away from the vertices a boolean left: start
+    # and end at the vertices themselves, so neighbouring edges still meet once mapped
+    corners = [v.Point for v in edge.Vertexes]
+    for k in (0, -1):
+        near = min(corners, key=lambda p: (p - raw[k]).Length) if corners else None
+        if near is not None and (near - raw[k]).Length < 1e-3:
+            raw[k] = near
+    if edge.Length < 1e-3 and not edge.isClosed():
+        # a sliver edge (a boolean's leftover, far below a micron): a straight piece, or
+        # nothing when its ends meet (a B-spline through points that close together has no
+        # plane and spoils the face built on the wire)
+        a, b = fn(raw[0]), fn(raw[-1])
+        return Part.makeLine(a, b) if (a - b).Length > 1e-7 else None
+    pts = [fn(p) for p in raw]
     closed = (pts[0] - pts[-1]).Length < 1e-7
     if not closed and _collinear(pts):
         return Part.makeLine(pts[0], pts[-1])
@@ -292,7 +306,7 @@ def _map_edge(edge, fn, lines_stay=True):
 
 
 def _map_wire(wire, fn):
-    edges = [_map_edge(e, fn) for e in wire.OrderedEdges]
+    edges = [m for m in (_map_edge(e, fn) for e in wire.OrderedEdges) if m is not None]
     try:
         return Part.Wire(edges)
     except Exception:
@@ -301,9 +315,24 @@ def _map_wire(wire, fn):
 
 def develop_face(fmap):
     """The bend face developed into its entry tangent plane (parent not applied)."""
-    fn = fmap.develop_local
-    outer = _map_wire(fmap.face.OuterWire, fn)
-    inner = [_map_wire(w, fn) for w in fmap.face.Wires if not w.isSame(fmap.face.OuterWire)]
+    n = App.Vector(fmap.rho0).normalize()
+    plane_point = fmap.center + n * fmap.radius
+
+    def fn(point):
+        # onto the plane exactly: a boolean's edges can lie a tolerance off the cylinder, and
+        # a wire a hair out of plane makes no face ("Wires are not coplanar")
+        q = fmap.develop_local(point)
+        return q - n * (q - plane_point).dot(n)
+
+    # an open wire is a slit left inside the face by a boolean (sm-more's Corner Closure with
+    # a Tangent relief leaves one, and OpenCASCADE may even call it the outer wire): it bounds
+    # no area, so it is left out
+    closed = [w for w in fmap.face.Wires if w.isClosed()]
+    border = fmap.face.OuterWire
+    if not border.isClosed() and closed:
+        border = max(closed, key=lambda w: w.BoundBox.DiagonalLength)
+    outer = _map_wire(border, fn)
+    inner = [_map_wire(w, fn) for w in closed if not w.isSame(border)]
     face = Part.makeFace([outer] + inner, "Part::FaceMakerBullseye")
     if face.isNull() or face.Area < 1e-9:
         raise UnfoldError("the bend at Face%d could not be developed" % (fmap.index + 1))
@@ -836,7 +865,7 @@ def _fold_wire(fmap, wire, base, lo_r, hi_r):
             source.append(e)
     for radius in (lo_r, hi_r):
         fn = _to_radius(fmap, base, radius)
-        edges = [_map_edge(e, fn, False) for e in source]
+        edges = [m for m in (_map_edge(e, fn, False) for e in source) if m is not None]
         rings.append(edges)
         cylinder = Part.Cylinder()
         cylinder.Center = fmap.center
