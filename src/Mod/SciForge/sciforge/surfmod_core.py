@@ -27,13 +27,31 @@ TYPES = {
 }
 KIND_BY_TYPE = {v: k for k, v in TYPES.items()}
 
-# kind -> (the timeline's title, icon in icons/ui)
+# kind -> (its title, its own icon in icons/ui: the browser / tree icon of the step)
 TIMELINE_KINDS = {
     "surface_fillet": ("Fillet", "surfmod_fillet"),
     "surface_chamfer": ("Chamfer", "surfmod_chamfer"),
     "surface_delete_face": ("Delete Face", "surfmod_delete"),
     "surface_merge": ("Merge", "surfmod_merge"),
     "surface_press_pull": ("Press Pull", "surfmod_press_pull"),
+}
+# In Fusion a fillet on a surface body is the same Fillet feature as on a solid (one row of
+# numbers and one icon in the timeline): these steps show as the SOLID kinds there
+# (timeline_core.KINDS). Merge is a kind of its own.
+TIMELINE_SHARED = {
+    "SurfaceFillet": "fillet",
+    "SurfaceChamfer": "chamfer",
+    "SurfaceDeleteFace": "delete_face",
+    "SurfacePressPull": "presspull",
+    "SurfaceMerge": "surface_merge",
+}
+# the dialog's header icon per kind (the SOLID command's, as Fusion's dialog is the same)
+DIALOG_ICONS = {
+    "surface_fillet": "fillet",
+    "surface_chamfer": "chamfer",
+    "surface_delete_face": "delete",
+    "surface_merge": "surfmod_merge",
+    "surface_press_pull": "press_pull",
 }
 
 CHAMFER_TYPES = ("equal", "two", "angle")

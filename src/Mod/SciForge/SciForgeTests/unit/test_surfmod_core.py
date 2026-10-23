@@ -36,6 +36,18 @@ class Kinds(unittest.TestCase):
         self.assertEqual(core.TIMELINE_KINDS["surface_delete_face"][0], "Delete Face")
         self.assertEqual(core.TIMELINE_KINDS["surface_press_pull"][0], "Press Pull")
 
+    def test_timeline_shares_the_solid_kinds(self):
+        from sciforge import timeline_core
+
+        for sciforge_type, kind in core.TIMELINE_SHARED.items():
+            self.assertIn(sciforge_type, core.KIND_BY_TYPE)
+            if kind != "surface_merge":
+                self.assertIn(kind, timeline_core.KINDS)
+                title = timeline_core.KINDS[kind][0]
+                self.assertEqual(title, core.TIMELINE_KINDS[core.KIND_BY_TYPE[sciforge_type]][0])
+        for kind, icon in core.DIALOG_ICONS.items():
+            self.assertTrue(os.path.isfile(os.path.join(ICONS, icon + ".svg")), icon)
+
     def test_defaults_do_not_leak(self):
         a = core.with_defaults("surface_fillet", {"radius": 4})
         self.assertEqual(a["radius"], 4)

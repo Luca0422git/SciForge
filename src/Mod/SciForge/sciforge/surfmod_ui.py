@@ -43,8 +43,8 @@ def _register():
     try:
         from . import timeline_core
 
-        timeline_core.KINDS.update(core.TIMELINE_KINDS)
-        timeline_core.KIND_BY_SCIFORGE_TYPE.update(core.KIND_BY_TYPE)
+        timeline_core.KINDS["surface_merge"] = core.TIMELINE_KINDS["surface_merge"]
+        timeline_core.KIND_BY_SCIFORGE_TYPE.update(core.TIMELINE_SHARED)
     except Exception as exc:
         warn("surface modify: timeline names unavailable: %s" % exc)
     try:
@@ -120,7 +120,7 @@ class SurfaceModifyPanel(pickpanel.PickPanel):
     def __init__(self, doc, kind, feature=None, body=None, picks=None):
         self.kind = kind
         self.title = core.TITLES[kind]
-        self.icon = core.TIMELINE_KINDS[kind][1]
+        self.icon = core.DIALOG_ICONS[kind]
         super().__init__(doc, self.title if feature is None else "Edit %s" % self.title)
         SurfaceModifyPanel.last = self
         self.target = feature
