@@ -311,6 +311,15 @@ def manage_ok():
     ps.ok()
 
 
+def shell_followed():
+    v = ps.volume(body())
+    h.check(
+        "the Shell made with the rule's wall follows the edit (24000 - 55*35*7.5)",
+        ps.near(v, 24000 - 55 * 35 * 7.5, 1e-6),
+        v,
+    )
+
+
 def shell_again():
     Gui.Selection.clearSelection()
     h.ribbon("Shell")
@@ -585,6 +594,7 @@ h.run(
         delete_default,
         default_refused,
         manage_ok,
+        shell_followed,
         shell_again,
         shell_follows_rule,
         esc_shell,

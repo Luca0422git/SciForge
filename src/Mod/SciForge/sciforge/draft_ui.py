@@ -1055,6 +1055,7 @@ class DraftPanel(pickpanel.PickPanel):
             if any(m.target is None or _failed(m.target) for m in self.members):
                 self.show_status()
                 return False
+            plastic.remember_links(obj, "draft", self.body)  # SCIFORGE (plastic-1)
             return self.finish_ok()
         except Exception as exc:
             self.say("⚠ %s" % exc)

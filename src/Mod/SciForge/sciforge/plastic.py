@@ -243,6 +243,7 @@ def save_rule(doc, rule):
     rules = [r for r in design_rules(doc) if r["name"] != rule["name"]]
     rules.append(dict(rule))
     obj.RulesJson = json.dumps(rules)
+    _follow_users(doc, rule["name"])
     _touch_users(doc, rule["name"])
     log("plastic rule '%s' saved" % rule["name"])
 
@@ -281,6 +282,7 @@ def assign_rule(doc, name, component=None):
             component.addProperty("App::PropertyString", RULE_PROP, "Plastic", "Plastic rule")
         setattr(component, RULE_PROP, name)
     if name:
+        _follow_users(doc, name)
         _touch_users(doc, name)
 
 
@@ -351,3 +353,105 @@ def apply_defaults(options, body, tool):
     except Exception as exc:
         warn("plastic rule defaults for %s: %s" % (tool, exc))
     return done
+
+
+# -- SOLID steps that follow the rule (plastic-1) --------------------------------------------------
+# Fusion: a Shell / Draft / Rib / Web / thin Extrude made with the rule's value is "linked"
+# to the rule: editing (or reassigning) the rule updates it. The dialog records, at OK,
+# which of the step's values are the rule's (remember_links); save_rule / assign_rule push
+# the new values (follow).
+LINKS_PROP = "SciForgePlasticLinks"
+# tool -> [(feature property, rule field, factor)]
+LINKABLE = {
+    "shell": [
+        ("Value", "thickness", 1.0),
+        ("InsideThickness", "thickness", 1.0),
+        ("OutsideThickness", "thickness", 1.0),
+    ],
+    "draft": [("Angle", "draft_angle", 1.0), ("Angle2", "draft_angle", 1.0)],
+    "rib": [("Thickness", "thickness", 0.6)],
+    "extrude": [("WallThickness", "thickness", 1.0), ("WallThickness2", "thickness", 1.0)],
+}
+
+
+def _value(obj, prop):
+    value = getattr(obj, prop)
+    return float(getattr(value, "Value", value))
+
+
+def _has_formula(obj, prop):
+    try:
+        return any(p == prop for p, _expr in obj.ExpressionEngine)
+    except Exception:
+        return False
+
+
+def remember_links(feature, tool, body=None):
+    """At a dialog's OK: link the step's values that are the rule's to the rule (so a rule
+    edit moves them); a value typed over drops its link. Nothing for a body without a
+    rule. Never raises."""
+    try:
+        if feature is None or tool not in LINKABLE:
+            return {}
+        body = body or bodies.body_of(feature)
+        rule = rule_for_body(body, fallback=False) if body is not None else None
+        links = {}
+        if rule is not None:
+            if tool == "extrude" and not getattr(feature, "Thin", False):
+                return {}
+            for prop, field, factor in LINKABLE[tool]:
+                if prop not in feature.PropertiesList or _has_formula(feature, prop):
+                    continue
+                if abs(_value(feature, prop) - float(rule[field]) * factor) < 1e-4:
+                    links[prop] = [field, factor]
+        if links or LINKS_PROP in feature.PropertiesList:
+            bodies.save_meta(feature, LINKS_PROP, links)
+        return links
+    except Exception as exc:
+        warn("plastic rule links of %s: %s" % (getattr(feature, "Label", "?"), exc))
+        return {}
+
+
+def _bodies_of(doc, component):
+    return components.bodies_in(doc, component, recursive=component is not None)
+
+
+def follow(doc, component, rule):
+    """Push an (evaluated) rule's values into the linked steps of a component's bodies.
+    Returns how many values changed."""
+    changed = 0
+    for body in _bodies_of(doc, component):
+        inner = components.container_of(body)
+        if inner is not component and assigned_rule_name(doc, inner):
+            continue  # a sub-component with its own rule follows that one
+        for feature in getattr(body, "Group", []):
+            links = (
+                bodies.load_meta(feature, LINKS_PROP)
+                if LINKS_PROP in getattr(feature, "PropertiesList", [])
+                else {}
+            )
+            for prop, (field, factor) in links.items():
+                try:
+                    if _has_formula(feature, prop) or field not in rule:
+                        continue
+                    want = round(float(rule[field]) * float(factor), 4)
+                    if abs(_value(feature, prop) - want) > 1e-9:
+                        setattr(feature, prop, want)
+                        changed += 1
+                except Exception as exc:
+                    warn("plastic rule: %s.%s: %s" % (feature.Label, prop, exc))
+    if changed:
+        log("plastic rule: %d linked value(s) followed" % changed)
+    return changed
+
+
+def _follow_users(doc, name):
+    rule = find_rule(doc, name)
+    if rule is None:
+        return
+    try:
+        rule = core.evaluated(rule)
+    except ValueError:
+        return
+    for component in _components_using(doc, name):
+        follow(doc, component, rule)

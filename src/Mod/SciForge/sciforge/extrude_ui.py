@@ -2636,6 +2636,7 @@ class ExtrudePanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
+        plastic.remember_links(feature, "extrude", self.body)  # SCIFORGE (plastic-1)
         # Fusion hides the profile's sketch once the extrude is made (inside this step:
         # Undo shows it again). A sketch shown for the edit is hidden again after the step
         # (_close), not in it.

@@ -523,6 +523,7 @@ class RibPanel(Panel):
             self.message.setText("⚠ " + text)
             return False
         feature = self.target
+        plastic.remember_links(feature, "rib", self.body)  # SCIFORGE (plastic-1)
         rib.hide_sketches(self.refs)
         self._shown = []
         self.cleanup()

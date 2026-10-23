@@ -728,6 +728,7 @@ class ShellPanel(pickpanel.PickPanel):
             if self.members_failed():
                 self.show_status()
                 return False
+            plastic.remember_links(obj, "shell", self.body)  # SCIFORGE (plastic-1)
             return self.finish_ok()
         except Exception as exc:
             self.say("⚠ %s" % exc)
