@@ -95,3 +95,59 @@ rib outer blends, per-rib extents per point, Boss / Rest in Change
 Parameters, Thicken / Emboss defaults, Rib draft, the Shell Sharp half-pipe finding.
 **Merge note**: `ribbon_config.py` conflicts with `sf/plastic-2` at the PLASTIC CREATE items
 (Boss / Snap Fit / Lip / Rest are adjacent lines): keep both sides' lines.
+
+### QA pass (branch `sf/plastic-1-qa`, 2026-10-23)
+
+An independent QA session re-ran every plastic scenario, the unit tests and the golden models
+(all passed as delivered), read the whole diff and walked the paths the builder's scenarios
+did not. What it found and fixed, in plain words for Luca:
+
+- **A 3D-print rule broke Draft.** The FDM PLA / PETG rules have no draft (0 degrees). With
+  one of them assigned, Draft opened at 0 degrees (which Draft refuses), and a Draft made
+  earlier with another rule was quietly set to 0: still "valid", but no longer drafting the
+  face. Now a rule without draft leaves Draft its own angle (`plastic.usable`).
+- **Editing a Boss or a Rest after the rule changed showed old numbers.** The part was built
+  with the new rule (for example a root radius of 1.25 mm) but the edit dialog showed the
+  old 1.0 mm. The edit now shows what the step is built with. A new Boss also showed a root
+  radius clamped to half the wall while it was built with the rule's full radius.
+- **Your library settings no longer change a saved design.** A Boss or Rest in a component
+  without a rule took its sizes from the library's default rule at every recompute, so
+  choosing another default (Set As Default) re-sized them in every such design. They now keep
+  the sizes they were made with until you assign a rule to their component.
+- **Rest now says which rule it uses** ("Plastic rule: ABS 2 mm", or the default rule when
+  none is assigned) and takes the rule of the body it actually builds in.
+- **Boss Major Draft Angle** (Fusion's counterbore wall draft) was missing and not listed as
+  a gap: it is built now (0 by default), with a golden model checked by hand.
+- **Flip with a picked body**: a body picked in a Side box stays on its side of the parting
+  plane when you Flip (it moves to the other box), instead of an error.
+- **Ribs next to a wall no longer refuse the boss.** Switching on the default ribs of a boss
+  10 mm from the case's edge refused the whole boss (FreeCAD's geometry kernel cannot round
+  the foot of a rib that stops 0.25 mm short of a wall). The boss is now built, those few rib
+  ends are left square, and the dialog says so and how to round them.
+- **Hex screw heads fit their counterbore.** A Hex or Hex Washer head was sized across its
+  flats, so its corners stuck 0.2 mm into the counterbore wall (the screw collided with the
+  lid). It is sized across its corners now. A Flat (countersunk) head needs a countersink:
+  on a counterbore it sank into the part, so the dialog now says to pick Countersink.
+- **A lid in its own component with its own rule**: each side of the boss already used the
+  rule of the body it joins, but the dialog showed one rule's numbers for both sides. It now
+  shows each side's own values and names both rules.
+- **Rule messages** now use the names you see in the dialog ("Nominal Radius: ..." rather
+  than "nominal_radius: ..."); a Thickness typed as "Thickness / 2" explains that it cannot
+  use itself; a new rule switched to inches converts its numbers (2 mm becomes 0.0787 in);
+  Assign says when the design's own copy of a library rule is the one used.
+
+New tests: scenarios `plastic_qa_rules` and `plastic_qa_tools` (an empty design,
+reassigning a rule and Ctrl+Z / Ctrl+Y, Esc in Manage after a followed edit, renaming a rule,
+the zero-draft rule, the browser row's menu, Boss on a face then Esc, the Boss's and the
+Rest's arrows dragged, a drafted Rest then Esc, the library default changed under a rest, a
+boss edited after save and reopen, a rule assigned after reopen, Flip with a picked body, the
+inch rule, a lid in its own component with its own rule, the default ribs by a wall, a Flat
+fastener head refused), golden `plastic_boss_major_draft` and `plastic_rest_cut` (the Rest's
+cut-only case, also probed on a shelled pipe crossing the plane: exact), four unit tests (25
+in all). Probes (not committed) of 12 Boss option sets, the fastener heads and a turned
+enclosure build valid solids, except Constant Thickness with the default alignment step:
+refused, the dialog now saying what to change (a smaller Alignment Diameter, or Step Type
+None). Gaps found but not fixed are in the parity doc's Known gaps (rules of nested
+components). Shared test file touched: `SciForgeTests/gui/harness.py` (one
+try block in `prepare()` resetting the plastic library settings, beside the other settings
+resets).

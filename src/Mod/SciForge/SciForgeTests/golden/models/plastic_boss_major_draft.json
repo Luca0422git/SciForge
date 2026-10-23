@@ -1,0 +1,137 @@
+{
+  "id": "plastic_boss_major_draft",
+  "title": "Boss: the head side's counterbore drafted 5 deg (Major Draft Angle), widening to the outside",
+  "tags": [
+    "plastic",
+    "boss"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "shell",
+      "id": "sh2",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          -1
+        ]
+      },
+      "thickness": 2,
+      "direction": "inside"
+    },
+    {
+      "op": "sf_boss",
+      "id": "b1",
+      "plane": "XY",
+      "offset": 20,
+      "points": [
+        [
+          10,
+          10
+        ],
+        [
+          50,
+          30
+        ]
+      ],
+      "side1": {
+        "draft": 0,
+        "step_draft": 0,
+        "root_radius": 0,
+        "major_draft": 5
+      },
+      "side2": {
+        "draft": 0,
+        "step_draft": 0,
+        "root_radius": 0
+      },
+      "comment": "as plastic_boss_enclosure, the counterbore wall drafted 5 deg"
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e1": {
+          "volume": 13197.936411,
+          "solids": 1
+        },
+        "e2": {
+          "volume": 8360.911962,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 8360.911962,
+    "solids": 1,
+    "bbox": [
+      0,
+      0,
+      20,
+      60,
+      40,
+      30
+    ],
+    "source": "analytic",
+    "note": "plastic_boss_enclosure's lid (8481.881309) with each counterbore a frustum instead of a cylinder: r 3.25 at its floor (z 22.05) widening by tan 5 deg to r 3.25 + 7.95 tan 5 = 3.945535 at the outside (z 30): pi 7.95 / 3 (3.25^2 + 3.25 r2 + r2^2) - pi 3.25^2 7.95 = 60.484674 more cut per point, two points: 8481.881309 - 120.969347 = 8360.911962. The enclosure (thread side) is unchanged (13197.936411)."
+  }
+}

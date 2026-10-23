@@ -269,12 +269,17 @@ def options_of(obj):
 
 
 def resolved(obj, body=None):
+    """The rest's options, the values linked to the rule read from the body's rule now (a
+    body without a rule keeps the values the rest was made with: a design never changes with
+    the user's library settings)."""
     options = options_of(obj)
     if any((options.get("links") or {}).values()):
         try:
             from . import plastic
 
-            options = apply_rule(options, plastic.rule_for_body(body or curves.owner_body(obj)))
+            rule = plastic.rule_for_body(body or curves.owner_body(obj), fallback=False)
+            if rule is not None:
+                options = apply_rule(options, rule)
         except Exception as exc:
             warn("rest: the plastic rule could not be read: %s" % exc)
     return options

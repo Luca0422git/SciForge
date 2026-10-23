@@ -658,6 +658,12 @@ def run(name, steps, check_errors_each_step=True, start_ms=2500):
             home_notices_ui.reset_for_tests(True)
         except Exception as exc:
             print("[SciForge] welcome line reset failed: %s" % exc, flush=True)
+        try:  # the user's plastic library and default rule (they size new plastic features)
+            from sciforge import plastic
+
+            plastic.reset_for_tests()
+        except Exception as exc:
+            print("[SciForge] plastic library reset failed: %s" % exc, flush=True)
         _tap = _ConsoleTap()
         new_errors()  # start-up messages are not the scenario's
 

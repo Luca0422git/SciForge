@@ -92,6 +92,15 @@ class LibraryTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             core.evaluated(core.make_rule("X", thickness="9"))
 
+    def test_refusals_name_the_fields_as_the_dialog_does(self):
+        # QA: the messages said "nominal_radius: ..." (the internal key)
+        bad = core.make_rule("X", nominal_radius="abc")
+        self.assertTrue(core.validate(bad)[0].startswith("Nominal Radius:"), core.validate(bad))
+        bad = core.make_rule("X", clearance="-1")
+        self.assertEqual(core.validate(bad), ["Clearance cannot be negative"])
+        bad = core.make_rule("X", thickness="Thickness / 2")
+        self.assertIn("cannot use Thickness", core.validate(bad)[0])
+
     def test_describe_lists_every_value_with_units(self):
         rows = dict(core.describe(core.library_rule("PC 2 mm")))
         self.assertEqual(rows["Thickness"], "2.0 mm")
@@ -144,6 +153,17 @@ class BossSettingsTest(unittest.TestCase):
         self.assertAlmostEqual(out["side1"]["root_radius"], 1.5)  # nominal radius
         self.assertAlmostEqual(o["side1"]["draft"], 1.0)  # a copy: the input is kept
 
+    def test_new_boss_shows_what_the_rule_link_builds(self):
+        # QA: a rule whose nominal radius is more than half its wall: the new dialog's root
+        # radius was clamped to T / 2 while the step was built with the rule's radius
+        pc = core.evaluated(core.make_rule("R", thickness="2", nominal_radius="1.6"))
+        o = boss.default_options(pc, 3.0)
+        built = boss.apply_rule(o, pc)
+        for side in ("side1", "side2"):
+            for key in boss.RULE_LINKS:
+                self.assertAlmostEqual(o[side][key], built[side][key], msg=key)
+        self.assertAlmostEqual(o["side1"]["root_radius"], 1.6)
+
     def test_constant_thickness_diameter(self):
         s = dict(boss.side_defaults(2, rule()), shape="constant_thickness")
         self.assertAlmostEqual(boss.outer_diameter(s), 2.4 + 2 * 1.2)
@@ -155,6 +175,26 @@ class BossSettingsTest(unittest.TestCase):
             boss.check_options(o)
         return str(ctx.exception)
 
+    def test_flat_head_needs_a_countersink(self):
+        o = boss.default_options(rule(), 3.0)  # Side 1: a counterbore
+        o["fastener"] = {"create": True, "head": "flat", "length": 0}
+        with self.assertRaises(boss.BossError) as ctx:
+            boss.check_options(o)
+        self.assertIn("needs a countersink", str(ctx.exception))
+        o["side1"]["hole"] = "countersink"
+        o["side1"]["major_diameter"] = 6.0
+        boss.check_options(o)
+
+    def test_major_draft(self):
+        # Fusion's Major Draft Angle (the counterbore wall), added by the QA pass: 0 by
+        # default, 0-30 degrees, and a boss saved before it existed reads as 0
+        o = boss.default_options(rule(), 3.0)
+        self.assertEqual(o["side1"]["major_draft"], 0.0)
+        self.assertIn("0-30 degrees", self.refused(1, major_draft=35))
+        old = boss.default_options(rule(), 3.0)
+        del old["side1"]["major_draft"]
+        self.assertEqual(boss.check_options(old)["side1"]["major_draft"], 0.0)
+
     def test_refusals(self):
         self.assertIn("smaller than the outer diameter", self.refused(1, hole_diameter=20))
         self.assertIn("larger than the hole", self.refused(1, major_diameter=3.0))
@@ -164,6 +204,10 @@ class BossSettingsTest(unittest.TestCase):
         self.assertIn("unknown shape", self.refused(1, shape="square"))
         self.assertIn("recess must be narrower", self.refused(1, step_diameter=12))
         self.assertIn("spigot must be wider", self.refused(2, step_diameter=2.0))
+        # QA: Constant Thickness with the default recess says what to change
+        text = self.refused(1, shape="constant_thickness")
+        self.assertIn("narrower than the boss", text)
+        self.assertIn("Step Type to None", text)
         self.assertIn("countersink angle", self.refused(1, hole="countersink", countersink_angle=5))
         self.assertIn("cannot be negative", self.refused(2, clearance=-1))
 

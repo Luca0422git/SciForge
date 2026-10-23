@@ -51,6 +51,7 @@ SIDE_FIELDS = [
     ("hole_depth", "Hole Depth", "mm"),
     ("major_diameter", "Major Diameter", "mm"),
     ("major_depth", "Major Depth", "mm"),
+    ("major_draft", "Major Draft Angle", "deg"),
     ("countersink_angle", "Countersink Angle", "deg"),
     ("step_diameter", "Alignment Diameter", "mm"),
     ("step_depth", "Alignment Depth", "mm"),
@@ -127,11 +128,22 @@ class BossPanel(Panel):
         if feature is not None:
             try:
                 self.refs, options, self.participants, self.steps = pb.read(feature)
+                # the values still linked to the rule show what the boss is built with now
+                # (the rule may have changed since the boss was made); without a rule the
+                # stored values are what it is built with
                 self.options = options or self.options
+                assigned = plastic.rule_for_body(self.body, fallback=False)
+                if options and assigned is not None:
+                    self.options = pb.apply_rule(options, assigned)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self._build_form()
         self._show_options()
+        if feature is not None:
+            try:  # each side's linked values from its own body's rule
+                self._follow_side_rules()
+            except Exception as exc:
+                warn("boss rule values: %s" % exc)
         self._watch()
         if feature is not None:
             self._refresh_picks()
@@ -369,15 +381,51 @@ class BossPanel(Panel):
     def _rib_side(self):
         return int(self.rib_side.currentData() or 1)
 
+    def _rule_name(self, body):
+        name = plastic.assigned_rule_name(
+            self.doc, plastic.components.container_of(body) if body is not None else None
+        )
+        return name or ("%s (default; no rule assigned)" % plastic.default_rule_name())
+
+    def _side_body(self, side):
+        return (self.participants or {}).get(self._toward(side))
+
     def _show_rule(self):
+        """The plastic rule the linked values come from: each side's body's (QA: the enclosure
+        and its lid may be components with different rules)."""
         try:
-            name = plastic.assigned_rule_name(
-                self.doc, plastic.components.container_of(self.body) if self.body else None
-            )
-            rule = name or ("%s (default; no rule assigned)" % plastic.default_rule_name())
-            self.rule_label.setText("Plastic rule: %s" % rule)
+            names = {}
+            for side in (1, 2):
+                body = self._side_body(side)
+                if body is not None:
+                    names[side] = self._rule_name(body)
+            if len(set(names.values())) > 1:
+                text = "; ".join("Side %d: %s" % (side, names[side]) for side in sorted(names))
+            else:
+                text = list(names.values())[0] if names else self._rule_name(self.body)
+            self.rule_label.setText("Plastic rule: %s" % text)
         except Exception:
             self.rule_label.setText("")
+
+    def _follow_side_rules(self):
+        """Each side is built with the rule of the body it joins (plastic_boss.compute): its
+        values still linked to the rule are shown from that rule."""
+        changed = False
+        for side in (1, 2):
+            body = self._side_body(side)
+            rule = plastic.rule_for_body(body, fallback=False) if body is not None else None
+            if rule is None:
+                continue  # no rule: built with the values shown (plastic_boss.resolved_options)
+            fresh = pb.apply_rule(self.options, rule)["side%d" % side]
+            s = self.options["side%d" % side]
+            for key in pb.RULE_LINKS:
+                if key in fresh and fresh[key] != s.get(key):
+                    s[key] = fresh[key]
+                    changed = True
+        if changed:
+            self._show_options()
+        else:
+            self._show_rule()
 
     def _update_visibility(self):
         for side in (1, 2):
@@ -393,6 +441,7 @@ class BossPanel(Panel):
                 "hole_depth": hole and side == 2 and s["extent"] != "through",
                 "major_diameter": hole and s["hole"] != "simple",
                 "major_depth": hole and s["hole"] == "counterbore",
+                "major_draft": hole and s["hole"] == "counterbore",
                 "countersink_angle": hole and s["hole"] == "countersink",
                 "step_diameter": s["step"] != "none",
                 "step_depth": s["step"] != "none",
@@ -530,6 +579,15 @@ class BossPanel(Panel):
         if self._quiet:
             return
         self.options["flip"] = bool(self.flip.isChecked())
+        # a picked body stays on its side of the parting plane: Flip swaps which side it is
+        # (head / thread), as Fusion's participant bodies keep their places (QA)
+        picked = dict(self.picked_bodies)
+        self.picked_bodies = {}
+        for side, body in picked.items():
+            self.picked_bodies[3 - side] = body
+        for side in (1, 2):
+            body = self.picked_bodies.get(side)
+            self.body_fields[side].set_text(body.Label if body is not None else "")
         self._changed(arrow=True)
 
     def _changed(self, arrow=False):
@@ -762,6 +820,10 @@ class BossPanel(Panel):
                 self.participants[1 if step.Toward >= 0 else -1] = pb.bodies.body_of(step)
             self.error = ""
             self._show_bodies()
+            try:
+                self._follow_side_rules()
+            except Exception as exc:
+                warn("boss rule values: %s" % exc)
         except pb.BossError as exc:
             self.error = str(exc)
         except Exception as exc:
@@ -791,7 +853,9 @@ class BossPanel(Panel):
             if text:
                 self.message.setText("⚠ " + text)
                 return
-        self.message.setText("")
+        # built, with something done differently from what was asked (rib ends left square)
+        notes = [n for step in self.steps for n in pb.notes_of(step)]
+        self.message.setText("\n".join(notes))
 
     # -- the offset arrow --------------------------------------------------------------------------
     def _remove_arrow(self):

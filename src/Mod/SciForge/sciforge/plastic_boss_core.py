@@ -24,6 +24,7 @@ SIDE_NUMBERS = (
     "hole_depth",
     "major_diameter",
     "major_depth",
+    "major_draft",
     "countersink_angle",
     "step_diameter",
     "step_depth",
@@ -89,10 +90,14 @@ def side_defaults(side, rule, screw=3.0):
         "wall": _r(0.6 * t),
         "draft": float(rule["draft_angle"]),
         "hole_draft": 0.0,
+        # the counterbore wall's draft (Fusion's Major Draft Angle); 0: a plain counterbore
+        # the screw head fits (G: SciForge does not link it to the rule's draft)
+        "major_draft": 0.0,
         "countersink_angle": 90.0,
         "step_draft": float(rule["draft_angle"]),
         "clearance": _r(c / 2.0, 3),
-        "root_radius": _r(min(float(rule["nominal_radius"]), 0.5 * t)),
+        # the rule's Nominal Radius, as the rule link (RULE_LINKS) sets it at every recompute
+        "root_radius": _r(float(rule["nominal_radius"]), 3),
         "tip_radius": 0.0,
         "hole_start_radius": 0.0,
         "hole_end_radius": 0.0,
@@ -197,6 +202,17 @@ def check_options(options):
         raise BossError("Fastener: the length cannot be negative (0 = auto).")
     if fastener["create"] and options["side1"]["shape"] == "blank":
         raise BossError("Fastener: Side 1 is blank (no hole), there is no screw to place.")
+    if (
+        fastener["create"]
+        and fastener["head"] == "flat"
+        and options["side1"].get("hole") != "countersink"
+    ):
+        # (QA: a countersunk head on a counterbore's floor or the outside face sank its cone
+        # into the part: the screw collided with it)
+        raise BossError(
+            "Fastener: a Flat (countersunk) head needs a countersink: set Side 1's Hole Type "
+            "to Countersink, or pick another head type."
+        )
     options["fastener"] = fastener
     for side in (1, 2):
         s = options["side%d" % side]
@@ -210,6 +226,7 @@ def check_options(options):
             "step_root_radius",
             "major_tip_radius",
             "major_root_radius",
+            "major_draft",  # (added by the QA pass: bosses saved before have none)
         ):
             s.setdefault(key, 0.0)
         for key in SIDE_NUMBERS:
@@ -248,12 +265,23 @@ def check_options(options):
         if s["step"] != "none" and (s["step_diameter"] <= TOL or s["step_depth"] <= TOL):
             raise BossError("%s: the alignment step needs a diameter and a depth." % name)
         if s["step"] == "in" and s["step_diameter"] >= od - TOL:
-            raise BossError("%s: the alignment recess must be narrower than the boss." % name)
+            raise BossError(
+                "%s: the alignment recess must be narrower than the boss (%.2f mm across, the "
+                "boss %.2f mm): make the Alignment Diameter smaller or set the Step Type to None."
+                % (name, s["step_diameter"], od)
+            )
         if s["step"] == "in" and hole and s["step_diameter"] <= s["hole_diameter"] + TOL:
             raise BossError("%s: the alignment recess must be wider than the hole." % name)
         if s["step"] == "out" and hole and s["step_diameter"] <= s["hole_diameter"] + TOL:
             raise BossError("%s: the alignment spigot must be wider than the hole." % name)
-        for key in ("draft", "hole_draft", "rib_draft", "rib_outer_draft", "step_draft"):
+        for key in (
+            "draft",
+            "hole_draft",
+            "major_draft",
+            "rib_draft",
+            "rib_outer_draft",
+            "step_draft",
+        ):
             if not 0.0 <= s[key] < 30.0:
                 raise BossError("%s: draft angles must be 0-30 degrees." % name)
         for key in (
