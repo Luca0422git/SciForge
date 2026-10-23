@@ -132,7 +132,8 @@ Results and check counts: `docs/sciforge/sessions/surface-4.md`.
     back, one Ctrl+Z then removes the fillet); Q on a floor with a rounded corner (the
     fillet grows with the walls); a Press Pull edit and a Delete Face edit cancelled with
     Esc; the Fillet deleted in the timeline while a Press Pull and a Delete Face come after
-    it (both keep working on the same faces); Merge; save, close, reopen, edit again.
+    it (both keep working on the same faces); Suppress / Unsuppress Features on the Press
+    Pull (the body is not blank); Merge; save, close, reopen, edit again.
   - `surface4_qa_reopen` (QA): Mirror Join with Stitch Tolerance 0.5 and Split Body by a
     surface, a Split Body edit (Extend off) cancelled with Esc, save, close, reopen: still
     stitched with 0.5, the pieces kept; the Mirror edits with Join and 0.5 read back.
@@ -179,6 +180,11 @@ Results and check counts: `docs/sciforge/sessions/surface-4.md`.
   Scale does on solids: the two floor halves of a mirrored and stitched box become one face).
   Fusion's Scale keeps every face; a face split on purpose (Split Face) is joined again by a
   Scale after it. Left as built (the solid Scale behaves the same; G).
+- **Suppressing a surface step that is not surface-4's** (surface.py: Extrude, Patch,
+  Stitch...) still leaves it empty (FreeCAD passes a suppressed step's base through as a
+  solid): the body after it is built on the step before it, but a suppressed surface Stitch
+  that is the body's last step shows nothing. The fix belongs in surface.py (as
+  `SurfaceModifyFeature.onChanged` does) or in the timeline's Suppress.
 - **Surface Fillet / Chamfer take edges only**: Fusion's selection also takes a face (all
   its edges). A face of a surface body selected before F opens the dialog on that body with
   nothing picked: click the edges.
@@ -198,6 +204,13 @@ Found and fixed:
   somewhere else is replaced by the face that is where it was (`surfmod._names_on`,
   `refound_picks`, `_checked`). The edit dialog reads the picks the same way. Files saved
   before have no memory: they behave as before until their first recompute.
+- **Suppress Features on a surface step blanked the body.** FreeCAD's PartDesign passes a
+  suppressed step's base through as a solid; a surface body's shell came out empty, so the
+  body showed nothing and the steps after it went red. A suppressed surface-4 step now shows
+  the surface before it (`SurfaceModifyFeature.onChanged`), and a surface-4 step after a
+  suppressed step that came out empty builds on the first step before it that holds the
+  surface (`surfmod.effective_base`). Still open (not surface-4's files): the other surface
+  steps (surface.py's Extrude, Patch, Stitch...) come out empty the same way when suppressed.
 - Press Pull of a wall next to a fillet (a flat face with an open edge and a tangent
   neighbour) was refused with "the faces next to it meet it at an angle": it now gives the
   real reason (a face next to it meets it smoothly).

@@ -125,6 +125,11 @@ Fixed (details in the parity doc's "QA pass"):
   instead of the right one. Each surface-4 step now remembers a point inside each pick
   (hidden `SciForgePickPoints`, flag NoRecompute so writing it in `execute` touches nothing)
   and finds its picks again by it (`surfmod._names_on`, `refound_picks`, `_checked`).
+- Suppress Features on a surface-4 step blanked the body (FreeCAD's PartDesign passes a
+  suppressed step's base through as a solid: a shell comes out empty) and turned the steps
+  after it red. `SurfaceModifyFeature.onChanged` puts the surface before it back when FreeCAD
+  empties a suppressed step; `surfmod.effective_base` skips a suppressed empty step. The
+  other surface steps (surface.py) still come out empty when suppressed: for surface-3.
 - Press Pull of a wall next to a fillet now says the real reason (a tangent neighbour).
 - F with a face of a surface body selected opened the dialog on another surface body.
 - The surface dialog could leave its new step behind in the first body when the user
@@ -133,10 +138,12 @@ Fixed (details in the parity doc's "QA pass"):
 FreeCAD facts: a PropertyLinkSub to a deleted step is emptied by FreeCAD (delete.py re-links
 it first only when the element is unchanged in the step before); a property added with
 attribute 4 | 16 (Hidden | NoRecompute) can be written in `execute` without leaving the
-document touched.
+document touched; PartDesign's Suppressed on a PartDesign::FeaturePython never calls its
+`execute`: it sets the Shape to the base's solid (empty for a shell) and calls `onChanged`.
 
 New scenarios: `surface4_qa` (empty design; edits cancelled with Esc for Fillet, Press Pull,
 Delete Face; one Ctrl+Z after a cancelled edit; Press Pull of a floor with a rounded corner;
-the Fillet deleted in the timeline under a Press Pull and a Delete Face; Merge; save,
+the Fillet deleted in the timeline under a Press Pull and a Delete Face; Suppress and
+Unsuppress Features on the Press Pull; Merge; save,
 close, reopen, edit) and `surface4_qa_reopen` (Mirror Join with Stitch Tolerance 0.5 and
 Split Body by a surface across a save and a reopen; a Split Body edit cancelled with Esc).

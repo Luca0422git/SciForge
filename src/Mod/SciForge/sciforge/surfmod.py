@@ -1522,14 +1522,29 @@ def _checked(obj, shape, names):
     for name, (kind, point) in zip(names, rows):
         try:
             elem = shape.getElement(name)
-            if elem.ShapeType == kind and elem.distToShape(point)[0] < 1e-6:
-                out.append(name)
+            if elem.ShapeType == kind and (
+                elem.distToShape(point)[0] < 1e-6 or _on_its_surface(elem, point.Point)
+            ):
+                out.append(name)  # where it was, or the same surface grown / cut back
                 continue
         except Exception:
             pass
         other = _element_at(shape, kind, point)
         out.append(other if other and other not in out else name)
     return out
+
+
+def _on_its_surface(elem, point):
+    """True when `point` lies on the surface (curve) the face (edge) is a piece of: the pick
+    is that piece still, only bigger or smaller (Split Face moved, a Press Pull edited)."""
+    try:
+        if elem.ShapeType == "Face":
+            u, v = elem.Surface.parameter(point)
+            return (elem.Surface.value(u, v) - point).Length < 1e-6
+        t = elem.Curve.parameter(point)
+        return (elem.Curve.value(t) - point).Length < 1e-6
+    except Exception:
+        return False
 
 
 def _names_on(obj, base_shape):
