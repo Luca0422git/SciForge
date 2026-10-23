@@ -81,13 +81,15 @@ def make_rule(name, **values):
 # The rule library shipped with SciForge (Fusion ships a similar one: steel, stainless steel,
 # aluminum and copper in mm and in; K-factor 0.44 everywhere, bend radius = thickness).
 # The first rule is the default of a new design.
+# Thicknesses: SciForge's own starting values (fusion-sheet-metal.md 3.2, marked G there:
+# Fusion's exact library could not be read); K 0.44 and bend radius = Thickness are Fusion's.
 LIBRARY = (
     make_rule("Steel (mm)", thickness="1.0"),
     make_rule("Steel (in)", units="in", thickness="0.06"),
     make_rule("Stainless Steel (mm)", thickness="1.0"),
-    make_rule("Stainless Steel (in)", units="in", thickness="0.06"),
-    make_rule("Aluminum (mm)", thickness="2.0"),
-    make_rule("Aluminum (in)", units="in", thickness="0.08"),
+    make_rule("Stainless Steel (in)", units="in", thickness="0.048"),
+    make_rule("Aluminum (mm)", thickness="1.5"),
+    make_rule("Aluminum (in)", units="in", thickness="0.063"),
     make_rule("Copper (mm)", thickness="1.0"),
     make_rule("Copper (in)", units="in", thickness="0.04"),
 )
@@ -100,6 +102,56 @@ def library_rule(name):
         if rule["name"] == name:
             return dict(rule)
     return None
+
+
+def unique_name(name, taken):
+    """`name`, or "name 2", "name 3"... the first one not in `taken` (Fusion: a rule's name is
+    unique within its list)."""
+    taken = set(taken)
+    if name not in taken:
+        return name
+    n = 2
+    while "%s %d" % (name, n) in taken:
+        n += 1
+    return "%s %d" % (name, n)
+
+
+def check_name(name, taken, old=None):
+    """'' when `name` can be a rule's name in a list holding `taken` (old: the rule's current
+    name, which it may keep), else the reason."""
+    name = (name or "").strip()
+    if not name:
+        return "A rule needs a name."
+    if name != old and name in set(taken):
+        return "There is already a rule named '%s': names are unique in a list." % name
+    return ""
+
+
+def display_value(rule, key):
+    """A rule field as the dialog shows it: the expression text, with the rule's units for a
+    plain-number length ("1.0 mm", "Thickness * 2")."""
+    text = str(rule.get(key, FIELDS[key][1]))
+    if FIELDS[key][0] == "length":
+        try:
+            float(text)
+            return "%s %s" % (text, rule.get("units", "mm"))
+        except ValueError:
+            return text
+    return text
+
+
+def parse_length(text, units):
+    """What a user typed in a rule's length field, as stored: an expression stays as typed;
+    a number may carry the rule's units ("1.5 mm"), other units are refused."""
+    text = (text or "").strip()
+    for unit in UNITS:
+        if text.endswith(unit):
+            if unit != units:
+                raise ValueError("this rule is in %s (units are fixed when a rule is made)" % units)
+            text = text[: -len(unit)].strip()
+            break
+    evaluate_expression(text, 1.0)  # raises ValueError with a reason
+    return text
 
 
 # -- expressions -------------------------------------------------------------------------------
