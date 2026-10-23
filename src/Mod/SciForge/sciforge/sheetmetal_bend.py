@@ -468,10 +468,10 @@ def _partial_zone(
     width = float(relief.get("width") or thickness)
     depth = float(relief.get("depth") or 0.0)
     if shape == "tear":
-        raise SheetMetalError(
-            "The rule's bend relief is Tear, which SciForge cannot cut yet: set the rule's "
-            "Bend Relief Shape to Straight or Round, or bend right across the sheet."
-        )
+        # Tear removes nothing: the sheet is split along the bend's end. One solid cannot hold
+        # two faces touching (a fuse would glue them back), so the split is a hairline slot,
+        # the same 0.01 mm as the Flat hem's, across the bend zone only
+        shape, width, depth = "straight", core.FLAT_GAP, 0.0
     if width <= 0:
         raise SheetMetalError("The rule's bend relief width must be more than 0.")
     slots = []

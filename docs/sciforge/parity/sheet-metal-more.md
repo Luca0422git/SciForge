@@ -36,10 +36,10 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Angle (default 90°) | Same, with a round angle handle on the bend and its value box | A[R31], G (default) |
 | Flip (bend up or down) | Same: up turns toward the stationary face's outside, Flip turns the other way | A[R47], G |
 | The body is reshaped, no material added | Same: the sheet beyond the zone moves back by BA and swings round the bend's axis; the zone is laid onto the bend's cylinders | A[R11] |
-| With Center the bend runs across the whole body | Same: every bend crosses the whole sheet (the line is extended) | F[F3] |
+| With Center the bend runs across the whole body | Same: the line is extended across the sheet. Where the sheet beyond the bend is narrower than the sheet the line crosses (a tab), only that width bends and the rest of the zone stays | F[F3], A[R31] (bend relief at the bend's ends) |
 | Holes or cut-outs in the bend zone | They come through bent: the zone's outline is mapped onto the cylinders (a straight line in the flat zone is a straight line in the cylinder's angle / height parameters) | G (geometry) |
 | Bend Radius from the rule | Same, with an Override Bend Radius row (G: Fusion's API shows no radius) | F[F5], G |
-| Bend Relief / Corner Relief checkboxes | Shown and stored; see Known gaps (a bend across the whole sheet needs no relief; crossing lines are refused) | A[R31] |
+| Bend Relief (per line) / Corner Relief checkboxes | Bend Relief (default on): where a bend ends beside sheet that stays (a tab), the rule's bend relief is cut into that sheet at both ends: a slot of the rule's Relief Width from the rule's Relief Depth below the zone to its far side, Straight or Round-ended (research 4.5), or the rule's Tear: a split along the bend's end, cut as a 0.01 mm hairline across the zone (one solid cannot hold two faces touching); off on a tab is refused with the reason. Corner Relief is stored (crossing lines are refused, Known gaps) | A[R31], A[R1], research 4.5 |
 | A zone that is not flat sheet | Refused: "The bend zone crosses something that is not flat sheet ... Move the bend line onto a flat part of the sheet." | G |
 | Timeline Bend<n>, the sketch consumed | "Bend 1"; the bend lines' sketch is hidden | G |
 
@@ -77,9 +77,9 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 | Gap (rule's Miter/Rip/Seam gap by default) | Rule Gap on by default, or your own Gap | A[R39] |
 | Overlap 0..1, Flip Overlap | Same | A[R39] |
 | Extend Aligned (default on) | On: each end is taken in line with its flange; off: square toward the other flange (the same on a 90° corner) | A[R39] |
-| Bend Transition Smooth / Straight Line / Trim To Bend | The row is shown; Trim To Bend is built, the other two are greyed with the reason | A[R39] |
-| Relief Placement Tangent / Intersection / Vertex | The row is shown for Round / Square; Intersection is built, the other two are greyed | A[R39] |
-| Relief shapes, Bend Transition | Trim To Bend (the bends end where they are, the corner stays open under the closed walls); Round (Size = diameter) and Square (Size = side), the rule's 2-bend size or your own, Placement Intersection: the closed part is laid flat with sm-flat's unfolder, the shape cut where the two bends' centre lines cross, and the cut folded back onto bends and walls (sm-flat's refold). With Overlap a relief is refused (the overlapped corner lies over itself when laid flat) | A[R39], A[R22], A[R1] |
+| Bend Transition Smooth / Straight Line / Trim To Bend | The row is shown; Trim To Bend is built (the bends meet the relief as cut), the other two are greyed with the reason | A[R39] |
+| Relief Placement Tangent / Intersection / Vertex | All three, shown for Round / Square, default Intersection (the rule's default; Fusion's API default is Tangent). Intersection: centred where the two bends' centre lines cross; Vertex: centred where both bends start on the flat side (the inner corner); Tangent: a Round whose edge touches the far side of both bend zones, so it clears their whole crossing (a Square is refused with the reason, research 4.6) | A[R39], A[R1], G (Vertex, and which side Tangent touches) |
+| Relief Shape Round / Square / Tear / Trim To Bend / Linear Weld / Arc Weld / Laser Weld | Round, Square, Tear, Trim To Bend (default). Tear: no cut, the bends are carried to the mitre with the walls, the Gap between them. Trim To Bend: whatever lies inside both bend zones is cut away, so each bend stops where the other one starts and the corner stays open under the closed walls (in the flat state: the patch between both bends' start and end lines; works with Overlap too). Round (Size = diameter) and Square (Size = side), the rule's 2-bend size or your own: the closed part is laid flat with sm-flat's unfolder, the shape cut at its placement, and the cut folded back onto bends and walls (sm-flat's refold). The result must still lay flat, else it is refused saying to try another placement or size (so is a cut that would split the body). With Overlap a Round or Square relief is refused (the overlapped corner lies over itself when laid flat). The weld shapes are not built | A[R39], A[R22], A[R1], research 4.6 |
 
 ### Lofted Flange (Fusion: the Lofted type of the Flange dialog)
 
@@ -107,14 +107,15 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 
 | Kind | What | Result (2026-10-23) |
 |---|---|---|
-| Unit | `SciForgeTests/unit/test_sheetmetal_bend_core.py`: bend zones (research 4.2 worked example), strips, every hem type and its refusals, the open / teardrop / rope geometry, the join fillet, closure reaches, facet counts, the transition triangulation (corner fans), the thickness-edge test | 24 tests pass |
-| Golden | 26 models `sheetmetal_smm_*.json`: a bend on a plate that has an edge flange; a hem on a bent wall; save + reopen of a hemmed, filleted, bent plate then an edit; a hem on an edge flange; bend centre / two lines / flip-start-45 edited to 60 / hole in the zone; the six hem types, two mitred hems, a hem edited to Rolled; join by bend; corner closure symmetric, overlap, Extend Aligned off, on an already mitred corner and with a Round relief; lofted brake, die (edited to Face Number 4) and joined to a plate; fillet + chamfer. Analytic volumes where the shape allows (bends, hems, join, fillet); FreeCAD 1.1.4 baselines for the rest | all pass |
+| Unit | `SciForgeTests/unit/test_sheetmetal_bend_core.py`: bend zones (research 4.2 worked example), strips, every hem type and its refusals, the open / teardrop / rope geometry, the join fillet, closure reaches, the corner relief placements (Intersection / Vertex / Tangent) and their refusals, facet counts, the transition triangulation (corner fans), the thickness-edge test | 26 tests pass |
+| Golden | 31 models `sheetmetal_smm_*.json`: a bend on a plate that has an edge flange; a hem on a bent wall; save + reopen of a hemmed, filleted, bent plate then an edit; a hem on an edge flange; bend centre / two lines / flip-start-45 edited to 60 / hole in the zone / a tab bent on a line across its root (Center, and End on a short line: reliefs cut); the six hem types, two mitred hems, a hem edited to Rolled; join by bend; corner closure symmetric (Trim To Bend), Tear, overlap, Extend Aligned off, on an already mitred corner, with a Round relief, a Round at the Tangent placement and a Square at the Vertex placement (on the mitred corner); lofted brake, die (edited to Face Number 4) and joined to a plate; fillet + chamfer. Analytic volumes where the shape allows (bends, tabs with reliefs, hems, join, fillet); FreeCAD 1.1.4 baselines for the rest | all pass |
 | Cross-check with sm-flat's unfolder | `sheetmetal_unfold.unfold` (branch `sf/sm-flat`, read-only copy) run on this branch's shapes: a 90° bend, a 45° flipped Start bend, the U (two lines) and a bend with a hole in its zone all lay flat to exactly the 100 x 40 plate they were bent from (volume 4000.0000, holed 3999.2148 = less the hole); the six hems, the join and a filleted plate unfold too (flat lengths = cut-back sheet + neutral-layer length of the strip) | all unfold |
 | Scenario `smmore_bend` | ribbon Bend, waits; stationary face; line; 90° preview (hand-worked volume); type 45; Start; Flip; OK; Bend 1; Ctrl+Z / Ctrl+Y; edit from the timeline back to 90 Center; a line past the sheet refused (OK waits); Esc; save, close, reopen | PASS, 44 checks |
-| Scenario `smmore_bend_two` | Bend in an empty design (no dialog, no error); a plate in a moved component; the face, then two lines: a U; Values For Line 2 at 45 (Line 1 keeps 90; All lines shows the common value); Bend Radius override 2; OK | PASS, 17 checks |
+| Scenario `smmore_bend_two` | Bend in an empty design (no dialog, no error); a plate in a moved component; the face, then two lines: a U; Values For Line 2 at 45 (Line 1 keeps 90; All lines shows the common value); Bend Radius override 2; OK | PASS, 18 checks |
+| Scenario `smmore_bend_tab` | a plate with a 20 mm tab, a line across its root; ribbon Bend; face, line: only the tab bends, round reliefs beside it (hand-worked volume, points in the plate and in a slot); Bend Relief off refused with the reason, back on; OK; Bend 1; Ctrl+Z / Ctrl+Y; the unfolder lays it flat to the plate and tab less the two reliefs | PASS, 17 checks |
 | Scenario `smmore_hem` | every type from the Type list (volumes from the cross-section), the rows each type shows, the Length arrow dragged (value box), a Length too short refused, a second edge mitred, OK, Hem 1, Ctrl+Z / Ctrl+Y, edit (Flip), Cancel | PASS, 40 checks |
 | Scenario `smmore_join` | CREATE menu Join by Bend; parallel plate refused, Esc; joined (hand-worked volume); the other body hidden; Ctrl+Z / Ctrl+Y; edit to a 3 mm Bend Radius | PASS, 25 checks |
-| Scenario `smmore_corner` | two edge flanges (Flange code) on a notched plate; MODIFY menu Corner Closure; Symmetric Gap (points inside / in the gap); Round relief (rule size), Square; Overlap with a relief refused, Trim To Bend, a 0 gap; OK; Ctrl+Z / Ctrl+Y; edit back; Cancel | PASS, 29 checks |
+| Scenario `smmore_corner` | two edge flanges (Flange code) on a notched plate; MODIFY menu Corner Closure; Symmetric Gap (points inside / in the gap); Round relief (rule size), Square; Trim To Bend by default, Tear (more material), Tangent with a Square refused, Round at Tangent (cuts more), Vertex (on this notched corner refused with what to try), back to Intersection; Overlap with a relief refused, Trim To Bend, a 0 gap; OK; Ctrl+Z / Ctrl+Y; edit back; Cancel | PASS, 37 checks |
 | Scenario `smmore_round` | MODIFY Fillet; a top edge not taken; 5 mm; the radius arrow dragged (value box); + New Set, 10 mm (hand-worked volumes); OK; Fillet 1; Ctrl+Z / Ctrl+Y; Chamfer 4 mm; edit (sets back) | PASS, 26 checks |
 | Scenario `smmore_lofted` | CREATE menu Lofted Flange; square + circle: Brake Form in a new sheet metal body; chord 0.5; Die Form (not developable); Face Number 4; OK; Ctrl+Z / Ctrl+Y; edit from the timeline to Die Form; an open line with a closed square refused; Esc | PASS, 27 checks |
 
@@ -127,9 +128,10 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
    supported (the second bend would cross a bend zone: refused with "The bend zone crosses
    something that is not flat sheet"); so Fusion's corner relief where bend lines meet has no
    case to act on yet. The checkbox is stored.
-3. **Bend: Bend Relief.** SciForge bends right across the sheet (as Fusion does with Center,
-   F[F3]), so a bend never ends inside material and no relief is cut. A bend line that stops
-   short of an edge on purpose (a partial bend with reliefs) is not built.
+3. **Bend: Bend Relief.** Built for a tab (the sheet beyond the bend narrower than the sheet
+   the line crosses): Straight and Round reliefs, and Tear as a 0.01 mm hairline split (the
+   Flat hem's reason, gap 5); the rule's Relief Remnant is not applied. A tongue cut inside a plate (sheet that stays
+   on both sides beyond the line) still bends all the sheet beyond the line.
 4. (fixed) A second line drawn on the face was hard to click once the preview showed the part
    see-through: while a box takes sketch curves only, clicks now go through the part.
 5. **Flat hem keeps a 0.01 mm hairline gap.** OpenCASCADE cannot hold two layers of one solid
@@ -138,10 +140,15 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 6. **Hem shapes are SciForge's reading of Fusion's descriptions** (Teardrop's leg comes back to
    the Gap, Rope = roll + reverse bend + flat run, Double = Z-fold with Setback): Fusion's exact
    sections were not published (research §5 item 5).
-7. **Corner Closure: Tear / weld relief shapes, Tangent / Vertex placement, Smooth / Straight
-   Line bend transitions, 3-bend corners, a relief with Overlap.** Built: Trim To Bend, Round
-   and Square at the Intersection placement with Symmetric Gap, Extend Aligned on and off; a
-   relief with Overlap is refused with the reason.
+7. **Corner Closure: weld relief shapes (Linear / Arc / Laser Weld), Smooth / Straight Line
+   bend transitions, 3-bend corners, a Round or Square relief with Overlap.** Built: Tear,
+   Trim To Bend (both alignments), Round and Square at the Intersection, Vertex and Tangent
+   (Round) placements with Symmetric Gap, Extend Aligned on and off; a Round or Square relief
+   with Overlap is refused with the reason. "Rule Relief Size" takes only the size from the
+   rule (Fusion's "Use rule defaults" also takes the shape and placement, and Fusion's API
+   default placement is Tangent; SciForge's default relief is Trim To Bend at Intersection).
+   Some placements cannot be cut on some corners (on the notched test corner the Vertex cut
+   fails): the dialog says so and suggests another placement or size.
 8. **Lofted Flange is its own command**, not yet a Type of the Flange dialog (sm-forming owns
    that dialog; one dialog later).
 9. **Lofted Flange, Brake Form: the facets meet in sharp folds**, not in bends of the rule's
