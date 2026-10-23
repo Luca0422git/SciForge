@@ -145,8 +145,11 @@ override's) inner bend radius, so sm-flat's unfolder can lay it flat; the except
 9. **Lofted Flange, Brake Form: the facets meet in sharp folds**, not in bends of the rule's
    radius. The facets are laid out like a press-brake transition (each corner of one profile
    fans out to the part of the other profile in the same direction, one flat facet along each
-   side), but sm-flat's unfolder (planar walls + cylindrical bends) may not lay sharp folds
-   flat; Die Form says it is not developable.
+   side), but sm-flat's unfolder (planar walls + cylindrical bends) refuses sharp folds
+   ("edge ... is a sharp corner between two walls, not a bend: fillet it ... or Rip it", checked
+   2026-10-23), so a Brake Form lofted flange has no flat pattern yet. Die Form is refused too
+   ("the thickness could not be measured at that face"); its step says `Developable = False`
+   (the flat pattern could name that reason: a note for sm-flat's code).
 10. **Lofted Flange, Die Form: the wall is T thick measured in the profile planes** (a loft of
     the thickened profiles), slightly thinner across a sloping wall.
 11. **Join by Bend: no flip or position options** (the API shows none, research §5 item 9);
