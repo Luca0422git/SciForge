@@ -110,6 +110,10 @@ did not. What it found and fixed, in plain words for Luca:
   with the new rule (for example a root radius of 1.25 mm) but the edit dialog showed the
   old 1.0 mm. The edit now shows what the step is built with. A new Boss also showed a root
   radius clamped to half the wall while it was built with the rule's full radius.
+- **Your library settings no longer change a saved design.** A Boss or Rest in a component
+  without a rule took its sizes from the library's default rule at every recompute, so
+  choosing another default (Set As Default) re-sized them in every such design. They now keep
+  the sizes they were made with until you assign a rule to their component.
 - **Rest now says which rule it uses** ("Plastic rule: ABS 2 mm", or the default rule when
   none is assigned) and takes the rule of the body it actually builds in.
 - **Boss Major Draft Angle** (Fusion's counterbore wall draft) was missing and not listed as

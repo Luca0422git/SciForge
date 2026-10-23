@@ -171,6 +171,34 @@ def rest_made():
     rests = [o for o in doc.Objects if getattr(o, "SciForgeType", "") == "Rest"]
     h.check("Rest made", ps.rest_panel() is None and len(rests) == 1, rests)
     s["v_rest"] = ps.volume(doc.getObject(s["cover"]))
+    Gui.Selection.clearSelection()
+    ps.menu("SETUP", "Manage Plastic Rules")
+
+
+def set_default_15():
+    """The library's default rule becomes ABS 1.5 mm (a setting of the user, not the
+    design's)."""
+    p = ps.manage_panel()
+    ps.click_tree_row(p.rules.tree, "ABS 1.5 mm", "Library")
+    ps.click(p.buttons["default"])
+    ps.ok()
+
+
+def design_unchanged():
+    """The cover has no rule: its rest keeps the 2 mm it was made with when the library's
+    default changes, also when the part is recomputed (as an edit earlier in the timeline
+    does). It used to take the new default's 1.5 mm: a design changed by a user setting."""
+    from sciforge import plastic
+
+    doc = App.ActiveDocument
+    cover = doc.getObject(s["cover"])
+    h.check("ABS 1.5 mm is the default now", plastic.default_rule_name() == "ABS 1.5 mm")
+    for feature in cover.Group:
+        feature.touch()
+    doc.recompute()
+    v = ps.volume(cover)
+    h.check("the rest unchanged by the library's default", ps.near(v, s["v_rest"], 1e-6), v)
+    ps.clear_library_prefs()
     assign_rule("PMMA 2.5 mm")
 
 
@@ -631,6 +659,8 @@ h.run(
         rest_again,
         rest_ok,
         rest_made,
+        set_default_15,
+        design_unchanged,
         rest_follows,
         rest_edit_shows_rule,
         rest_closed,

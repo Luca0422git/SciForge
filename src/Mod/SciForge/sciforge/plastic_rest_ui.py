@@ -53,8 +53,11 @@ class RestPanel(Panel):
                 self.refs, read = pr.read(feature)
                 self.options.update(read)
                 # the values still linked to the rule show what the rest is built with now
-                # (the rule may have changed since the rest was made)
-                self.options = pr.apply_rule(self.options, rule)
+                # (the rule may have changed since the rest was made); without a rule the
+                # stored values are what it is built with
+                assigned = plastic.rule_for_body(self.body, fallback=False)
+                if assigned is not None:
+                    self.options = pr.apply_rule(self.options, assigned)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self._build_form()

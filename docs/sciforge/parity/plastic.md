@@ -66,7 +66,9 @@ settle it).
 
 A design without a rule opens every SOLID dialog exactly as before (checked in
 `plastic_rules`). The PLASTIC-only tools (Boss, Rest, Rule Fillet) use the library's default
-rule when the component has none, and say so in the dialog.
+rule when the component has none, and say so in the dialog; a Boss or Rest made that way
+keeps those values (a later change of the library's default never changes the design) and
+follows a rule once its component gets one (QA pass).
 
 ### Boss (PLASTIC > CREATE)
 
@@ -128,7 +130,7 @@ rule when the component has none, and say so in the dialog.
 | Golden | `plastic_rest_cut` | a rest whose plane lies below a round bar's crown: only cuts (exact; QA pass) |
 | Golden | `plastic_boss_major_draft` | the enclosure's counterbores drafted 5 deg (frustum by hand, exact; QA pass) |
 | Scenario | `plastic_qa_rules` (QA pass) | an empty design (Assign gives the default rule and is no timeline step, Ctrl+Z; Manage opens and Esc; Rule Fillet says it needs a solid); a Shell made with the rule follows a reassigned rule, Ctrl+Z puts both back; Assign names the design's copy of a library rule it already holds; Manage: an edit the Shell follows at once, Esc drops both; rename a rule (still assigned, browser row renamed), Ctrl+Z; a new rule switched to inches converts its numbers; a Draft linked to PP 1.5 mm keeps its angle when FDM PLA (no draft) is assigned, a new Draft then opens with its own 1 deg, ABS moves the linked Draft to 1 deg and makes the part ABS, Ctrl+Z (PLA, 1.5 deg) / Ctrl+Y; the browser row's right-click menu opens Manage |
-| Scenario | `plastic_qa_tools` (QA pass) | Boss on a face then Esc (no step, no point sketch left); a Rest with the rule's 1 deg draft (flat 20 x 12 face), Esc; a Rest OK'd, then PMMA 2.5 mm assigned: the Rest follows, its edit says the rule and shows 2.5; a boss saved and reopened: edit from the timeline, Offset 1 (moves), Major Draft Angle 5 (frustum by hand), a rounded drafted mouth refused, OK, Ctrl+Z; the default ribs switched on at the enclosure's bosses (the rib ends by the walls left square, said), a Flat fastener head on the counterbore refused, Pan, OK; PMMA assigned after reopen: the boss follows, its edit shows the rule's root radius 1.25; Side 1 Body picked (the lid) then Flip: the lid moves to the Side 2 box, no error; the lid in a component of its own (placed by the component) with PMMA 2.5 mm, the enclosure with no rule: each side found, built and shown with its own rule (volumes by hand), OK, Ctrl+Z |
+| Scenario | `plastic_qa_tools` (QA pass) | Boss on a face then Esc (no step, no point sketch left); a Rest with the rule's 1 deg draft (flat 20 x 12 face), Esc; a Rest OK'd, the library's default set to ABS 1.5 mm (the rest keeps its 2 mm, also recomputed), then PMMA 2.5 mm assigned: the Rest follows, its edit says the rule and shows 2.5; a boss saved and reopened: edit from the timeline, Offset 1 (moves), Major Draft Angle 5 (frustum by hand), a rounded drafted mouth refused, OK, Ctrl+Z; the default ribs switched on at the enclosure's bosses (the rib ends by the walls left square, said), a Flat fastener head on the counterbore refused, Pan, OK; PMMA assigned after reopen: the boss follows, its edit shows the rule's root radius 1.25; Side 1 Body picked (the lid) then Flip: the lid moves to the Side 2 box, no error; the lid in a component of its own (placed by the component) with PMMA 2.5 mm, the enclosure with no rule: each side found, built and shown with its own rule (volumes by hand), OK, Ctrl+Z |
 | Unit | `test_plastic_core.py` (25) | the library against the research table, inch rules, expressions, refusals, describe, materials; Boss defaults, rule links, refusals, rib angles; the PLASTIC tab's wiring |
 
 ## Known gaps (not built, with the reason)
@@ -194,7 +196,11 @@ fastener head in a counterbore was 6 mm across flats in a 6.5 mm counterbore, so
 cut 0.2 mm into the counterbore wall (the screw collided with the part): it is sized across
 its corners now; a Flat (countersunk) head on a counterbore's floor or on the outside face
 sank its cone 22-26 mm3 into the part: a Flat head now needs Side 1's Hole Type Countersink
-(refused with the reason otherwise). New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
+(refused with the reason otherwise); a Boss or Rest in a component without a rule followed
+the library's default rule at every recompute, so Set As Default in the user's library (a
+setting, not the design) re-sized them in every design without a rule: they now keep the
+values they were made with (from the default rule at the time) until the component gets a
+rule. New: scenarios `plastic_qa_rules`, `plastic_qa_tools`,
 golden `plastic_boss_major_draft`, unit tests. Every builder scenario, the plastic golden
 models, the unit tests and the shared dialogs' scenarios pass after the fixes.
 

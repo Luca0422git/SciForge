@@ -129,8 +129,12 @@ class BossPanel(Panel):
             try:
                 self.refs, options, self.participants, self.steps = pb.read(feature)
                 # the values still linked to the rule show what the boss is built with now
-                # (the rule may have changed since the boss was made)
-                self.options = pb.apply_rule(options, self.rule) if options else self.options
+                # (the rule may have changed since the boss was made); without a rule the
+                # stored values are what it is built with
+                self.options = options or self.options
+                assigned = plastic.rule_for_body(self.body, fallback=False)
+                if options and assigned is not None:
+                    self.options = pb.apply_rule(options, assigned)
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         self._build_form()
@@ -409,9 +413,10 @@ class BossPanel(Panel):
         changed = False
         for side in (1, 2):
             body = self._side_body(side)
-            if body is None:
-                continue
-            fresh = pb.apply_rule(self.options, plastic.rule_for_body(body))["side%d" % side]
+            rule = plastic.rule_for_body(body, fallback=False) if body is not None else None
+            if rule is None:
+                continue  # no rule: built with the values shown (plastic_boss.resolved_options)
+            fresh = pb.apply_rule(self.options, rule)["side%d" % side]
             s = self.options["side%d" % side]
             for key in pb.RULE_LINKS:
                 if key in fresh and fresh[key] != s.get(key):

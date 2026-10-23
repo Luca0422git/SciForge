@@ -771,7 +771,10 @@ def is_boss(obj):
 
 
 def resolved_options(obj, body=None):
-    """The step's options with the rule-linked fields read from the plastic rule now."""
+    """The step's options with the rule-linked fields read from the plastic rule now. A
+    body whose component has no rule keeps the values the boss was made with (they came from
+    the library's default rule then): a design never changes with the user's settings (QA:
+    Set As Default in the library re-sized every boss of every design without a rule)."""
     meta = load_meta(obj)
     options = meta.get("options") or {}
     if not options:
@@ -780,8 +783,9 @@ def resolved_options(obj, body=None):
     try:
         from . import plastic
 
-        rule = plastic.rule_for_body(body)
-        options = apply_rule(options, rule)
+        rule = plastic.rule_for_body(body, fallback=False)
+        if rule is not None:
+            options = apply_rule(options, rule)
     except Exception as exc:
         warn("boss: the plastic rule could not be read: %s" % exc)
     return options
