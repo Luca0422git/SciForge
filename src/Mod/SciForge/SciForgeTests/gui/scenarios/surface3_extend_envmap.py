@@ -13,6 +13,8 @@ Path M1 (Environmental Map): INSPECT > Environmental Map Analysis: Environment S
         faces covered); Environment Horizon and Reflection Strength 40: drawn again; OK:
         "Environmental Map1" in the browser's Analysis folder.
 Path M2 (Esc): the analysis again, Esc: no second one.
+Path M3 (save / reopen): saved, closed, opened: the analysis with Horizon and 40 % is drawn
+        again on the extended sphere (227.79).
 """
 
 import math
@@ -201,6 +203,24 @@ def envmap_esc():
 def envmap_escaped():
     h.check("Esc closed it", a.panel() is None)
     h.check("no second analysis", len(a.analyses("EnvironmentMapAnalysis")) == 1)
+    a.save_reopen("surface3_envmap.FCStd")
+
+
+def reopened():
+    st.wait(800)
+    obj, vp = _vp()
+    h.check("the analysis is back", obj is not None)
+    if obj is None:
+        return
+    h.check("Horizon, 40 % read back", (obj.Environment, obj.ReflectionStrength) == ("Horizon", 40))
+    h.check(
+        "drawn again",
+        getattr(vp, "environment", None) == ("Horizon", 0.4),
+        getattr(vp, "environment", None),
+    )
+    body = obj.Targets[0][0] if obj.Targets else None
+    area = st.area(body)
+    h.check("the extended sphere is back (227.79)", st.near(area, EXTENDED, 1e-5), area)
 
 
 h.run(
@@ -222,5 +242,6 @@ h.run(
         envmap_again,
         envmap_esc,
         envmap_escaped,
+        reopened,
     ],
 )

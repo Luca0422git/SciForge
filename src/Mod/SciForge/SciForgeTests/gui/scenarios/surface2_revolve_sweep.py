@@ -311,7 +311,11 @@ def s1_rail_type():
         return
     box = p.rows["type"][0]
     types = [box.itemText(i) for i in range(box.count())]
-    h.check("Type: Single Path, Path + Guide Rail", types == ["Single Path", "Path + Guide Rail"])
+    h.check(
+        "Type: Single Path, Path + Guide Rail, Path + Guide Surface (part 3)",
+        types == ["Single Path", "Path + Guide Rail", "Path + Guide Surface"],
+        types,
+    )
     st.choose("type", "Path + Guide Rail")
 
 
