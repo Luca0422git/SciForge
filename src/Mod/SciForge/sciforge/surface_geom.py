@@ -2184,7 +2184,9 @@ def _natural_face(face, extend):
 def extend(target, edges, distance, extend_type="natural", alignment="free"):
     """Fusion's Extend: free edges of a surface carried on by `distance`. Natural continues
     the face's own surface (a flat face stays one flat face); Tangent adds flat faces that
-    carry the face on; Perpendicular adds faces square to it."""
+    carry the face on; Perpendicular adds faces square to it. Edge Alignment Align Edges
+    (Natural): the extension's sides carry on the neighbouring outside edges (G1) instead of
+    leaving square to the extended edge."""
     if not edges:
         raise NeedsPick("Select edges on the outside of a surface body.")
     d = float(distance)
@@ -2198,9 +2200,15 @@ def extend(target, edges, distance, extend_type="natural", alignment="free"):
                 "Pick a free edge."
             )
     if extend_type == "natural":
+        # a face that is its surface's parameter rectangle carries itself on: its sides are
+        # the surface's own curves, so they stay aligned with the outside edges either way
         natural = _natural_extend(target, edges, d)
         if natural is not None:
             return natural
+    if extend_type == "natural" and alignment == "align":
+        aligned = _aligned_extend(target, edges, d, free)
+        if aligned is not None:
+            return aligned
     ruled_type = "normal" if extend_type == "perpendicular" else "tangent"
     items = []
     for edge in edges:
@@ -2215,6 +2223,83 @@ def extend(target, edges, distance, extend_type="natural", alignment="free"):
             joined = joined.removeSplitter()  # a flat face carried on stays one face
         except Exception:
             pass
+    return surface_result(joined)
+
+
+def _side_direction(edge, point, free, picked):
+    """Align Edges: the direction the outside edge meeting `edge` at `point` carries on in
+    past that corner (unit), or None (no single such edge, or it is extended too)."""
+    meeting = []
+    for other in free:
+        if other.isSame(edge):
+            continue
+        a, b = other.valueAt(other.FirstParameter), other.valueAt(other.LastParameter)
+        if (a - point).Length < SAME:
+            meeting.append((other, other.FirstParameter, -1.0))
+        elif (b - point).Length < SAME:
+            meeting.append((other, other.LastParameter, 1.0))
+    if len(meeting) != 1 or any(meeting[0][0].isSame(p) for p in picked):
+        return None
+    other, u, sign = meeting[0]
+    try:
+        return unit(other.tangentAt(u) * sign)
+    except Exception:
+        return None
+
+
+def _aligned_extend(target, edges, d, free):
+    """Natural extension with Edge Alignment Align Edges: each picked edge grows a band
+    whose sides carry on the outside edges meeting it (where none meets it, or it is
+    extended too, the side leaves square to the edge, as Free Edges), every ruling reaching
+    `d` out from the edge. A band on a flat face is flat and merges with it. None when no
+    picked edge has a neighbour to align with (Free Edges' result then)."""
+    bands = []
+    aligned_any = False
+    for edge in edges:
+        owners = faces_of_edge(target, edge)
+        if not owners:
+            raise SurfaceError("An edge picked has no face to extend.")
+        face = owners[0]
+        a, b = edge.FirstParameter, edge.LastParameter
+        ends = []
+        for u in (a, b):
+            p = edge.valueAt(u)
+            t = unit(edge.tangentAt(u))
+            away = away_in_face(face, edge, p, t)
+            side = _side_direction(edge, p, free, edges)
+            if side is None or side.dot(away) < 0.2:
+                side = away  # nothing to align with (or it turns back): square to the edge
+            else:
+                aligned_any = True
+            ends.append(side)
+
+        def rule(u, a=a, b=b, ends=ends, face=face, edge=edge):
+            s = (u - a) / (b - a) if abs(b - a) > 1e-12 else 0.0
+            r = unit(ends[0] * (1.0 - s) + ends[1] * s)
+            p = edge.valueAt(u)
+            away = away_in_face(face, edge, p, unit(edge.tangentAt(u)))
+            k = r.dot(away)
+            if k < 0.2:
+                raise SurfaceError(
+                    "The neighbouring edges turn back too sharply to align the extension. "
+                    "Use Free Edges."
+                )
+            return r * (1.0 / k)
+
+        straight = edge.Curve.TypeId in ("Part::GeomLine", "Part::GeomLineSegment")
+        if straight and face.Surface.TypeId == "Part::GeomPlane":
+            p0, p1 = edge.valueAt(a), edge.valueAt(b)
+            q0, q1 = p0 + rule(a) * d, p1 + rule(b) * d
+            bands.append(Part.Face(Part.makePolygon([p0, p1, q1, q0, p0])))
+        else:
+            bands.append(_ruled_face(edge, rule, d))
+    if not aligned_any:
+        return None
+    joined = sew(list(target.Faces) + bands)
+    try:
+        joined = joined.removeSplitter()  # a flat face carried on stays one face
+    except Exception:
+        pass
     return surface_result(joined)
 
 

@@ -535,6 +535,16 @@ class PartThreeTests(unittest.TestCase):
         with self.assertRaises(core.SurfaceError):
             core.check_values("sweep", core.with_defaults("sweep", {"rail_distance": 1.5}))
 
+    def test_extend_edge_alignment(self):
+        self.assertEqual(core.ALIGNMENTS, ("free", "align"))
+        core.check_values(
+            "extend", core.with_defaults("extend", {"distance": 5, "alignment": "align"})
+        )
+        with self.assertRaises(core.SurfaceError):
+            core.check_values(
+                "extend", core.with_defaults("extend", {"distance": 5, "alignment": "aligned"})
+            )
+
     def test_stitch_operations(self):
         self.assertEqual(core.operations("stitch"), ["new_body", "join", "cut", "intersect"])
         self.assertEqual(core.with_defaults("stitch")["operation"], "new_body")

@@ -8,6 +8,10 @@ Path X1 (Extend Natural): SURFACE > Extend: Extend Type Natural, click the arc e
         plane; type 5: the sphere carried on past that edge by 5 mm (measured along the
         surface at the edge's middle): one face, still the sphere: 100 (pi / 2 + 5 / (10 cos
         45)) = 227.79. OK: "Extend 1". Undo: 157.08; Redo.
+Path X2 (Align Edges): a trapezoid patch 20 / 10 wide, 10 high (150); SURFACE > Extend, Edge
+        Alignment Align Edges, click its top edge, type 5: the slanted sides carried on, one
+        flat face (187.5); Free Edges: square to the edge (200); Align Edges again, OK; edited
+        from the timeline: Align Edges read back; Cancel.
 Path M1 (Environmental Map): INSPECT > Environmental Map Analysis: Environment Studio,
         Reflection Strength 70; click the sphere: the studio reflected on it (the model's own
         faces covered); Environment Horizon and Reflection Strength 40: drawn again; OK:
@@ -115,6 +119,86 @@ def undone():
 
 def redone():
     h.check("Redo: extended again", st.near(st.area(s["sphere"]), EXTENDED, 1e-5))
+
+
+# -- Extend Natural, Edge Alignment Align Edges ---------------------------------------------
+def x2_setup():
+    from sciforge import bodies, commands, sketch_ui, surface
+
+    body = bodies.body_of(s["sketch"])
+    planes = sketch_ui.origin_planes(body)
+    sk = sketch_ui.create_sketch(body, (planes["XY_Plane"], ""))
+    st.add_lines(sk, [(30, 0), (50, 0), (45, 10), (35, 10)], closed=True)
+    commands.leave_edit()
+    doc().recompute()
+    step = surface.build("patch", {"refs": [(sk, "Edge%d" % (i + 1)) for i in range(4)]}, {})
+    doc().recompute()
+    s["trapezoid"] = bodies.body_of(step)
+    bodies.set_shown(sk, False)
+    h.fit()
+    h.click_empty()
+    st.menu("MODIFY", "Extend")
+
+
+def x2_align():
+    p = st.panel()
+    h.check("Extend dialog open", p is not None and p.kind == "extend")
+    if p is None:
+        return
+    h.check("a trapezoid of 150", st.near(st.area(s["trapezoid"]), 150.0, 1e-6))
+    box = p.rows["alignment"][0]
+    items = [box.itemText(i) for i in range(box.count())]
+    h.check(
+        "Edge Alignment: Free Edges / Align Edges", items == ["Free Edges", "Align Edges"], items
+    )
+    item = box.model().item(1)
+    h.check("Align Edges can be chosen", item is not None and item.isEnabled())
+    st.choose("alignment", "Align Edges")
+
+
+def x2_click():
+    st.settle()
+    h.check("clicked the trapezoid's top edge", h.click_edge(V(40, 10, 0)))
+
+
+def x2_type():
+    st.settle()
+    st.type_field("distance", "5")
+
+
+def x2_aligned():
+    st.settle()
+    body = st.step_body()
+    area = st.area(body)
+    h.check("Align Edges: the slanted sides carried on (187.5)", st.near(area, 187.5, 1e-6), area)
+    h.check("one flat face", body is not None and len(body.Shape.Faces) == 1)
+    h.shot("2-extend-align-edges")
+    st.choose("alignment", "Free Edges")
+
+
+def x2_free():
+    st.settle()
+    area = st.area(st.step_body())
+    h.check("Free Edges: square to the edge (200)", st.near(area, 200.0, 1e-6), area)
+    st.choose("alignment", "Align Edges")
+
+
+def x2_ok():
+    st.settle()
+    st.ok()
+
+
+def x2_done():
+    h.check("dialog closed", st.panel() is None)
+    h.check("kept aligned (187.5)", st.near(st.area(s["trapezoid"]), 187.5, 1e-6))
+    h.check("edited from the timeline", st.double_click_timeline("Extend 2"))
+
+
+def x2_reads_back():
+    st.settle()
+    p = st.panel()
+    h.check("Align Edges read back", p is not None and p.options.get("alignment") == "align")
+    st.cancel()
 
 
 # -- Environmental Map Analysis --------------------------------------------------------------
@@ -234,6 +318,15 @@ h.run(
         extend_done,
         undone,
         redone,
+        x2_setup,
+        x2_align,
+        x2_click,
+        x2_type,
+        x2_aligned,
+        x2_free,
+        x2_ok,
+        x2_done,
+        x2_reads_back,
         envmap_menu,
         envmap_dialog,
         envmap_drawn,

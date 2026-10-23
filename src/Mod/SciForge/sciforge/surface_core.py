@@ -528,6 +528,8 @@ def check_values(kind, options):
                 raise SurfaceError(
                     "Natural and Tangent extend outwards only: type a positive distance."
                 )
+            if o.get("alignment", "free") not in ALIGNMENTS:
+                raise SurfaceError("Pick Free Edges or Align Edges.")
     elif kind == "thicken":
         thickness = _finite(o.get("thickness", 0.0), "Thickness")
         if abs(thickness) < 1e-7:

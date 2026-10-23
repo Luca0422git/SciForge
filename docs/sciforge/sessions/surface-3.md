@@ -11,7 +11,7 @@ doc (`parity/surface.md`, section "Part 3") has the behaviour table with sources
 |---|---|---|
 | 3 | Offset Type Sharp / Rounded (Sharp default; old files keep Rounded) | `surface_geom.offset_faces` (join 2 / 0), `surface_core.LEGACY` + `with_saved` |
 | 8 | Patch Group Edges off (Continuity per edge), Reverse Normal + Flip, Tangency Weight 0.5 (greyed) | `surface_geom.patch` (3-tuples), `PatchPanel` edge rows |
-| 9 | Extend Natural on spheres, tori, revolved / extruded / free-form faces | `surface_geom._grow_rectangle`, `_refit` |
+| 9 | Extend Natural on spheres, tori, revolved / extruded / free-form faces; Edge Alignment Align Edges | `surface_geom._grow_rectangle`, `_refit`, `_aligned_extend` |
 | 11 | Untrim Manual (loops) and Keep Copy | `surface_geom.untrim_loops`, Keep Copy = an Unstitch-style piece body (`_sync_pieces(copy=True)`) |
 | 12 | Revolve Project Axis, "Partial", To with Two Sides | `surface_geom.project_axis`, `surface_core.two_sided_to` |
 | 13 | Extrude flat faces as profiles; Chain Faces / Extend Faces | `surface.edges_of` (Face picks), `ExtrudePanel` |
@@ -34,6 +34,9 @@ doc (`parity/surface.md`, section "Part 3") has the behaviour table with sources
   24): 3e-6 mm off on a wavy face, 2e-3 mm on a circle-to-ellipse loft carried on 20 %.
 - `Surface.toShape(u0, u1, v0, v1)` past the face's range works for cylinders, cones,
   spheres (v within the poles), tori and surfaces of revolution / extrusion.
+- Corner matching must stay out of `_thru_shell`: the rail loft (`_rail_stations`, the
+  solid Loft too) reads the plain loft of the profiles as given; restarting the wires there
+  broke `sf_loft_rails_turning` (+63 % volume). It runs on the plain loft only.
 - `Part.makeLoft` already pairs the starts of two squares drawn from different corners (its
   compatibility check is on): corner matching adds the deterministic rule, it rarely changes
   the result.
@@ -64,7 +67,7 @@ doc (`parity/surface.md`, section "Part 3") has the behaviour table with sources
   for the new Sweep type).
 - Golden: `surface3_offset_sharp_rounded`, `surface3_revolve_to_two_sides`,
   `surface3_revolve_project_axis`, `surface3_extend_natural_sphere`,
-  `surface3_extend_natural_strip`, `surface3_untrim_manual`, `surface3_sweep_guide_surface`,
+  `surface3_extend_natural_strip`, `surface3_extend_align_edges`, `surface3_untrim_manual`, `surface3_sweep_guide_surface`,
   `surface3_stitch_join` (with reopen), `surface3_loft_corner_matching`.
 - Scenarios: `surface3_offset_patch`, `surface3_untrim_revolve`, `surface3_sweep_extrude`,
   `surface3_stitch_trim_ruled`, `surface3_extend_envmap`, `surface3_isocurve`. Updated:
@@ -79,8 +82,8 @@ doc (`parity/surface.md`, section "Part 3") has the behaviour table with sources
 
 ## Gaps left (details and evidence in the parity doc)
 
-Patch Tangency Weight (OpenCASCADE has no weight), Extend Align Edges and Loft Edge
-Alignment Align Edges / Align to Surface (no OpenCASCADE control; greyed with the reason),
+Patch Tangency Weight (OpenCASCADE has no weight), Loft Edge Alignment Align Edges / Align to
+Surface (no OpenCASCADE control; greyed with the reason),
 Extrude Match Shape (not found in Fusion's documentation), Full Extents' rail mapping (G),
 the Isoparametric Curves live in a companion of the sketch (FreeCAD's sketches are flat) and
 have no edit dialog, Ruled Type default unverified.

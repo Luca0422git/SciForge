@@ -2285,18 +2285,11 @@ class ExtendPanel(SurfacePanel):
             [("Natural", "natural"), ("Perpendicular", "perpendicular"), ("Tangent", "tangent")],
         )
         self.add_combo(
-            "alignment",
-            "Edge Alignment",
-            [
-                ("Free Edges", "free"),
-                (
-                    "Align Edges",
-                    "align",
-                    False,
-                    "Not in SciForge yet: the extension follows the face's own surface, or "
-                    "carries it on tangent where it cannot",
-                ),
-            ],
+            "alignment", "Edge Alignment", _pairs(core.ALIGNMENT_LABELS, core.ALIGNMENTS)
+        )
+        self.rows["alignment"][0].setToolTip(
+            "Free Edges: the extension's sides leave square to the edge. Align Edges: they "
+            "carry on the outside edges that meet it"
         )
 
     def update_visibility(self):
