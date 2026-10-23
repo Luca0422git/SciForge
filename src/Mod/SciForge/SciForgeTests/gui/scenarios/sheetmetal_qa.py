@@ -572,6 +572,9 @@ def d2_closed_corner():
     shape = body.Shape
     h.check("no message", not sm.message(), sm.message())
     h.check("one valid solid", shape.isValid() and len(shape.Solids) == 1)
+    p = sm.panel()
+    radius = p.options.get("bend_radius") if p is not None else None
+    h.check("the Bend Radius override starts at the body's rule (1.5)", radius == 1.5, radius)
     # the walls stand 1.5 mm out past the plate; each runs on to the mitre (gap 1.5 mm)
     h.check("the 30 mm edge's wall reaches the mitre", shape.isInside(V(51.4, 30.1, 6), 1e-6, True))
     h.check("the 50 mm edge's wall reaches the mitre", shape.isInside(V(50.1, 31.4, 6), 1e-6, True))

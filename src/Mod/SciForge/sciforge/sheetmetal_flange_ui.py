@@ -589,6 +589,8 @@ class FlangePanel(Panel):
             return
         if not self._switch("edge"):
             return
+        if not self.editing and not self.refs:
+            self._overrides_from(body)
         self.body = body
         key = (obj.Name, short)
         keys = [(o.Name, s) for o, s in self.refs]
@@ -597,6 +599,32 @@ class FlangePanel(Panel):
         else:
             self.refs = self.refs + [(obj, short)]
         self._picks_changed()
+
+    OVERRIDDEN_BY = {
+        "bend_radius": "override_bend_radius",
+        "relief_shape": "override_bend_relief",
+        "relief_width": "override_bend_relief",
+        "relief_depth": "override_bend_relief",
+        "relief_remnant": "override_bend_relief",
+        "corner_shape": "override_corner_relief",
+        "corner_placement": "override_corner_relief",
+        "corner_size": "override_corner_relief",
+        "corner3_shape": "override_corner3_relief",
+        "corner3_radius": "override_corner3_relief",
+    }
+
+    def _overrides_from(self, body):
+        """An edge flange follows its body's rule: the override fields start at that rule's
+        values (the dialog opened with the active component's rule, QA)."""
+        try:
+            fresh = flange.defaults("edge", sheetmetal.rule_for_body(body))
+        except Exception as exc:
+            warn("Flange: %s" % exc)
+            return
+        for key, flag in self.OVERRIDDEN_BY.items():
+            if not self.options.get(flag):
+                self.options[key] = fresh[key]
+        self._show_options()
 
     def _object_clicked(self, obj, short):
         if short and not short.startswith("Face"):
