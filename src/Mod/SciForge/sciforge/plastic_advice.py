@@ -95,6 +95,10 @@ class DesignAdvice:
             for name in ("Problem", "Results", "Summary", "Stale"):
                 obj.setPropertyStatus(name, ["Output", "Hidden"])
             obj.setEditorMode("PullVector", 2)
+            # the display only changes the colours drawn from the results kept: no new
+            # check (seconds on a big part). "Output": a change does not touch the analysis
+            # (NoRecompute does not stop a FeaturePython from running again)
+            obj.setPropertyStatus("Display", "Output")
         except Exception:
             pass
 

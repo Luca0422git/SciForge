@@ -406,6 +406,14 @@ class SnapFitPanel(Panel):
         if body is self.other_pick:
             self.message.setText("⚠ The hooks cannot go on the body that takes the grooves.")
             return
+        if self.editing and self.target is not None and bodies.body_of(self.target) is not body:
+            # the step lives in its hook body's history: it cannot move to another body
+            self.message.setText(
+                "⚠ This snap fit's hooks stay on %s: to put them on %s, delete this Snap Fit "
+                "and make a new one (Hook Body)." % (bodies.body_of(self.target).Label, body.Label)
+            )
+            self.activate("points")
+            return
         self.hook_pick = body
         self.hook_field.set_text(body.Label)
         self._rebuild_in_hook_body()
@@ -440,10 +448,20 @@ class SnapFitPanel(Panel):
     def _hide_other_toggled(self, on):
         self._show_other()
         if on:
-            other = plastic_snap.other_body(self.target) if self.target is not None else None
-            if other is not None and other.ViewObject is not None:
-                self.hidden_other = (other, bool(other.ViewObject.Visibility))
-                other.ViewObject.Visibility = False
+            self._hide_other_now()
+
+    def _hide_other_now(self):
+        """Hide Other Body hides the body the grooves / loops go in now: also one found
+        after the box was ticked (no snap fit yet, a new type, another body picked)."""
+        if self._closed or not self.hide_other.isChecked():
+            return
+        other = plastic_snap.other_body(self.target) if self.target is not None else None
+        if self.hidden_other is not None and self.hidden_other[0] is other:
+            return
+        self._show_other()
+        if other is not None and other.ViewObject is not None:
+            self.hidden_other = (other, bool(other.ViewObject.Visibility))
+            other.ViewObject.Visibility = False
 
     def _show_other(self):
         if self.hidden_other is None:
@@ -610,6 +628,7 @@ class SnapFitPanel(Panel):
                 self._apply()
             preview.recompute(self.doc)
             self._show_sketch()
+            self._hide_other_now()
             self.show_status()
             if not any(_dragging(a) for a in self.arrows.values()):
                 self._make_arrows()
@@ -667,6 +686,12 @@ class SnapFitPanel(Panel):
         if not text and self.target is not None:
             notes = [getattr(self.target, "SciForgeWarning", "")]
             notes += [getattr(f, "SciForgeWarning", "") for f in _followers(self.target)]
+            if self.options["groove"] and other is None:
+                # e.g. the sketch on the hook body's own face: its normal points away from it
+                notes.append(
+                    "no body found in front of the catches for the %s: click it in the Body "
+                    "box, or use Flip" % OTHER_TITLES[self.options["type"]].lower()
+                )
             notes = [n for n in notes if n]
             if notes:
                 self.message.setText("Note: " + "; ".join(notes))

@@ -90,7 +90,7 @@ def _check_again(obj):
             QtCore.QTimer.singleShot(150, lambda: _check_again(obj))
             return
         obj.touch()
-        doc.recompute()
+        doc.recompute([obj])  # this analysis (and what it needs), not the whole design
         schedule(obj)
     except Exception as exc:
         warn("Design Advice: %s" % exc)
@@ -327,7 +327,7 @@ class DesignAdvicePanel(Panel):
         form.addRow(self.issues)
         self.finish_layout()
         self.flip.toggled.connect(self._changed)
-        self.display.currentIndexChanged.connect(self._changed)
+        self.display.currentIndexChanged.connect(self._display_changed)
         self.bodies_field.set_active(True)
 
     def _show(self):
@@ -444,6 +444,14 @@ class DesignAdvicePanel(Panel):
         self._refresh_fields()
         self.schedule()
 
+    @safe
+    def _display_changed(self, *_):
+        """Issues / Thickness: the same results drawn in other colours, no new check."""
+        if self._quiet or self._closed:
+            return
+        plastic_advice.apply(self.analysis, {"display": self.display.currentData()})
+        schedule(self.analysis)
+
     def _recompute(self):
         if self._closed:
             return
@@ -486,11 +494,15 @@ class DesignAdvicePanel(Panel):
         if self._closed:
             return True
         try:
+            pending = self._timer.isActive() or getattr(self, "_pending", False)
             self._timer.stop()
             if not plastic_advice.targets(self.analysis):
                 self.message.setText("⚠ Pick the bodies to check.")
                 return False
-            self.analysis.touch()
+            # the preview has checked the design as it is unless a change still waits: OK
+            # does not check it all again (seconds on a big part)
+            if pending or not self.analysis.Results or self.analysis.Stale:
+                self.analysis.touch()
             preview.recompute(self.doc)
             if self.analysis.Problem:
                 self.message.setText("⚠ " + self.analysis.Problem)
