@@ -382,7 +382,8 @@ class RestPanel(Panel):
             inward = pr.inward_direction(shape, origin, normal, bool(self.options.get("flip")))
             centre = faces[0].CenterOfMass
             size = max(3.0, min(10.0, faces[0].BoundBox.DiagonalLength * 0.3))
-            # the arrow points out of the flat face; dragging it in thickens the wall
+            # the arrow stands on the flat face, as long as the wall is thick: pulling it out
+            # thickens the wall, pushing it in thins it
             self.arrow = ArrowDragger(
                 centre,
                 inward * -1.0,

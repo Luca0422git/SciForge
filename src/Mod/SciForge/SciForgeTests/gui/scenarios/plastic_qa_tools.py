@@ -176,6 +176,31 @@ def rest_drafted():
     )
 
 
+def drag_rest_arrow():
+    """Pull the blue thickness arrow 1 mm further out of the flat face (real mouse drag)."""
+    p = ps.rest_panel()
+    if p is None or p.arrow is None:
+        h.check("the thickness arrow to drag", False)
+        return
+    s["t0"] = p.thickness.value()
+    s["v_t0"] = ps.volume(App.ActiveDocument.getObject(s["cover"]))
+    up = App.Vector(0, 0, 1)
+    centre = App.Vector(30, 0, 22) + up * p.arrow.distance()
+    h.fit()
+    h.drag(h.screen_point(centre), h.screen_point(centre + up * 1.0))
+
+
+def rest_arrow_dragged():
+    p = ps.rest_panel()
+    ps.settle(p)
+    t = p.thickness.value() if p else 0.0
+    h.check("pulling the arrow out thickens the wall", t > s["t0"] + 0.3, (s["t0"], t))
+    h.check("the typed / dragged value leaves the rule", p and not p.options["links"]["thickness"])
+    v = ps.volume(App.ActiveDocument.getObject(s["cover"]))
+    h.check("a thicker landing", v > s["v_t0"] + 1.0, (v, s["v_t0"]))
+    h.check("no error", p and not p.message.text().startswith("⚠"), p and p.message.text())
+
+
 def rest_esc_dropped():
     doc = App.ActiveDocument
     cover = doc.getObject(s["cover"])
@@ -687,6 +712,8 @@ h.run(
         rest_setup,
         click_landing,
         rest_drafted,
+        drag_rest_arrow,
+        rest_arrow_dragged,
         esc,
         rest_esc_dropped,
         rest_again,
