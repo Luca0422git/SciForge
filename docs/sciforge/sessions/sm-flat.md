@@ -106,11 +106,13 @@ Rip (a face, along an edge, or between two points).
 - The scratchpad folder is shared with other sessions: another builder overwrote probe files
   with the same names (p5.py, p6.py). Use names with the area in them.
 
-**Tests run (real FreeCAD 1.1.4)**: every `flatpattern_*` scenario passes (counts in the
-branch report), golden `sm_flat_*` 14/14, `--only base` passed (unit, golden 465 + 2 known
-xfail, smoke, journey), sm-forming's 4 and sm-more's 7 scenarios pass on the merged branch,
-`SWEEP_TABS=sheet_metal,flat_pattern,drawing`: every command passes but sm-forming's Sheet
-Metal Rules window (needs an INTENDED entry in `ribbon_sweep.py`).
+**Tests run (real FreeCAD 1.1.4)**, on the branch with sm-forming and sm-more merged: all 11
+`flatpattern_*` scenarios pass (counts in the branch report); golden `sm_flat_*` 17/17 and
+the whole golden set 507 + 2 known xfail; unit tests 1909 OK; `--only base` (unit, golden,
+smoke, journey) passes; every sm-forming (6) and sm-more (8) scenario passes;
+`drawing_new`, `drawing_annotations` pass; `ribbon_sweep` with
+`SWEEP_TABS=sheet_metal,flat_pattern,drawing` passes (175 checks). `ribbon_customize` failed
+once under load in an earlier full run and passed alone.
 
 **Gaps** (details in the parity doc): Refold has no inputs (folds back everything its Unfold
 laid flat); material added across a bend in the flat state is refused at the Refold; the
