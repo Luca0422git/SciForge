@@ -80,12 +80,38 @@ def refind(shape, name, memo):
         if d is not None and (best is None or d < best[0]):
             best = (d, "Face%d" % (i + 1))
     if best is None:
+        best = _moved(shape, p, n)
+    if best is None:
         # (Edit Flat Pattern only opens the flat pattern: it cannot pick another face)
         raise FlatPatternError(
             "the stationary face is gone after an edit: delete the Flat Pattern and create it "
             "again from another top or bottom face"
         )
     return best[1]
+
+
+def _moved(shape, p, n):
+    """(offset, 'FaceN') of the face that is the remembered stationary face moved along its
+    normal (QA: a new rule thickness moved the plate's top face up and the flat pattern said
+    the face was gone; Fusion's follows): a flat face facing the same way that holds the
+    remembered point seen along the normal, the nearest one first. None when there is none."""
+    moved = None
+    for i, face in enumerate(shape.Faces):
+        try:
+            if not unfolder.is_planar(face):
+                continue
+            if unfolder.normal_at(face, unfolder.inner_point(face)).dot(n) < 1 - 1e-6:
+                continue
+            axis = App.Vector(face.Surface.Axis).normalize()
+            off = (p - face.Surface.Position).dot(axis)
+            seen = p - axis * off  # the remembered point moved onto this face's plane
+            if face.distToShape(Part.Vertex(seen))[0] > 1e-3:
+                continue
+        except Exception:
+            continue
+        if moved is None or abs(off) < moved[0]:
+            moved = (abs(off), "Face%d" % (i + 1))
+    return moved
 
 
 def _xy(v):
