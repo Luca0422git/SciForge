@@ -8,6 +8,7 @@ Picks: a Dominant Edge and a Submissive Edge, each an edge of a flange's end at 
 bend ends in the same plane) is taken further in line with the flange (Extend Aligned) until:
 
 * Symmetric Gap: both stop half the Gap short of the corner's bisector (a mitred corner);
+  Extend Aligned off takes each end square toward the other flange instead of in line;
 * Overlap: the dominant flange runs over the other's end, to its outside face (less
   (1 - Overlap) of the thickness, Flip Overlap swaps which runs over); the submissive one
   stops the Gap short of the dominant's inside face.
@@ -121,11 +122,6 @@ def closure_shape(
             "%s corner relief is not available yet in SciForge; use Trim To Bend."
             % core.CLOSURE_RELIEF_LABELS.get(relief, relief)
         )
-    if not options.get("extend_aligned", True):
-        raise sb.SheetMetalError(
-            "Extend Aligned off (closing square to the flanges) is not available yet; leave "
-            "it on."
-        )
     if dominant == submissive:
         raise sb.SheetMetalError("Pick two different edges, one on each flange.")
     fd = end_frame(shape, dominant, thickness)
@@ -138,13 +134,23 @@ def closure_shape(
     if options.get("flip_overlap") and alignment == "overlap":
         fd, fs = fs, fd
     corner, _dl = _corner_point(fd, fs, thickness)
+    aligned = bool(options.get("extend_aligned", True))
+    # the way each end is taken: in line with its flange (Extend Aligned), or square to the
+    # other flange (straight toward it, across its face)
+    way = {}
+    for fr, other in ((fd, fs), (fs, fd)):
+        if aligned:
+            way[id(fr)] = fr["out"]
+        else:
+            toward = other["normal"] * (1.0 if other["normal"].dot(fr["out"]) > 0 else -1.0)
+            way[id(fr)] = toward
     big = shape.BoundBox.DiagonalLength * 2.0 + 10.0
     pieces = []
     if alignment == "symmetric":
         reach = core.closure_reach("symmetric", gap, thickness)
         m = sb.unit(fs["out"] - fd["out"])
         for fr, sign in ((fd, 1.0), (fs, -1.0)):
-            prism = fr["side"].extrude(fr["out"] * big)
+            prism = fr["side"].extrude(way[id(fr)] * big)
             normal = m * sign
             ydir = fr["normal"].cross(normal)
             if ydir.Length < 1e-9:
@@ -177,9 +183,11 @@ def closure_shape(
         ]
         near = min(planes) - gap
         if far > 1e-6:
-            pieces.append(fd["side"].extrude(fd["out"] * far))
+            step = way[id(fd)]
+            pieces.append(fd["side"].extrude(step * (far / max(step.dot(fd["out"]), 1e-6))))
         if near > 1e-6:
-            pieces.append(fs["side"].extrude(fs["out"] * near))
+            step = way[id(fs)]
+            pieces.append(fs["side"].extrude(step * (near / max(step.dot(fs["out"]), 1e-6))))
     else:
         raise sb.SheetMetalError("Alignment must be Symmetric Gap or Overlap.")
     pieces = [p for p in pieces if not p.isNull() and p.Volume > 1e-9]

@@ -68,9 +68,9 @@ class CornerPanel(smp.SmPanel):
         self.add_check(
             "extend_aligned",
             "Extend Aligned",
-            "Close in line with the flanges (off: not available yet)",
+            "On: in line with the flanges; off: square toward the other flange",
         )
-        self.fields["extend_aligned"].setEnabled(False)
+
         self.add_combo(
             "transition",
             "Bend Transition",
