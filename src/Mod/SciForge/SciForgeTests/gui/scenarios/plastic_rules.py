@@ -235,6 +235,7 @@ def type_good():
     p = ps.manage_panel()
     ps.type_into(p.fields["minimum_thickness"], "1.0")
     ps.type_into(p.fields["thickness"], "2.5")
+    ps.type_into(p.fields["draft_angle"], "1.5")
 
 
 def save_good():
@@ -252,6 +253,9 @@ def saved():
         "the design's rule is 2.5 mm",
         rule and rule["thickness"] == "2.5",
         rule and rule["thickness"],
+    )
+    h.check(
+        "and its draft 1.5 deg", rule and rule["draft_angle"] == "1.5", rule and rule["draft_angle"]
     )
 
 
@@ -305,6 +309,71 @@ def shell_follows_rule():
 
 def esc_shell():
     ps.esc()
+
+
+def draft():
+    Gui.Selection.clearSelection()
+    h.ribbon("Draft")
+
+
+def draft_follows_rule():
+    from sciforge import draft_ui
+
+    p = draft_ui.DraftPanel.last
+    h.check(
+        "Draft opens with the rule's angle (1.5 deg)",
+        p is not None and abs(p.angle.value() - 1.5) < 1e-9,
+        p and p.angle.value(),
+    )
+    ps.esc()
+
+
+def rib():
+    Gui.Selection.clearSelection()
+    ps.menu("CREATE", "Rib")
+
+
+def rib_follows_rule():
+    from sciforge import rib_ui
+
+    p = rib_ui.RibPanel.last
+    h.check(
+        "Rib opens with 0.6 x the rule's wall (1.5 mm)",
+        p is not None and abs(p.thickness.value() - 1.5) < 1e-9,
+        p and p.thickness.value(),
+    )
+    ps.esc()
+
+
+def extrude():
+    Gui.Selection.clearSelection()
+    h.ribbon("Extrude")
+
+
+def extrude_follows_rule():
+    from sciforge import extrude_ui
+
+    p = extrude_ui.ExtrudePanel.last
+    h.check(
+        "Extrude's thin wall from the rule (2.5 mm)",
+        p is not None and abs(p.options["wall_thickness"] - 2.5) < 1e-9,
+        p and p.options["wall_thickness"],
+    )
+    h.check("Extrude's distance still starts at 0", p is not None and p.options["distance"] == 0.0)
+    ps.esc()
+
+
+def no_rule_no_change():
+    """A design without a rule keeps the tools' own defaults (checked on the Cover, whose
+    component has no rule yet)."""
+    from sciforge import plastic
+
+    cover = App.ActiveDocument.getObject(s["cover"])
+    opts = {"inside": 1.0}
+    h.check(
+        "no rule: Shell keeps its own 1 mm",
+        plastic.apply_defaults(opts, cover, "shell") == [] and opts["inside"] == 1.0,
+    )
 
 
 def manage_again():
@@ -499,6 +568,13 @@ h.run(
         shell_again,
         shell_follows_rule,
         esc_shell,
+        draft,
+        draft_follows_rule,
+        rib,
+        rib_follows_rule,
+        extrude,
+        extrude_follows_rule,
+        no_rule_no_change,
         manage_again,
         new_rule,
         new_editor,
