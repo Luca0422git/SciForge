@@ -107,7 +107,7 @@ m-p/12566467); SolidWorks' help (an analogue) says fillets become bends.
 | Show rules with matching thickness only | Same (on by default, G) | A[R8] |
 | The Standard parent component becomes Sheet Metal (one way); in a Sheet Metal component its active rule is used | Same (sm-forming's `sheetmetal_component`); a component rule of another thickness is refused | A[R34], A[R9] |
 | Cylindrical faces of constant thickness become bends, planar pairs flanges | Same (the unfolder's walk) | G |
-| Sharp corners cannot be converted; add fillets | Refused naming the edge: "edge EdgeN is a sharp corner between two walls, not a bend: fillet it (inside with the bend radius, outside with radius + thickness) or Rip it"; nothing is inserted silently (CP2 item 6) | F (forum 12566467), CP2 item 6 |
+| Sharp corners cannot be converted; add fillets | Refused naming the edge: "edge EdgeN is a sharp corner between two walls, not a bend: fillet it (inside with the bend radius, outside with radius + thickness), then convert it" (QA: it said "or Rip it", but Rip needs a sheet metal body); nothing is inserted silently (CP2 item 6) | F (forum 12566467), CP2 item 6 |
 | Non-uniform thickness refused | Refused with the reason | F[F5] |
 | A timeline step | "Convert to Sheet Metal 1" (the shape passes through; red if the body later stops being one even sheet); a double-click says the conversion is one way | G |
 

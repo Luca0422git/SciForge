@@ -154,6 +154,9 @@ words for Luca):
   component is shown while it is open and hidden again when you finish.
 - **Export DXF over an existing file.** A file name typed in the box replaced an existing
   file without asking; OK now says it exists and a second OK replaces it.
+- **Convert's sharp-corner message.** It said "fillet it or Rip it", but Rip only works on a
+  part that is sheet metal already, so it sent you in a circle. It now says to fillet the
+  corner, then convert.
 - Smaller: Show/Hide Bend Lines always closes its undo step; the "face is gone" message
   now says to delete and recreate the flat pattern (Edit Flat Pattern cannot pick a face).
 
