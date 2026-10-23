@@ -150,7 +150,8 @@ Fixed (details in the parity doc's QA section):
   refused with the reason; a note when no body is in front of the catches (a sketch facing
   away from the hook body); a note when a hook runs into the other body (a beam through
   the floor, a catch in a too-thick panel, a point on a wall's top); Manual points kept by
-  the sketch's geometry ids too (deleting an earlier point no longer moves the snap fit).
+  the sketch's geometry ids too (deleting an earlier point no longer moves the snap fit);
+  OK (Snap Fit and Lip) also waits on a failed hidden step in the other body.
 - Design Advice: a Display change and OK no longer check the design again; shown again it
   recomputes only itself; its default pull is each body's component's Z (research 2.11);
   it checks again after an Undo / Redo that brings back bodies other than those it last
@@ -160,8 +161,10 @@ Fixed (details in the parity doc's QA section):
 New scenario `plastic2_qa`. Run on the builder's code it failed on exactly the 5 checks of
 the first fixes (Hide Other Body, Hook Body in an edit, the no-body note, the Display
 change, OK). Also checked headless: resizing the enclosure's boxes after a Lip keeps it on
-the same edges (lip +208, groove -252.164, exact). A trial merge into `develop` (with
-plastic-1) is clean; the five `plastic2_*` scenarios and `plastic_rules` pass on it.
+the same edges (lip +208, groove -252.164, exact). A trial merge into `develop` (which
+already has plastic-1 and the builder's plastic-2) is clean (merge-tree, nothing
+committed); on that merged tree the five `plastic2_*` scenarios, `ribbon_sweep` with
+`SWEEP_TABS=plastic` (118) and plastic-1's `plastic_rules` pass.
 
 FreeCAD facts found:
 

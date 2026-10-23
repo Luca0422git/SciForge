@@ -202,6 +202,10 @@ Fixed:
   notes "the hook of snap fit N runs into this body: shorten Beam Length or move the
   point" when a beam or catch overlaps that body (checked headless: through a 2 mm floor,
   a loop's floor, a too-thick panel, a point on the rim; none for the normal cases).
+- **OK only looked at the Snap Fit / Lip step itself**: a failed hidden step in the other
+  body (the groove, slot, loop or the Lip's groove) would have been accepted and left in
+  that body's history. The dialogs now show its error and keep OK waiting, like the
+  step's own (defensive: no design found that fails only there).
 - **Manual points followed the wrong point after a sketch edit**: the picked points were
   kept by geometry index only, so deleting an earlier point of the sketch moved the snap
   fit to another point without a word. They are now also kept by the sketch's own

@@ -682,7 +682,7 @@ class SnapFitPanel(Panel):
         if self.error:
             self.message.setText("⚠ " + self.error)
             return
-        text = preview.failure(self.target)
+        text = failure(self.target)
         if not text and self.target is not None:
             notes = [getattr(self.target, "SciForgeWarning", "")]
             notes += [getattr(f, "SciForgeWarning", "") for f in _followers(self.target)]
@@ -897,7 +897,7 @@ class SnapFitPanel(Panel):
             self.message.setText("⚠ This snap fit cannot be built.")
             return False
         preview.recompute(self.doc)
-        text = preview.failure(self.target)
+        text = failure(self.target)
         if text:
             self.message.setText("⚠ " + text)
             return False
@@ -946,6 +946,19 @@ class SnapFitPanel(Panel):
         self._hide_shown()
         self._show_other()
         super().cleanup()
+
+
+def failure(feature):
+    """The error of the Snap Fit step or of its hidden groove / loop step in the other body,
+    or "" (OK must not leave a failed step behind, even a hidden one)."""
+    text = preview.failure(feature)
+    if text or feature is None:
+        return text
+    for follower in _followers(feature):
+        text = preview.failure(follower)
+        if text:
+            break
+    return text
 
 
 def _followers(feature):

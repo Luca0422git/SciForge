@@ -11,7 +11,9 @@ click on the base and says the hooks stay on the lid (they cannot move to anothe
 edit); Beam Length 14, OK; Undo: Beam Length 12 and both bodies as before the edit; Redo:
 the edit back. Double-click, Beam Length 16, Ctrl+Z over the 3D view: the dialog closes as
 cancelled, the design as before it (14). A sketch with only a line: Snap Fit says it has no
-points; Esc leaves nothing.
+points; Esc leaves nothing. A sketch facing down into the base (as one on the lid's
+underside): the hooks would go on the base with nothing in front of them, and the dialog
+says so; Flip finds the groove body; Esc leaves nothing.
 
 Lip: base and shell lid, the lid hidden, the four inside rim edges clicked, OK. Double-click
 "Lip 1": Type Groove (the lid left alone), Cancel: the lip and the lid's groove back exactly.
