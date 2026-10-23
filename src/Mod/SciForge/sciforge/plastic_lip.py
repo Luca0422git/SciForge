@@ -379,6 +379,28 @@ def check_fit(rim, options):
     )
 
 
+def inner_loop(shape, name):
+    """["EdgeN", ...] of the inside edge of the flat face `name` (its one inner loop: a rim's
+    inside edge), or None when it is not flat or has no single inner loop."""
+    try:
+        face = shape.getElement(name)
+        if type(face.Surface).__name__ != "Plane":
+            return None
+        outer = face.OuterWire
+        inner = [w for w in face.Wires if not w.isSame(outer)]
+        if len(inner) != 1:
+            return None
+        names = []
+        for edge in inner[0].Edges:
+            for i, candidate in enumerate(shape.Edges, start=1):
+                if candidate.isSame(edge):
+                    names.append("Edge%d" % i)
+                    break
+        return names or None
+    except Exception:
+        return None
+
+
 def tangent_chain(shape, name):
     """The edge `name` and the edges joined to it end to end with no corner (tangent), as
     names: Fusion's tangent chain of a rim's edges."""

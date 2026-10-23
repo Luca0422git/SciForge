@@ -336,7 +336,8 @@ class LipPanel(Panel):
         if getattr(self, "active", "edges") == "mate":
             self._mate_picked(obj)
             return
-        if not short.startswith("Edge"):
+        face = short.startswith("Face")
+        if not short.startswith("Edge") and not face:
             self.message.setText("⚠ A lip runs along edges: click the rim's inside edges.")
             return
         body = bodies.body_of(obj)
@@ -358,6 +359,9 @@ class LipPanel(Panel):
                     )
                     return
                 base = body.Tip
+        if face:
+            self._rim_face_picked(base, obj, short)
+            return
         found = curve_pick.base_element(base, obj, short)
         if found is None:
             found = _within(base, obj, short) or _nearest(base, point)
@@ -373,6 +377,20 @@ class LipPanel(Panel):
             self.names = self.names + [n for n in names if n not in self.names]
         if refresh:
             self._picks_changed()
+
+    def _rim_face_picked(self, base, obj, short):
+        """A click on the rim's flat face takes its inside edge (the face's inner loop), as
+        if each of its edges had been clicked (SciForge's shortcut)."""
+        found = curve_pick.base_element(base, obj, short)
+        names = plastic_lip.inner_loop(found[0].Shape, found[1]) if found is not None else None
+        if not names:
+            self.message.setText(
+                "⚠ Click the rim's flat face (a face with an inside edge) or the inside edges."
+            )
+            return
+        self.source = found[0]
+        self.names = names
+        self._picks_changed()
 
     def _edges(self):
         if self.source is None or not self.names:

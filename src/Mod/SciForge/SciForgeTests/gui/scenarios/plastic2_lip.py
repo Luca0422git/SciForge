@@ -12,6 +12,9 @@ is left alone, the base loses 207.24 x 1.1 = 227.964. Type Lip: only the lip. Li
 (wider than the 2 mm wall): refused in the dialog, OK keeps it open. Back to Lip And Groove,
 OK: one "Lip 1" in the timeline. Undo / Redo. Double-click "Lip 1": the values read back;
 Lip Height 1, OK. Double-click again, 2, Esc: unchanged. Save, close, reopen: the same.
+A lip ring on a cone's rim (Pull Direction and Face Guide); walls of different draft refused.
+A new design: a click on the rim's flat face takes its 4 inside edges (the same lip and
+groove); Cancel leaves both bodies as they were.
 """
 
 import math
@@ -451,6 +454,46 @@ def mixed_walls():
     h.check("walls of different draft: Face Guide refused, saying why", "different" in text, text)
 
 
+def rim_face_design():
+    base, lid = ps.enclosure("LipFace", lid="shell")
+    s["base"], s["lid"] = base, lid
+    h.fit()
+    ps.click_eye("Lid")
+
+
+def rim_face_open():
+    h.check("the new design's lid is hidden", not s["lid"].ViewObject.Visibility)
+    ps.plastic_tab()
+    h.ribbon("Lip")
+
+
+def click_rim_face():
+    ps.settle(ps.lip_panel)
+    h.check("the Lip dialog again", ps.lip_panel() is not None)
+    h.click(V(1, 20, 20))  # the rim's flat face, on the left wall
+
+
+def rim_face_lip():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    if not h.check("still open", p is not None):
+        return
+    text = p.field.button.text()
+    h.check(
+        "a click on the rim's face: its 4 inside edges", text == "4 edges", (text, ps.message(p))
+    )
+    base, lid = changes()
+    h.check("the same lip as with the edges: +184.718", ps.near(base, LIP_DRAFTED, 1e-6), base)
+    h.check("the same groove: -225.929", ps.near(-lid, GROOVE_DRAFTED, 1e-6), lid)
+    ps.cancel()
+
+
+def rim_face_cancelled():
+    h.check("Cancel: no Lip left", not ps.lip_steps())
+    base, lid = changes()
+    h.check("both bodies as they were", ps.near(base, 0.0) and ps.near(lid, 0.0), (base, lid))
+
+
 h.run(
     "plastic2_lip",
     [
@@ -502,5 +545,10 @@ h.run(
         cone_pull_exact,
         cone_face_guide,
         cone_done,
+        rim_face_design,
+        rim_face_open,
+        click_rim_face,
+        rim_face_lip,
+        rim_face_cancelled,
     ],
 )

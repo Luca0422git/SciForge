@@ -27,7 +27,8 @@ edited (this file is the session log entry).
   angles, base fillet, Hook / Groove switches, picked or found bodies, Flip. Lip: Lip /
   Groove / Lip And Groove, Swap, tangent chains (closed or open, straight or round), Pull
   Direction (rim normal or picked) and Face Guide (leans with a drafted wall), drafts, tip
-  and root radius (the groove's mouth rounded to keep the clearance).
+  and root radius (the groove's mouth rounded to keep the clearance); a click on the rim's
+  flat face takes its inside edge.
 - `sciforge/plastic_advice.py`: the analysis object (`DesignAdvice`, SciForgeType
   "DesignAdviceAnalysis", so the browser's Analysis folder shows it), measuring in its
   `execute` (results as JSON in `Results`), never failing (a `Problem` text instead), waiting
@@ -42,7 +43,7 @@ edited (this file is the session log entry).
   hand-worked volumes (they give every size, so they do not depend on the default rule).
 - Icons `pl_snap_fit`, `pl_lip`, `pl_design_advice`, `pl_snap_groove`
   (`tools/sciforge/icons_plastic2.py`); the three ribbon entries wired.
-- Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (94), `plastic2_lip` (85),
+- Scenarios `plastic2_snap` (63 checks), `plastic2_snap_options` (94), `plastic2_lip` (95),
   `plastic2_advice` (81); helpers `SciForgeTests/gui/plastic2_steps.py`; unit tests
   `test_plastic2_core.py` (34).
 
