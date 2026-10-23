@@ -14,7 +14,7 @@ new (all in one undo step, a timeline step with edit, saved with the design):
 | Delete | on the SURFACE tab faces go without healing (step `SurfaceDeleteFace`; a solid, also a STEP part without history, becomes a surface body); SOLID heals as before; faces of a surface body never heal |
 | Fillet / Chamfer | new steps `SurfaceFillet` / `SurfaceChamfer` (Radius Type Constant / Chord Length / Variable; Equal / Two Distances / Distance and Angle + Flip; Tangent Chain; drag arrow + value box); F and SOLID's Fillet / Chamfer hand over when the picks are on a surface body (or nothing is picked on the SURFACE tab); a solid's edge clicked in the surface dialog goes back to the SOLID dialog |
 | Press Pull (Q) | step `SurfacePressPull`. A flat face of a surface body moves along its normal: among flat polygons its corners slide along the edges leaving them (slanted walls follow exactly); faces running along the move grow or are cut back; neighbours at an angle (a cone under a lid) are carried on along their own surface or cut back and the lid is rebuilt in the moved plane; several flat faces facing different ways (two walls of a box or tray) each move along their own normal; one curved face is offset (a cup's wall, the floor follows). An edge of a surface body opens its Fillet; a surface fillet's face opens that fillet |
-| Move/Copy, Align, Scale | the steps accept a body with faces (no solid needed) |
+| Move/Copy, Align, Scale | the steps accept a body with faces (no solid needed); Move Object Faces moves flat faces of a surface body (the faces round them follow) |
 | Pattern (Rect / Circ / Path), Mirror | bodies of type Bodies; a surface pick switches Pattern Type to Bodies; Mirror Join stitches the copy on with a Stitch Tolerance (dialog row, default 1 mm, kept on edit) |
 | Merge (ribbon entry wired) | `SciForge_SurfaceMerge`: adjacent faces on one surface become one face (`UnifySameDomain`); faces that meet smoothly are refitted as one surface (filling through their boundary and sample points, refused when it moves them more than 0.01 mm / 0.1 %); a sharp edge is refused with the reason (step `SurfaceMerge`). Works in a design without history too (where Fusion offers it) |
 | Split Face, Replace Face | the SOLID steps take a surface body: Split Face divides its faces and sews them back (Merge joins them again); Replace Face moves one face onto a flat target, the faces round it carried on or cut back |
@@ -26,11 +26,11 @@ New files: `sciforge/surfmod_core.py` (rules, unit tested), `sciforge/surfmod.py
 `SurfaceModifyFeature`, saved as `sciforge.surfmod.SurfaceModifyFeature`: never rename),
 `sciforge/surfmod_ui.py` (dialog on `pickpanel.PickPanel`, hand-overs, Merge command,
 `ViewProviderSurfaceModify`), `tools/sciforge/icons_surface4.py` (5 icons `surfmod_*`),
-`SciForgeTests/gui/surface4_steps.py`, 15 scenarios `surface4_*`, 19 golden models
+`SciForgeTests/gui/surface4_steps.py`, 16 scenarios `surface4_*`, 20 golden models
 `surface4_*`, `SciForgeTests/unit/test_surfmod_core.py`.
 
 Shared files touched (small, each marked "surface-4"): `split.py`, `split_ui.py`,
-`split_face.py`, `replace_face.py`, `delete.py`, `delete_ui.py`, `fillet_ui.py`,
+`split_face.py`, `replace_face.py`, `move_face.py`, `delete.py`, `delete_ui.py`, `fillet_ui.py`,
 `presspull_ui.py`, `move.py`, `align.py`, `scale.py`, `scale_ui.py`, `pattern.py`,
 `pattern_ui.py`, `combine.py`, `silhouette.py`, `material_ui.py`, `ribbon_config.py` (the
 Merge line only), `ai/ops/bodies_ops.py` (`measure_bodies` measures a surface body's faces),

@@ -14,7 +14,7 @@ Code (all under `src/Mod/SciForge/sciforge/`):
 - `surfmod_ui.py`: the dialog (`SurfaceModifyPanel`, on `pickpanel.PickPanel` like Shell and
   Draft), the hand-over functions the SOLID commands call, the Merge command.
 - Small changes in the SOLID tool files (each marked "surface-4" in a comment): `split.py`,
-  `split_face.py`, `replace_face.py`,
+  `split_face.py`, `replace_face.py`, `move_face.py`,
   `split_ui.py`, `delete.py`, `delete_ui.py`, `fillet_ui.py`, `presspull_ui.py`, `move.py`,
   `align.py`, `scale.py`, `scale_ui.py`, `pattern.py`, `pattern_ui.py`, `combine.py`,
   `silhouette.py`, `material_ui.py`; the ribbon's Merge entry; the golden ops block at the
@@ -48,7 +48,7 @@ keys in `docs/sciforge/dev/research/fusion-surface.md`), **F** = Autodesk Commun
 | **Press Pull** (Q) on a face of a surface body: an Offset Face / Press Pull feature; the faces around follow | Press Pull hands over at the first pick on a surface body (`presspull_ui._take`). A flat face moves along its normal (+ along it). Among flat polygons (a box, a tray with slanted walls) each corner of the face slides along the edge that leaves it to the moved plane and the faces around are rebuilt with it (exact, like Fusion's offset of a face of a solid); otherwise a neighbour that runs along the move (a round or flat extruded wall) grows by a band or is cut back to the moved face. A face whose neighbours meet it at an angle (the flat lid of a cone, a lampshade) is moved with its neighbours carried on along their own surfaces (exactly for a cone, cylinder or plane; else `surface_geom.extend`) or cut back to the moved plane, and the moved face is the piece of that plane they close round; a neighbour that meets it tangentially (a fillet) is refused with the reason. Several parallel flat faces move together. Flat faces that face different ways (two walls of a box, of a tray) move together among flat polygons, each along its own normal: every corner goes where its faces' planes meet again, a corner on the open edge of a face that stays slides along that edge, the rim between two moved walls stays flat. One curved face is offset (a cup's round wall: the floor grows or is cut back with it). A "Press Pull" step (`SurfacePressPull`) | A (presence, several faces: `OffsetFacesFeatures`), G (the neighbour rule, the rim) |
 | Press Pull on a fillet's face changes the fillet | The face of a surface Fillet / Chamfer step opens that step's dialog (its size) | A (H-MOD: Press Pull resizes fillets) |
 | Press Pull on an edge: Fillet | An edge of a surface body opens the surface Fillet | A |
-| **Move/Copy** (M), **Align** of surface bodies | Same dialogs; the steps take a body with faces (`surfmod.body_has_faces`) instead of needing a solid. A copy of a surface body is a surface body | G (present in Fusion's menu) |
+| **Move/Copy** (M), **Align** of surface bodies | Same dialogs; the steps take a body with faces (`surfmod.body_has_faces`) instead of needing a solid. A copy of a surface body is a surface body. Move Object Faces moves flat faces of a surface body (translate or turn): each face is replaced by itself moved and the faces round it are carried on or cut back, as Replace Face does (`move_face._move_open`); a curved face is refused with the reason (Press Pull offsets it) | G (present in Fusion's menu) |
 | **Pattern** (Rectangular / Circular / on Path) and **Mirror** of surface bodies, Object Type Bodies | Same dialogs. A click on a surface body sets Pattern Type to Bodies (a surface body has no features to pattern); with nothing selected and no solid, the dialog opens on the shown surface body | A |
 | **Mirror, Operation Join**: the mirrored surface bodies are **stitched** to the originals with a **Stitch Tolerance** | Same: SciForge's PatternFeature stitches the copy to the body (`surface_geom.stitch`); a stitch that closes is a solid. Stitch Tolerance row (shown for a surface body with Join), default 1 mm; kept on edit | A (stitch, tolerance), G (default 1 mm) |
 | **Scale** of surface bodies | Same dialog and step; uniform or per-axis. Faces that end up in one plane are merged (Refine, as for solids) | A |
@@ -91,7 +91,7 @@ saved with the design.
 
 Results and check counts: `docs/sciforge/sessions/surface-4.md`.
 
-- Scenarios (real input, FreeCAD 1.1.4), 15:
+- Scenarios (real input, FreeCAD 1.1.4), 16:
   - `surface4_fillet`: fillet, edit with a parameter that the radius then follows, chamfer
     with a pre-selected edge, a free-edge refusal, Esc, a Variable radius fillet, edited to
     Chord Length.
@@ -115,6 +115,8 @@ Results and check counts: `docs/sciforge/sessions/surface-4.md`.
     back), undo / redo, a target beyond the walls refused in the edit, Cancel.
   - `surface4_move_mirror`: Mirror Join with stitch, edit with Stitch Tolerance, Move, Move
     with Create Copy, Scale.
+  - `surface4_move_faces`: Move Object Faces: a surface box's floor 5 down (the walls grow),
+    Ctrl+Z / Ctrl+Y, a curved face refused, Esc.
   - `surface4_pattern`: rectangular and circular patterns of a surface body, undo / redo,
     Esc.
   - `surface4_misc`: Align, Combine refusal, Physical Material, Appearance.
@@ -124,10 +126,11 @@ Results and check counts: `docs/sciforge/sessions/surface-4.md`.
     Ctrl+Y, SURFACE Delete, Fillet, history turned on again.
   - `surface4_step_part`: SURFACE Delete of a face of a STEP part without history (taken
     into a body, it becomes a surface body), Ctrl+Z / Ctrl+Y, Fillet on it.
-- Golden models `surface4_*.json`, 19: fillet + edit + reopen, variable fillet, chord length
+- Golden models `surface4_*.json`, 20: fillet + edit + reopen, variable fillet, chord length
   fillet, chamfer + SURFACE delete, press pull + edit + reopen, press pull of a tray with
   slanted walls (its floor; two of its walls at once), of a cup's round wall, of a
   lampshade's lid, merge, merge of tangent faces (refit), split face + merge, replace face,
+  move faces (down, then turned),
   split of a solid by a surface and by a lofted surface, split of a surface, rectangular
   pattern and pattern on path of a surface body, mirror join + scale.
 - Unit tests: `SciForgeTests/unit/test_surfmod_core.py`.
