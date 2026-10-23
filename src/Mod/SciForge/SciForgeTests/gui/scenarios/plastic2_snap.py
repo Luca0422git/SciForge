@@ -194,6 +194,25 @@ def reopened():
         bad = [o.Name for o in ps.doc().Objects if "Invalid" in o.State or "Error" in o.State]
         h.check("every step computed", not bad, bad)
     h.check("Snap Fit 1 in the timeline", "Snap Fit 1" in ps.titles(), ps.titles())
+    rule_changes()
+
+
+def rule_changes():
+    """The design's rule becomes "ABS 1.5 mm" (plastic-1's Assign Plastic Rule dialog does
+    this; its contract call here): the values still linked to the rule follow it, the typed
+    Beam Length stays."""
+    from sciforge import plastic
+
+    step = ps.snap_steps()[0]
+    lid = ps.by_label("Lid")
+    before = ps.volume(lid)
+    plastic.assign_rule(ps.doc(), "ABS 1.5 mm", None)
+    ps.doc().recompute()
+    h.check("the rule's thickness reaches the beam", ps.near(step.RootThickness.Value, 1.5))
+    h.check("and the catch end", ps.near(step.TipThickness.Value, 1.5))
+    h.check("the typed Beam Length stays 14", ps.near(step.BeamLength.Value, 14.0))
+    h.check("the hook is thinner now", ps.volume(lid) < before - 10, (ps.volume(lid), before))
+    h.check("still computed", "Invalid" not in step.State, step.State)
 
 
 h.run(

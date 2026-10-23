@@ -121,7 +121,13 @@ class LipPanel(Panel):
         form.addRow("", self.swap)
         self.mate_label = QtWidgets.QLabel("")
         self.mate_label.setObjectName("SciForgeLip_mate")
-        form.addRow("Other Body", self.mate_label)
+        self.mate_field = SelectionField(self, "mate", "Found")
+        self.mate_field.button.setObjectName("SciForgeLip_mate_body")
+        self.mate_field.clear.setObjectName("SciForgeLip_clear_mate")
+        self.mate_title = QtWidgets.QLabel("Other Body")
+        form.addRow(self.mate_title, self.mate_field.widget)
+        form.addRow("", self.mate_label)
+        self.mate_pick = None
         box = QtWidgets.QGroupBox("Advanced")
         advanced = QtWidgets.QFormLayout(box)
         self.fields = {}
@@ -176,6 +182,8 @@ class LipPanel(Panel):
             self.labels[key].setVisible(show)
         self.swap.setVisible(kind == "lip_and_groove")
         self.mate_label.setVisible(kind == "lip_and_groove")
+        self.mate_title.setVisible(kind == "lip_and_groove")
+        self.mate_field.widget.setVisible(kind == "lip_and_groove")
         pull = self.options["guide"] == "pull"
         self.direction_label.setVisible(pull)
         self.direction_field.widget.setVisible(pull)
@@ -217,8 +225,16 @@ class LipPanel(Panel):
         self.active = name
         self.field.set_active(name == "edges")
         self.direction_field.set_active(name == "direction")
+        self.mate_field.set_active(name == "mate")
 
     def clear_field(self, name):
+        if name == "mate":
+            self.mate_pick = None
+            self.mate_field.set_text("")
+            self.find_mate = True
+            self.activate("edges")
+            self._changed()
+            return
         if name == "direction":
             self.options.pop("direction", None)
             self.activate("edges")
@@ -227,6 +243,20 @@ class LipPanel(Panel):
             return
         self.names = []
         self._picks_changed()
+
+    def _mate_picked(self, obj):
+        body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+        own = bodies.body_of(self.source) if self.source is not None else None
+        if body is None or not bodies.has_solid(body):
+            self.message.setText("⚠ Click the solid body that touches the rim.")
+            return
+        if body is own:
+            self.message.setText("⚠ The other body cannot be the one the edges are on.")
+            return
+        self.mate_pick = body
+        self.mate_field.set_text(body.Label)
+        self.activate("edges")
+        self._changed()
 
     def _direction_picked(self, obj, short):
         from . import construct, surface_analysis
@@ -300,6 +330,9 @@ class LipPanel(Panel):
     def _picked(self, obj, short, refresh=True, point=None):
         if getattr(self, "active", "edges") == "direction":
             self._direction_picked(obj, short)
+            return
+        if getattr(self, "active", "edges") == "mate":
+            self._mate_picked(obj)
             return
         if not short.startswith("Edge"):
             self.message.setText("⚠ A lip runs along edges: click the rim's inside edges.")
@@ -388,14 +421,18 @@ class LipPanel(Panel):
         if self.source is None or not self.names:
             return
         try:
+            mate = self.mate_pick if bodies.alive(self.mate_pick) else None
             if self.target is None:
-                self.target = plastic_lip.make(self.source, list(self.names), dict(self.options))
+                self.target = plastic_lip.make(
+                    self.source, list(self.names), dict(self.options), mate=mate
+                )
             else:
+                keep = mate if mate is not None else (None if self.find_mate else False)
                 plastic_lip.update(
                     self.target,
                     names=list(self.names),
                     options=dict(self.options),
-                    mate=None if self.find_mate else False,
+                    mate=keep,
                 )
             self.find_mate = False
             self.error = ""

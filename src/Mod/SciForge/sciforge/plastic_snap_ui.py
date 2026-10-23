@@ -106,6 +106,7 @@ class SnapFitPanel(Panel):
         self.dirty = False
         self.find_other = False
         self.other_pick = None  # the other body picked in its box (None: found)
+        self.hook_pick = None  # the hook body picked in its box (None: found)
         self.active = "points"
         self.hidden_other = None  # (body, was visible) while Hide Other Body is on
         self.arrows = {}
@@ -178,6 +179,10 @@ class SnapFitPanel(Panel):
         self.hook = curve_pick.checkbox("Hook", self.options["hook"])
         self.hook.setObjectName("SciForgeSnap_hook")
         hook.addRow("", self.hook)
+        self.hook_field = SelectionField(self, "hook", "Found")
+        self.hook_field.button.setObjectName("SciForgeSnap_hook_body")
+        self.hook_field.clear.setObjectName("SciForgeSnap_clear_hook_body")
+        hook.addRow("Hook Body", self.hook_field.widget)
         self.extent = curve_pick.combo(EXTENT_LABELS, self.options["extent"])
         self.extent.setObjectName("SciForgeSnap_extent")
         hook.addRow("Extent Type", self.extent)
@@ -337,11 +342,19 @@ class SnapFitPanel(Panel):
         self.field.set_active(name == "points")
         self.align_field.set_active(name == "align")
         self.other_field.set_active(name == "other")
+        self.hook_field.set_active(name == "hook")
 
     def clear_field(self, name):
         if name == "align":
             self.options["align_point"] = None
             self.align_field.set_text("")
+            self.activate("points")
+            self._changed()
+            return
+        if name == "hook":
+            self.hook_pick = None
+            self.hook_field.set_text("")
+            self._rebuild_in_hook_body()
             self.activate("points")
             self._changed()
             return
@@ -371,6 +384,30 @@ class SnapFitPanel(Panel):
         self.align_field.set_text("%s %s" % (obj.Label, short) if short else obj.Label)
         self.activate("points")
         self._changed()
+
+    def _hook_picked(self, obj, short):
+        body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+        if body is None or not bodies.has_solid(body):
+            self.message.setText("⚠ Click a solid body for the hooks.")
+            return
+        if body is self.other_pick:
+            self.message.setText("⚠ The hooks cannot go on the body that takes the grooves.")
+            return
+        self.hook_pick = body
+        self.hook_field.set_text(body.Label)
+        self._rebuild_in_hook_body()
+        self.activate("points")
+        self._changed()
+
+    def _rebuild_in_hook_body(self):
+        """A snap fit lives in its hook body: a new hook body makes it again there."""
+        if self.target is None or self.editing:
+            return
+        wanted = self.hook_pick
+        if wanted is None or bodies.body_of(self.target) is not wanted:
+            plastic_snap.remove(self.target)
+            self.target = None
+            self.find_other = True
 
     def _other_picked(self, obj, short):
         body = obj if bodies.is_body(obj) else bodies.body_of(obj)
@@ -465,6 +502,9 @@ class SnapFitPanel(Panel):
             return
         if self.active == "other":
             self._other_picked(obj, short)
+            return
+        if self.active == "hook":
+            self._hook_picked(obj, short)
             return
         if not extrude.is_sketch(obj):
             self.message.setText(
@@ -567,8 +607,9 @@ class SnapFitPanel(Panel):
         try:
             other = self.other_pick if bodies.alive(self.other_pick) else None
             if self.target is None:
+                hook = self.hook_pick if bodies.alive(self.hook_pick) else None
                 self.target = plastic_snap.make(
-                    self.sketch, dict(self.options), self.indices, groove_body=other
+                    self.sketch, dict(self.options), self.indices, hook_body=hook, groove_body=other
                 )
             else:
                 keep = other if other is not None else (None if self.find_other else False)

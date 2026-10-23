@@ -94,6 +94,21 @@ def lip_and_groove():
     h.check("no error", "⚠" not in ps.message(p), ps.message(p))
     h.check("two arrows (height, width)", set(p.arrows) == {"lip_height", "lip_width"})
     h.shot("plastic2_lip_drafted")
+    ps.ui.click(p.mate_field.button)
+
+
+def click_base_as_mate():
+    h.check("the Other Body box takes the clicks", ps.lip_panel().active == "mate")
+    h.click(V(30, 0, 10))
+
+
+def mate_refused():
+    ps.settle(ps.lip_panel)
+    p = ps.lip_panel()
+    text = ps.message(p)
+    h.check("the edges' own body cannot be the other body", "cannot be the one" in text, text)
+    h.check("the lid stays the other body", p.mate_label.text() == "Lid", p.mate_label.text())
+    ps.ui.click(p.field.button)
     ps.type_field(p, "inner_draft", "0")
 
 
@@ -406,6 +421,8 @@ h.run(
         click_edge(2),
         click_edge(3),
         lip_and_groove,
+        click_base_as_mate,
+        mate_refused,
         outer_draft,
         height,
         taller,

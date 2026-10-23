@@ -262,6 +262,47 @@ def across_components():
 
     box = bodies.global_shape(s["lid"]).BoundBox
     h.check("the hook hangs from the moved lid (z 8)", ps.near(box.ZMin, 8.0, 1e-6), box)
+    ps.ui.click(p.hook_field.button)
+
+
+def click_base_for_hooks():
+    h.check("the Hook Body box takes the clicks", ps.snap_panel().active == "hook")
+    h.fit()
+    h.click(V(30, 0, 10))
+
+
+def hooks_on_base_refused():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("Hook Body: Base", p.hook_field.button.text() == "Base", p.hook_field.button.text())
+    text = ps.message(p)
+    h.check("no part above the point in the base: says so, names Flip", "Flip" in text, text)
+    ps.toggle(p.flip)
+
+
+def hooks_on_base_flipped():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("Flip: the hooks stand on the base", "⚠" not in ps.message(p), ps.message(p))
+    h.check("the base gained the hook", base_change() > 150, base_change())
+    from sciforge import bodies
+
+    h.check("the snap fit is in the base now", bodies.body_of(p.target) is s["base"])
+    ps.toggle(p.flip)
+
+
+def unflip():
+    ps.settle(ps.snap_panel)
+    ps.ui.click(ps.snap_panel().hook_field.clear)
+
+
+def hooks_back_on_lid():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    from sciforge import bodies
+
+    h.check("cleared: the hooks on the lid again", bodies.body_of(p.target) is s["lid"])
+    h.check("and the groove again", ps.near(-base_change(), ps.GROOVE, 1e-6), base_change())
     ps.ok()
 
 
@@ -314,6 +355,11 @@ h.run(
         components_design,
         pick_in_components,
         across_components,
+        click_base_for_hooks,
+        hooks_on_base_refused,
+        hooks_on_base_flipped,
+        unflip,
+        hooks_back_on_lid,
         empty_design,
         no_snap_dialog,
         no_lip_dialog,
