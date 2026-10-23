@@ -145,8 +145,9 @@ inch rule, a lid in its own component with its own rule, the default ribs by a w
 fastener head refused), golden `plastic_boss_major_draft` and `plastic_rest_cut` (the Rest's
 cut-only case, also probed on a shelled pipe crossing the plane: exact), four unit tests (25
 in all). Probes (not committed) of 12 Boss option sets, the fastener heads and a turned
-enclosure build valid solids, except Constant Thickness with the default alignment step,
-refused with its reason (the recess is wider than the thin boss: set Step Type None). Gaps found but not fixed are in the parity doc's Known gaps
-(rules of nested components). Shared test file touched: `SciForgeTests/gui/harness.py` (one
+enclosure build valid solids, except Constant Thickness with the default alignment step:
+refused, the dialog now saying what to change (a smaller Alignment Diameter, or Step Type
+None). Gaps found but not fixed are in the parity doc's Known gaps (rules of nested
+components). Shared test file touched: `SciForgeTests/gui/harness.py` (one
 try block in `prepare()` resetting the plastic library settings, beside the other settings
 resets).

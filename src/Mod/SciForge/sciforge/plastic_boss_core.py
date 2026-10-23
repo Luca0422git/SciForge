@@ -265,7 +265,11 @@ def check_options(options):
         if s["step"] != "none" and (s["step_diameter"] <= TOL or s["step_depth"] <= TOL):
             raise BossError("%s: the alignment step needs a diameter and a depth." % name)
         if s["step"] == "in" and s["step_diameter"] >= od - TOL:
-            raise BossError("%s: the alignment recess must be narrower than the boss." % name)
+            raise BossError(
+                "%s: the alignment recess must be narrower than the boss (%.2f mm across, the "
+                "boss %.2f mm): make the Alignment Diameter smaller or set the Step Type to None."
+                % (name, s["step_diameter"], od)
+            )
         if s["step"] == "in" and hole and s["step_diameter"] <= s["hole_diameter"] + TOL:
             raise BossError("%s: the alignment recess must be wider than the hole." % name)
         if s["step"] == "out" and hole and s["step_diameter"] <= s["hole_diameter"] + TOL:

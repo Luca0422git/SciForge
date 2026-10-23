@@ -204,6 +204,10 @@ class BossSettingsTest(unittest.TestCase):
         self.assertIn("unknown shape", self.refused(1, shape="square"))
         self.assertIn("recess must be narrower", self.refused(1, step_diameter=12))
         self.assertIn("spigot must be wider", self.refused(2, step_diameter=2.0))
+        # QA: Constant Thickness with the default recess says what to change
+        text = self.refused(1, shape="constant_thickness")
+        self.assertIn("narrower than the boss", text)
+        self.assertIn("Step Type to None", text)
         self.assertIn("countersink angle", self.refused(1, hole="countersink", countersink_angle=5))
         self.assertIn("cannot be negative", self.refused(2, clearance=-1))
 
