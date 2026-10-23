@@ -19,7 +19,8 @@ is `parity/plastic-2.md`. Code in `src/Mod/SciForge/sciforge/`:
 The rule defaults go into the existing dialogs by one guarded line each:
 `shell_ui.py`, `draft_ui.py`, `rib_ui.py` (Rib and Web), `extrude_ui.py`
 (`plastic.apply_defaults(options, body, tool)`, which does nothing for a body whose component
-has no rule). The browser's Document Settings get a "Plastic Rule: <name>" row (the active
+has no rule), and one more line at each dialog's OK (`plastic.remember_links(feature, tool)`)
+links the values that are the rule's. The browser's Document Settings get a "Plastic Rule: <name>" row (the active
 component's rule; a click opens Assign Plastic Rule), through the settings-row hook sm-forming
 added to `browser_ui.py` / `browser_core.py` (merged from `sf/sm-forming`).
 
@@ -45,7 +46,7 @@ settle it).
 | Manage Plastic Rules: two lists, a pencil to edit, New, Copy, Delete, Set As Default (library) | Same as buttons under the lists (New, Edit, Copy, Delete, Copy to Library, Copy to Design, Set As Default); Edit opens the rule's fields under the lists (not a second window) | A, G (buttons) |
 | Edit Plastic Rule fields: Name, Units (fixed once made), Material, Thickness, Draft Angle, Nominal Radius, Reveal Height, Clearance, Thickness Range min / max, Thickness Variation, Minimum Draft Angle, Knife Edge Threshold | Same fields; lengths may be expressions in Thickness ("Thickness / 2"), a bare number is in the rule's units | A |
 | Thickness must lie in the thickness range; the default library rule and a rule in use cannot be deleted | Same, each refusal said in the dialog | A |
-| Editing a design rule updates the features that use it | Boss and Rest values that came from the rule follow it (they stay linked until typed over; golden `plastic_rule_edit_moves_boss`); the SOLID dialogs take the rule's values as defaults only | A, G (links) |
+| Editing a design rule (or giving the component another rule) updates the features that use it | Boss and Rest values that came from the rule follow it (linked until typed over; golden `plastic_rule_edit_moves_boss`). A Shell, Draft, Rib / Web or thin Extrude whose value was the rule's when its dialog was OK'd is linked too (`plastic.remember_links`, one line at each dialog's OK) and follows the rule (`plastic.follow`); a value typed over, or a formula, is left alone | A, G (links) |
 | The library: Fusion ships base rules in metric and imperial and several resins | SciForge's own library (16 rules: Default mm / in, ABS, PC, PC/ABS, PP, PA66, POM, HIPS, HDPE, PBT, PMMA, TPE, FDM PLA / PETG); values checked against the research table (unit test) | A (existence), G (values) |
 | The library is the user's (cloud) | The user's own rules and the default choice are kept in SciForge's settings (`Mod/SciForge/Plastic`), the built-in ones always there (an edited built-in rule replaces it) | G |
 | Not a timeline step | Same (the assignment is an undo step) | G |
@@ -94,6 +95,7 @@ rule when the component has none, and say so in the dialog.
 |---|---|---|
 | A closed sketch profile and a body; the profile becomes a flat face, material removed where the body bulges past it and added where it lies below, Thickness and draft | Same: what lies past the sketch plane inside the profile is cut; a plate Thickness thick under the flat face, side walls Thickness thick (drafted, wider towards the body) down to the old wall; in a shelled part the old wall inside the walls is removed (even wall, the inside open), in a solid part the pedestal is solid | A (outcome), G (construction) |
 | Flip | Turns the inside round (default: the side of the part's centre of mass); a profile that lies over nothing is refused in the dialog | G |
+| The body | Body box: Auto (the body the profile lies over; the sketch's own body first) or picked (click the box, then the body); the dialog says where it builds | A (a body is an input), G (box) |
 | Thickness / draft from the rule | Same, linked until typed over; a blue arrow drags the thickness | G |
 
 ### Rule Fillet (PLASTIC > MODIFY)
@@ -107,11 +109,11 @@ rule when the component has none, and say so in the dialog.
 
 | Kind | Name | What |
 |---|---|---|
-| Scenario | `plastic_rules` (66 checks) | Assign (lists, values, library rule copied, material), undo / redo, Shell / Draft / Rib / thin Extrude open with the rule's values, Manage (edit with a refused range, Save, in-use and default rules not deleted, New, Copy, Set As Default, Esc drops design changes), a component's own rule picked by clicking its body, Rule Fillet's type and radius, save and reopen |
+| Scenario | `plastic_rules` (67 checks) | Assign (lists, values, library rule copied, material), undo / redo, Shell / Draft / Rib / thin Extrude open with the rule's values, Manage (edit with a refused range, Save, in-use and default rules not deleted, New, Copy, Set As Default, Esc drops design changes), a component's own rule picked by clicking its body, Rule Fillet's type and radius, save and reopen |
 | Scenario | `plastic_boss` (53 checks) | enclosure and lid, Boss waits, points from the sketch's browser row, both sides' volumes by hand, ribs turned 45, a too wide hole refused (OK waits), OK, undo / redo, edit from the timeline with Flip then Esc, a second Boss cancelled with Esc, save and reopen |
 | Scenario | `plastic_boss_face` (28 checks) | Boss and Rest in an empty design (nothing opens), a boss by clicking the floor (point sketch, standoff by hand), a second point, a body picked for Side 1 that its direction does not meet (refused) then back to Auto, another face refused, OK, undo |
 | Scenario | `plastic_boss_fastener` (19 checks) | Create Component: a Fastener component with pan-head screws (volume by hand, clear of the lid), Hex heads, OK, edit and untick (the component goes), undo |
-| Scenario | `plastic_rest` (32 checks) | a shelled half pipe, Rest waits, a click in the profile, the pedestal by hand, thicker wall, Flip refused, OK, undo / redo, edit from the timeline and Esc, save and reopen |
+| Scenario | `plastic_rest` (39 checks) | a shelled half pipe, Rest waits, a click in the profile, the pedestal by hand, the Body box (picked, then Auto), thicker wall, Flip refused, OK, undo / redo, edit from the timeline and Esc, save and reopen |
 | Golden | `plastic_boss_enclosure` | both sides, counterbore and alignment, no drafts / fillets: exact |
 | Golden | `plastic_rest_cylinder` | a solid pedestal on a round bar |
 | Golden | `plastic_rule_boss_wall` | a rule edited to 2.5 mm drives a Constant Thickness boss |
@@ -136,9 +138,10 @@ rule when the component has none, and say so in the dialog.
   the wall fails, the same rib turned 45 deg passes.
 - **Rest clearance** (Inventor's Rest has one; Fusion's is unconfirmed) and a drafted rest on a
   profile with holes (refused with the reason: set the draft to 0).
-- **Rule links in the SOLID dialogs**: Shell, Draft, Rib, Web and thin Extrude take the rule's
-  value when they open; editing the rule later does not move those steps (Boss and Rest do
-  follow it).
+- **Boss and Rest values in Change Parameters**: not listed (a rule-linked value would
+  override a number typed there); edit them in their dialogs.
+- **Rule links of steps made before the rule was assigned**: only values that were the
+  rule's at the dialog's OK follow it (Fusion links the parameter when the dialog opens).
 - **Thicken and Emboss defaults**: Thicken lives in the SURFACE builders' files (surface-3
   owns them); Emboss has no draft in Fusion either (critic C4) and its depth mapping is a
   guess. Not wired.

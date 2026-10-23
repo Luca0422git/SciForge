@@ -8,7 +8,8 @@ SOLID dialogs, Boss, Rest and Rule Fillet. Spec and gaps: `docs/sciforge/parity/
 - PLASTIC tab > SETUP > **Assign Plastic Rule**: pick a component (or click one of its
   bodies), pick a rule (a material with its wall thickness, draft angle, corner radius...),
   OK. The bodies take the rule's material. From then on Shell opens with the rule's wall,
-  Draft with its angle, Rib / Web with 0.6 x the wall, a thin Extrude with the wall.
+  Draft with its angle, Rib / Web with 0.6 x the wall, a thin Extrude with the wall; and
+  when you later edit the rule, those steps (if you kept the rule's value) change with it.
 - **Manage Plastic Rules**: the rules of this design and your library; New, Edit (the fields
   open under the lists; "Thickness / 2" works), Copy, Delete, Copy to Library / Design, Set As
   Default. A rule in use, or the library's default, cannot be deleted (it says why).
@@ -66,15 +67,16 @@ apply_defaults`; `plastic_core.MATERIAL_KEYS / MATERIALS / LABELS / describe`. N
 renamed or removed. `assign_rule` and `rule_for_component` now also look in the user's
 library and use the user's default rule.
 
-**Shared files touched** (one guarded line each, plus an import line): `shell_ui.py`,
-`draft_ui.py`, `rib_ui.py`, `extrude_ui.py` (`plastic.apply_defaults`); `ribbon_config.py`
+**Shared files touched** (two guarded lines each, plus an import line): `shell_ui.py`,
+`draft_ui.py`, `rib_ui.py`, `extrude_ui.py` (`plastic.apply_defaults` when the dialog
+opens, `plastic.remember_links` at its OK); `ribbon_config.py`
 (the five plastic-1 lines only); `browser_ui.py` / `browser_core.py` (a `_plastic_rows`
 function beside sm-forming's `_settings_rows`, one call, one click branch, two menu entries,
 one MENUS row). `sf/sm-forming` is merged into this branch (7f7e786) for that hook. No
 FreeCAD core change.
 
-**Tests**: scenarios `plastic_rules` (66), `plastic_boss` (53), `plastic_boss_face` (28),
-`plastic_boss_fastener` (19), `plastic_rest` (32) pass; golden `plastic_boss_enclosure`,
+**Tests**: scenarios `plastic_rules` (67), `plastic_boss` (53), `plastic_boss_face` (28),
+`plastic_boss_fastener` (19), `plastic_rest` (39) pass; golden `plastic_boss_enclosure`,
 `plastic_boss_fastener`, `plastic_rest_cylinder`, `plastic_rule_boss_wall`,
 `plastic_rule_edit_moves_boss` pass (exact, analytic); existing scenarios of the touched
 dialogs pass (shell_draft 103, shell_draft_draft 85, sweep_loft_rib 68, sweep_loft_web 57,
@@ -84,5 +86,5 @@ timeline_browser 92);
 (existing).
 
 **Open** (see the parity doc's Known gaps): more fastener heads / drives / thread, more
-boss blends, per-rib extents, rule links in the SOLID steps (defaults only), Thicken /
-Emboss defaults, Rib draft, the Shell Sharp half-pipe finding.
+boss blends, per-rib extents, Boss / Rest in Change Parameters, Thicken / Emboss defaults,
+Rib draft, the Shell Sharp half-pipe finding.
