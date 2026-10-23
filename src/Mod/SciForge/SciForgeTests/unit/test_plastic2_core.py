@@ -256,6 +256,12 @@ class AdviceChecks(unittest.TestCase):
         self.assertIn("Undercuts 1", advice.summary_text(results))
         self.assertIn("No issues", advice.summary_text({"bodies": []}))
 
+    def test_blended_thickness(self):
+        samples = [(0, 0, 0, 2.0), (10, 0, 0, 4.0)]
+        self.assertAlmostEqual(advice.blended_thickness((0, 0, 0), samples), 2.0)
+        self.assertAlmostEqual(advice.blended_thickness((5, 0, 0), samples), 3.0)
+        self.assertIsNone(advice.blended_thickness((5, 0, 0), []))
+
     def test_colors(self):
         self.assertEqual(advice.face_color({"draft": 0, "undercut": None}), advice.UNDERCUT)
         self.assertEqual(advice.face_color({}), advice.OK)

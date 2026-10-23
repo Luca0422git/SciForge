@@ -195,14 +195,28 @@ class ViewProviderDesignAdvice:
             m.on_mesh = True  # drawn a hair in front of the model's faces
             per_point = []
             tolerance = surface_analysis.display_tolerance(body)
+            smooth = getattr(obj, "Display", "Issues") == "Thickness"
+            # the samples are in design coordinates, the drawing in the body's component's
+            frame = surface_analysis.parent_placement(body)
+            faces = body_result.get("faces", {})
+            # the map needs points inside the faces too: their triangles split finer
+            split = body.Shape.BoundBox.DiagonalLength / 40.0 if smooth else 0.0
             for i, face in enumerate(body.Shape.Faces):
+                name = "Face%d" % (i + 1)
                 try:
-                    pts, tris, normals, _k = surface_analysis.face_mesh(face, tolerance, 0.0)
+                    pts, tris, normals, _k = surface_analysis.face_mesh(face, tolerance, split)
                 except Exception:
                     continue
-                color = colors.get("Face%d" % (i + 1), core.OK)
                 m.add(pts, tris, normals, [])
-                per_point += [color] * len(pts)
+                samples = faces.get(name, {}).get("samples") if smooth else None
+                if samples:
+                    lo, hi = rule["minimum_thickness"], rule["maximum_thickness"]
+                    for q in pts:
+                        g = frame.multVec(App.Vector(*q))
+                        t = core.blended_thickness((g.x, g.y, g.z), samples)
+                        per_point.append(core.heat_color(t, lo, hi))
+                else:
+                    per_point += [colors.get(name, core.OK)] * len(pts)
             if not m.triangles:
                 continue
             group = sau.group_for(coin, body)

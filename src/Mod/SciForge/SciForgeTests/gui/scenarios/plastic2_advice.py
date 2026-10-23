@@ -114,7 +114,15 @@ def thickness_map():
     p = ps.advice_panel()
     h.check("Display Thickness", p.analysis.Display == "Thickness")
     h.check("still drawn", len(p.analysis.ViewObject.Proxy.drawn) == 2)
+    faces = plastic_results()["bodies"][0]["faces"]
+    sampled = [n for n, d in faces.items() if d.get("samples")]
+    h.check("the map is shaded from the faces' samples", len(sampled) >= 8, sampled)
+    h.shot("plastic2_advice_thickness")
     h.click(V(90, 10, 20))
+
+
+def plastic_results():
+    return results()
 
 
 def block_left_out():

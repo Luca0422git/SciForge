@@ -286,13 +286,15 @@ def measure_shape(shape, rule, pull, checks):
     faces = {}
     for k, (i, _pt, n) in enumerate(samples):
         name = "Face%d" % (i + 1)
-        entry = faces.setdefault(name, {"issues": {}, "t_min": None, "t_max": None})
+        entry = faces.setdefault(name, {"issues": {}, "t_min": None, "t_max": None, "samples": []})
         issues = entry["issues"]
         t = thick[k]
         nt = (n.x, n.y, n.z)
         if t is not None:
             entry["t_min"] = t if entry["t_min"] is None else min(entry["t_min"], t)
             entry["t_max"] = t if entry["t_max"] is None else max(entry["t_max"], t)
+            pt = samples[k][1]
+            entry["samples"].append([round(pt.x, 4), round(pt.y, 4), round(pt.z, 4), round(t, 4)])
         if "thickness" in checks:
             kind = core.thickness_issue(t, rule)
             if kind == "thin":

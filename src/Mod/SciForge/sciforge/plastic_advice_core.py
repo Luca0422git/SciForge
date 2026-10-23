@@ -145,6 +145,22 @@ def heat_color(t, lo, hi):
     return (0.3 * (1 - k) + 0.9 * k, 0.75 * (1 - k) + 0.15 * k, 0.35 * (1 - k) + 0.1 * k)
 
 
+def blended_thickness(point, samples, power=2.0):
+    """The thickness at `point` from a face's samples [(x, y, z, t)], weighted by the inverse
+    distance (the Thickness display shades each face smoothly between its samples)."""
+    if not samples:
+        return None
+    total = weight = 0.0
+    for x, y, z, t in samples:
+        d2 = (point[0] - x) ** 2 + (point[1] - y) ** 2 + (point[2] - z) ** 2
+        if d2 < 1e-18:
+            return t
+        w = 1.0 / d2 ** (power / 2.0)
+        total += w * t
+        weight += w
+    return total / weight
+
+
 # -- rows of the issues list -------------------------------------------------------------------
 def describe(issue, value):
     """The text of one issue for the list."""
