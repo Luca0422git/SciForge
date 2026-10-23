@@ -27,6 +27,7 @@ The contract of the SHEET METAL builders (wave 6; extend it, never rename or rem
     body_rule_name(body)
     rule_for_body(body)                the body's rule, evaluated (lengths in mm, floats)
     sheet_metal_bodies(doc)
+    find_sheet_body(doc, active, component)   the body a SHEET METAL tool works on (or None)
 """
 
 import json
@@ -149,6 +150,9 @@ def make_sheet_metal_body(body, rule_name):
     """Flag the body as sheet metal following rule_name (copied into the design from the
     library when the design does not have it yet)."""
     doc = body.Document
+    if rules_object(doc) is None:
+        # the design keeps its own copy of its rules (a later library change leaves it alone)
+        rules_object(doc, create=True)
     if find_rule(doc, rule_name) is None:
         rule = core.library_rule(rule_name)
         if rule is None:
@@ -173,3 +177,29 @@ def rule_for_body(body):
 
 def sheet_metal_bodies(doc):
     return [b for b in bodies.list_bodies(doc) if is_sheet_metal_body(b)]
+
+
+def find_sheet_body(doc, active=None, component=None):
+    """The sheet metal body a SHEET METAL tool works on (sm-forming, wave 6): the active body
+    when it is sheet metal, else the first sheet metal body of the component (None: the
+    active one, or the root) that exists at the history marker, else None. SOLID tools keep
+    using commands.find_body, which takes sheet metal bodies too."""
+    if doc is None:
+        return None
+    if active is not None and is_sheet_metal_body(active):
+        return active
+    try:
+        from . import components
+
+        if component is None:
+            component = components.active_component(doc)
+        candidates = components.bodies_in(doc, component)
+    except Exception:
+        candidates = bodies.list_bodies(doc)
+    for body in candidates:
+        if not is_sheet_metal_body(body):
+            continue
+        if body.Tip is None and any(o.isDerivedFrom("PartDesign::Feature") for o in body.Group):
+            continue  # rolled back before its first step: not made yet at the marker
+        return body
+    return None
