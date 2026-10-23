@@ -1569,7 +1569,23 @@ breakdown for him: `docs/sciforge/sessions/wave6-overnight.md`.
   under load, also on develop before wave 6.
 
 #### Results
-(filled in at the end of the session)
+- GitHub "SciForge tests" run #258 on `39ec051` (everything but the three follow-up fixes):
+  Windows golden, update script and quick update green; scenario shards 1, 2 and 4 green
+  (every new sheet metal, plastic, surface and journey scenario in them passed); **red** on
+  three things, two fixed before the final push: (1) base: `test_plastic2_core`'s two
+  ray-casting tests need numpy, which the runner's plain python3 lacks (now skipped without
+  numpy, like test_analysis_core); (2) shard 3: `surface3_qa` compared an Isoparametric
+  Curve's angle with the exact local click value (CI landed 0.13 mm off: now compares with
+  the Distance the click produced); (3) shard 3: **`welcome_line` "no crash line next to it"
+  failed: a FreeCAD crash log was left in the shard's shared profile by an earlier scenario
+  of that shard (all of them reported PASS). Not investigated yet: next session, read the
+  crash log in the artifact `sciforge-test-output-scenarios-3` of run #258 and find which
+  scenario crashed FreeCAD (probably at exit).**
+- The final push (`develop`, after this log) starts a new run that includes the follow-up
+  fixes; check it first thing next session.
+- Quick update for Luca: `SciForge-quick-update-aee067d.zip` (make_quick_update.sh +
+  WHATS_NEW.txt), sent with the morning report; product code locally tested (unit 1995,
+  golden 587, the 9 journeys, the fixed areas' scenarios).
 
 ### Session log: Delete on Home and in the Data Panel (`develop`, 2026-10-23, later)
 

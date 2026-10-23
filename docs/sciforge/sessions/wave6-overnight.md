@@ -117,4 +117,10 @@ The full lists are in each parity doc's "Known gaps". The main ones:
   a surface step no longer blanks its body; Shell with Sharp corners no longer hands back an
   unshelled part without a word on some shapes (it now says to choose Rounded); Join by Bend
   keeps working when the joined body is deleted later.
-- GitHub's full "SciForge tests" run on the final code: see the end of this file.
+- GitHub's full "SciForge tests" run (#258, before the last fixes): about 315 of 317 GUI
+  scenarios passed, the Windows golden models passed. It was red on a test-setup detail
+  (two unit tests need numpy, which the GitHub machine's Python lacks: fixed), one test
+  that was too strict about where a click lands (fixed), and one older Home-screen test
+  that found a crash notice left by some earlier test in the same batch: that one still has
+  to be tracked down (noted in MEMORY.md for the next session). A new run on the final code
+  started when this was pushed.

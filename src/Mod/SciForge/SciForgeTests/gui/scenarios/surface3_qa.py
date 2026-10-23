@@ -432,7 +432,15 @@ def iso_follows():
         r = math.hypot(b.XMin + 60.0, b.YMin)
         h.check("on the cylinder r 12", st.near(r, 12.0, 1e-6), b)
         angle = math.degrees(math.atan2(b.YMin, b.XMin + 60.0)) % 360.0
-        h.check("47.12 mm round from the seam (225 degrees)", st.near(angle, 225.0, 1e-3), angle)
+        # the Distance is the one the click produced (CI's renderer lands a little off 47.12):
+        # the curve must sit that far round on r 12, near 225 degrees
+        dist = float(getattr(iso.Distance, "Value", iso.Distance))
+        expected = math.degrees(dist / 12.0) % 360.0
+        h.check(
+            "the kept Distance round from the seam (about 225 degrees)",
+            st.near(angle, expected, 1e-3) and st.near(angle, 225.0, 2.0),
+            (angle, expected, dist),
+        )
     tl.menu("Untrim 1", "Delete")
 
 
