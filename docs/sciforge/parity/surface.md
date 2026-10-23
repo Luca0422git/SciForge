@@ -217,6 +217,7 @@ is undone or rolled back; the icon follows.
 | Surface bodies are saved with the design | Same (scenario `surface_reopen`: same bodies, icons, timeline; the steps edit after reopening) | A |
 | Every surface tool is one timeline step, named like the tool, with its icon; double-click to edit | Same: "Extrude 1", "Patch 1", "Boundary Fill 1"... (a surface Extrude is "Extrude" like Fusion's, with the surface icon) | A |
 | Stitch uses the other surfaces up; Boundary Fill with Remove Tools uses its tools up | Same as Combine: they are hidden while the step is active and come back when it is undone, rolled back, suppressed or deleted | A |
+| A feature suppressed in the timeline is skipped: the body shows what the features before it made | Same: a suppressed surface step (Extrude, Patch, Trim, Stitch...) shows the surface before it unchanged, and the steps after it carry on from that; the first step of a body suppressed leaves the body empty, the steps that need it go off with it, nothing turns red; Unsuppress gives the result back (sf/fix-surface-suppress; before, FreeCAD emptied a suppressed surface step and the body went blank) | A |
 | Unstitch makes a body per face | Same: the new bodies belong to the Unstitch step (they go with it on delete or undo) | A |
 | Trim and Reverse Normal can change several bodies in one step | Same: one timeline step; hidden companion steps in the other bodies | A |
 

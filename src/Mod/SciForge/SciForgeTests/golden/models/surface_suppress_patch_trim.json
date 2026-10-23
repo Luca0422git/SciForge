@@ -1,0 +1,171 @@
+{
+  "id": "surface_suppress_patch_trim",
+  "title": "Patch a square, Trim a hole; suppress the Trim (also across a reopen) and unsuppress it, then the Patch",
+  "tags": [
+    "surface",
+    "patch",
+    "trim",
+    "suppress",
+    "timeline"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              30
+            ],
+            [
+              0,
+              30
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        },
+        {
+          "circle": [
+            15,
+            15,
+            5
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 900,
+        "faces": 1,
+        "source": "analytic",
+        "note": "30 x 30"
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "t1",
+      "kind": "trim",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            10
+          ]
+        }
+      ],
+      "remove": [
+        {
+          "step": "p1",
+          "at": [
+            15,
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 821.4601836602552,
+        "faces": 1,
+        "source": "analytic",
+        "note": "the disc of radius 5 removed: 900 - 25 pi"
+      }
+    },
+    {
+      "op": "suppress",
+      "target": "t1"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 900,
+        "faces": 1,
+        "solids": 0,
+        "source": "analytic",
+        "note": "Trim suppressed: the body shows the patch before it (it used to go blank)"
+      }
+    },
+    {
+      "op": "reopen",
+      "comment": "save, close and open again with the Trim suppressed"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 900,
+        "faces": 1,
+        "solids": 0,
+        "source": "analytic",
+        "note": "Reopened: the suppressed Trim still shows the patch before it"
+      }
+    },
+    {
+      "op": "unsuppress",
+      "target": "t1"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 821.4601836602552,
+        "faces": 1,
+        "source": "analytic",
+        "note": "Trim back on: the hole again"
+      }
+    },
+    {
+      "op": "suppress",
+      "target": "p1"
+    },
+    {
+      "op": "unsuppress",
+      "target": "p1"
+    }
+  ],
+  "expect": {
+    "area": 821.4601836602552,
+    "faces": 1,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      30,
+      30,
+      0
+    ],
+    "source": "analytic",
+    "note": "The Patch (the body's first step) suppressed then unsuppressed: the Trim on it went off and comes back with it: 900 - 25 pi, as before"
+  }
+}
