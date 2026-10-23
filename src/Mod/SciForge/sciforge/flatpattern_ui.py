@@ -26,7 +26,7 @@ from . import sheetmetal_unfold as unfolder
 from .compat import QtCore, QtWidgets
 from .unfold_panel import SheetPanel, planar_face
 
-STATE = {"fp": None, "doc": None, "hidden": [], "camera": None}
+STATE = {"fp": None, "doc": None, "hidden": [], "camera": None, "shown": []}
 
 
 def _later(fn, *args):
@@ -97,7 +97,7 @@ def enter(fp):
             camera = gdoc.ActiveView.getCamera()
         except Exception:
             pass
-        STATE.update(fp=fp, doc=doc.Name, hidden=hidden, camera=camera)
+        STATE.update(fp=fp, doc=doc.Name, hidden=hidden, camera=camera, shown=_show_parents(fp))
         if "Invalid" in list(fp.State) or fp.Shape.isNull() or doc.isTouched():
             # the flat pattern is computed when it opens (after an undo / redo too)
             doc.recompute()
@@ -118,19 +118,47 @@ def enter(fp):
         return False
 
 
+def _show_parents(fp):
+    """The hidden components the flat pattern is in, shown (QA: a flat pattern opened from
+    a hidden component showed an empty view); their names, to hide them again after."""
+    shown = []
+    try:
+        from . import components
+
+        parent = components.container_of(fp)
+        while parent is not None:
+            vobj = getattr(parent, "ViewObject", None)
+            if vobj is not None and not vobj.Visibility:
+                vobj.Visibility = True
+                shown.append(parent.Name)
+            parent = components.container_of(parent)
+    except Exception as exc:
+        warn("flat pattern: its component not shown: %s" % exc)
+    return shown
+
+
+def _hide_parents(doc, names, hidden=True):
+    for name in names:
+        obj = doc.getObject(name)
+        if obj is not None and getattr(obj, "ViewObject", None) is not None:
+            obj.ViewObject.Visibility = not hidden
+
+
 def leave():
     """Finish Flat Pattern: back to the folded part as it was shown."""
     fp = STATE["fp"]
     doc = App.getDocument(STATE["doc"]) if STATE["doc"] in App.listDocuments() else None
     hidden = list(STATE["hidden"])
     camera = STATE["camera"]
-    STATE.update(fp=None, doc=None, hidden=[], camera=None)
+    shown = list(STATE.get("shown") or [])
+    STATE.update(fp=None, doc=None, hidden=[], camera=None, shown=[])
     _ribbon(False)
     if doc is None:
         return
     try:
         if fp is not None and flatpattern.is_flat_pattern(fp) and fp.ViewObject is not None:
             fp.ViewObject.Visibility = False
+        _hide_parents(doc, shown)
         for name in hidden:
             obj = doc.getObject(name)
             if obj is not None and getattr(obj, "ViewObject", None) is not None:
@@ -146,6 +174,7 @@ def _show_folded(doc, folded):
     """The objects hidden for the open flat pattern shown again (folded=True), or hidden
     again with the flat shown; the environment's state stays as it is."""
     fp = STATE["fp"]
+    _hide_parents(doc, STATE.get("shown") or [], folded)  # the file keeps them hidden
     for name in STATE["hidden"]:
         obj = doc.getObject(name)
         if obj is not None and getattr(obj, "ViewObject", None) is not None:

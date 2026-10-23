@@ -4,8 +4,9 @@
 click on the bracket's top face, Unfold All Bends ticked: the bracket lies flat (preview).
 Then a click on the plate's top face: the dialog moves to the plate, and the bracket is
 folded again with no Unfold step left in it (before QA the bracket kept the preview step,
-whose stationary face was then set to the plate's face). Esc: no Unfold anywhere, both
-bodies as they were."""
+whose stationary face was then set to the plate's face). The plate has no bend: OK is
+refused ("no bend to unfold") instead of adding an Unfold that does nothing. Esc: no Unfold
+anywhere, both bodies as they were."""
 
 import FreeCAD as App
 import FreeCADGui as Gui
@@ -102,6 +103,17 @@ def moved_to_plate():
     h.check("any preview is in the plate", t is None or bodies.body_of(t) is s["b2"], t and t.Name)
 
 
+def ok_flat_plate():
+    fs.ok()
+
+
+def nothing_to_unfold():
+    fs.settle()
+    text = fs.message()
+    h.check("OK on a flat plate is refused: dialog open", fs.dialog_open())
+    h.check("it says there is no bend", "no bend" in text, text)
+
+
 def esc():
     fs.esc()
 
@@ -130,6 +142,8 @@ h.run(
         bracket_flat,
         click_plate,
         moved_to_plate,
+        ok_flat_plate,
+        nothing_to_unfold,
         esc,
         nothing_left,
     ],

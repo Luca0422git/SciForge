@@ -188,6 +188,11 @@ class UnfoldPanel(SheetPanel):
         # OK keeps what the dialog shows now (QA: a bend cleared or Unfold All Bends unticked
         # after the preview left the step with the old picks, and OK kept those)
         sheetmetal_flat.update_unfold(self.target, self.base, face, bends, unfold_all)
+        self.doc.recompute()
+        state = list(self.target.State)
+        if "Invalid" not in state and "Error" not in state and self.target.BendCount == 0:
+            # (QA: OK made an Unfold that changed nothing, and Refold then had nothing to do)
+            return "There is no bend to unfold: the body is flat already."
         return None
 
 
