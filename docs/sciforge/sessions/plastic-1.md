@@ -26,11 +26,11 @@ SOLID dialogs, Boss, Rest and Rule Fillet. Spec and gaps: `docs/sciforge/parity/
   component; Pan, Round, Flat, Hex or Hex Washer heads; they follow the boss.
 - The browser shows "Plastic Rule: <name>" under Document Settings; click it to assign.
 
-**Commits**: a807084 (Boss / Rest geometry), f7c8248 (dialogs, commands, defaults, tab),
-c477760 / d506fba / 59026c1 (scenarios), d103e0f (golden), 3c708d7 (core split, unit tests),
-f3d4434 (critic pass), 1599346, 1c99d05, d22b14a (Boss on a face), e0764ea (Side bodies,
-docs), 45ca6b0 (fastener), 715b74d (merge of `sf/sm-forming` for its browser settings-row
-hook), 98a1d05 (Plastic Rule row).
+**Commits** (in order): Boss / Rest geometry; dialogs, commands, defaults, tab; scenarios;
+golden models; core split and unit tests; the critic pass; Boss on a face; Side bodies;
+fastener; the merge of `sf/sm-forming` (its browser settings-row hook); the Plastic Rule row;
+Rest Body box; rule links of the SOLID steps; hole radii; fastener heads; ribs one by one;
+counterbore / alignment blends (the log from 3eeb5b1 to the branch's head).
 
 **FreeCAD facts and traps found**
 
@@ -78,16 +78,19 @@ one MENUS row). `sf/sm-forming` is merged into this branch (7f7e786) for that ho
 FreeCAD core change.
 
 **Tests**: scenarios `plastic_rules` (67), `plastic_boss` (58), `plastic_boss_face` (30),
-`plastic_boss_fastener` (23), `plastic_rest` (39), `ribbon_sweep` with SWEEP_TABS=plastic (114) pass; golden `plastic_boss_enclosure`,
-`plastic_boss_fastener`, `plastic_boss_hole_radii`, `plastic_boss_ribs_each`,
-`plastic_boss_blends`, `plastic_rest_cylinder`, `plastic_rule_boss_wall`,
-`plastic_rule_edit_moves_boss` pass (exact, analytic); existing scenarios of the touched
-dialogs pass (shell_draft 103, shell_draft_draft 85, sweep_loft_rib 68, sweep_loft_web 57,
-gaps_thin_extrude 215, extrude_feel_box 108, fillet2_rule 30, sheetmetal_rules 60,
-timeline_browser 92);
-`test_plastic_core.py` (21) passes; `--only base`: unit 1858 OK, golden 444 pass + 2 xfail
-(existing).
+`plastic_boss_fastener` (23), `plastic_rest` (39) and `ribbon_sweep` with
+`SWEEP_TABS=plastic` (114) pass. Golden `plastic_boss_enclosure`, `plastic_boss_fastener`,
+`plastic_boss_hole_radii`, `plastic_boss_ribs_each`, `plastic_boss_blends`,
+`plastic_rest_cylinder`, `plastic_rule_boss_wall`, `plastic_rule_edit_moves_boss` pass
+(exact, analytic). The existing scenarios of the touched dialogs pass: shell_draft (103),
+shell_draft_draft (85), shell_draft_hollow (72), modify2_shell (53), sweep_loft_rib (68),
+sweep_loft_web (57), gaps_thin_extrude (215), extrude_feel_box (108), fillet2_rule (30),
+sheetmetal_rules (60), timeline_browser (92). `test_plastic_core.py` (21) passes.
+`--only base` (after the merge of `sf/sm-forming`): unit 1876 OK, golden 464 pass + 2 xfail
+(existing), smoke and journey pass.
 
 **Open** (see the parity doc's Known gaps): more fastener heads / drives / thread, the
-alignment root / rib outer blends, per-rib extents per point, Boss / Rest in Change Parameters, Thicken / Emboss defaults,
-Rib draft, the Shell Sharp half-pipe finding.
+alignment root / rib outer blends, per-rib extents per point, Boss / Rest in Change
+Parameters, Thicken / Emboss defaults, Rib draft, the Shell Sharp half-pipe finding.
+**Merge note**: `ribbon_config.py` conflicts with `sf/plastic-2` at the PLASTIC CREATE items
+(Boss / Snap Fit / Lip / Rest are adjacent lines): keep both sides' lines.
