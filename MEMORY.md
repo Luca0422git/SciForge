@@ -1475,6 +1475,38 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 
 ## Session log
 
+### Session log: Draft in real time, live pictures, safe sketch geometry (branch `experimental`, 2026-10-22/23)
+
+Luca: "draft is still extremely slow ... the angle dragger doesn't even update, it waits behind
+for the model ... 1-3 seconds" and "fix the sketch tools bug, the loose end". Then: timing and
+drag feel are tested by LUCA on real hardware with his mouse; agents do not tune or gate on
+sandbox timings (software OpenGL) - tests prove correctness only.
+
+- **Handles never wait for the model** (taskui.PollOnMove: every dialog's handle takes each
+  mouse move at once; Panel.schedule(settle=True)/REST_FIRST/_slow/_rest_needed/HEAVY_FACES:
+  a slow exact rebuild runs only when the mouse rests (0.2 s, longer while the button is held)
+  or on release (handle_released), never between two moves).
+- **Live pictures** while dragging, exact solid at the rest: Draft (draft_live*.py: the picked
+  faces' own triangles moved; every point checked on the exact solid), Fillet/Chamfer
+  (fillet_live*.py: rolling-ball bands; exact on planes/cylinders/extrusions, approximate on
+  doubly curved faces and 3-edge corners), Press Pull/Offset Face, Shell, Extrude (live_core.py,
+  live_shapes.py). Golden `live_blend_expect` checks pictures against exact results.
+- **Limit search in the background** (value_limits.Background, limit_refuse/limit_waits/
+  limit_accept): Draft, Shell, Press Pull, Fillet/Chamfer (own version), Thicken, Pipe, Torus,
+  Coil, Gear; not Extrude taper/thin and Revolve (their trials run in the document feature),
+  not the sketch fillet/chamfer. A local validity check instead of BRepCheck was measured and
+  rejected (no cheaper when safe). Draft past the limit: the held solid ~3 s after the rest
+  on a 179-face part (deferred).
+- Draft speed: undrafted() 0.52 s -> 13 ms, draft_shape results cached, scratch objects never
+  tessellated; FreeCAD's Draft past the steepest angle made a broken solid silently (now held).
+- **Sketch geometry kept** (sketch_geometry.py set_geometry/restore): assigning sketch.Geometry
+  lost construction flags and geometry ids; fixed everywhere (sketch_explain, scale, text,
+  derive, sketch Scale delete, projected edges following replaced steps).
+- Sketch entry: the Sketcher workbench switch costs ~100 ms each way (measured); not removed
+  (needs EditingWorkbench handling, probably a core patch); toolbars now hidden before layout.
+- Docs runner ignores dates in recorded answers (title blocks take today's date).
+- Luca to test on his PC: Draft/Fillet/Chamfer/Shell/Press Pull/Extrude drags on a big part.
+
 ### Session log: Eight features from the CADCraft study (branch `experimental`, 2026-10-21/22)
 
 Luca asked to study github.com/storytold/cadcraft (an AutoCAD-like 2D app in Rust, MIT/Apache)
