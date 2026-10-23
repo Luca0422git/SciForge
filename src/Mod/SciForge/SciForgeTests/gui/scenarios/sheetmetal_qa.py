@@ -109,6 +109,7 @@ def empty_rules_edit():
 def empty_rules_editor():
     d = sm.rules_dialog()
     h.check("the editor page", d is not None and d.pages.currentIndex() == 1)
+    h.check("only Save / Cancel while editing", d is not None and not d.close_button.isVisible())
     sm.rule_field("thickness", "3")
 
 
@@ -135,6 +136,7 @@ def empty_rules_back():
         "Esc in the editor goes back to the lists", d is not None and d.pages.currentIndex() == 0
     )
     h.check("the edit was not saved", not _doc().Objects, [o.Name for o in _doc().Objects])
+    h.check("Close is back", d is not None and d.close_button.isVisible())
 
 
 def empty_rules_esc():

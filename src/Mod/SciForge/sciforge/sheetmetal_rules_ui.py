@@ -363,11 +363,15 @@ class RulesDialog(QtWidgets.QDialog):
         self._placement_rule()
         self.setWindowTitle("Sheet Metal Rules - %s" % ("New Rule" if new else rule["name"]))
         self.pages.setCurrentIndex(1)
+        # only Save / Cancel while a rule is edited: Close there dropped the typed values
+        # without a word (QA)
+        self.close_button.setVisible(False)
 
     def close_editor(self, *_):
         self.editing = None
         self.setWindowTitle("Sheet Metal Rules")
         self.pages.setCurrentIndex(0)
+        self.close_button.setVisible(True)
 
     def editor_rule(self):
         """The rule as typed in the editor (raises ValueError with the reason)."""

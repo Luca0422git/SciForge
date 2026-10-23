@@ -169,6 +169,11 @@ Fixed on `sf/sm-forming-qa`:
   Distance, Orientation, Direction and Flip ("it runs the whole edge"). A flange that is its
   body's first step is never attached now, and neither the Join target nor an attachment is
   looked for in the body the dialog's own preview made.
+- **The Sheet Metal Rules window showed Close while a rule was edited**: Close dropped the
+  typed values without a word. Only Save / Cancel show on the editor page now.
+- **An edge flange's override fields started at the active component's rule**, not at the
+  body's (Bend Radius 1.00 shown for a 1.5 mm Aluminum body). They follow the picked body's
+  rule now.
 - **A base flange Join standing on the sheet (or across its edge)** was fused into a T or a
   sharp L: a solid no flat pattern can unfold (a corner between two sheets needs a bend).
   Join now needs the new plate in the plane of one of the body's sheets, touching it; the

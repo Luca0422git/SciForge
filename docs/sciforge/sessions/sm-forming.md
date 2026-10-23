@@ -103,6 +103,8 @@ Fixed (details in `docs/sciforge/parity/sheet-metal.md`, "QA pass"):
 - Editing a stand-alone contour flange (Distance, Orientation, Direction hidden: the dialog
   took the flange's own edge for the sheet edge it starts from); the dialog's own preview
   body also counted as the Join target (Join enabled, then "pick or make one first").
+- Close in the rule editor dropped the typed values silently (hidden while editing now); an
+  edge flange's override fields started at the active rule instead of the body's.
 - Inserting a design with its own rule into one that already had sheet metal silently
   rebuilt the inserted parts in the default rule (copied rule stores were never read).
 
