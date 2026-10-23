@@ -85,9 +85,15 @@ Steps and hand-worked numbers: `SciForgeTests/gui/journey_plastic_steps.py`.
 - The Snap Fit's catch faces the sketch's X (parity `plastic-2.md`): a sketch on a rim face
   gets its axes from the face, so the catch is turned with Rotation Angle to face the wall.
 
+## Seen, not fixed (small)
+
+- Design Advice names bodies by label only: with two components each holding "Body1" its
+  rule line reads "Body1: ABS 2 mm; Body1: ABS 2 mm" and the issues list "Body1 Face3" for
+  either body (the component's name would tell them apart).
+
 ## Tests (real FreeCAD 1.1.4 under xvfb)
 
-- `journey_plastic` 215 checks, `journey_plastic_rule` 282, `journey_plastic_timeline` 218:
+- `journey_plastic` 215 checks, `journey_plastic_rule` 291, `journey_plastic_timeline` 218:
   PASS.
 - After the fixes: golden models with "plastic" in their name (31, with the new
   `plastic_rest_closed_box`), `plastic_rest`, `plastic_qa_tools`, `plastic_boss_face`,
@@ -97,4 +103,5 @@ Steps and hand-worked numbers: `SciForgeTests/gui/journey_plastic_steps.py`.
 - `extrude_multibody_edit` fails one timing check ("the drag answered quickly": 11-12.8 s
   for 16 moves, limit 8 s) with and without this branch's changes (checked by running it on
   the base code): a speed problem of the integration branch or this machine, not a
-  regression of this session.
+  regression of this session. `--only base` (unit 1994, golden 583 + 2 xfail, smoke,
+  journey, restart): all passed.
