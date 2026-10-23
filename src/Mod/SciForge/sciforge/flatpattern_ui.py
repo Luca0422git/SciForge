@@ -29,6 +29,18 @@ from .unfold_panel import SheetPanel, planar_face
 STATE = {"fp": None, "doc": None, "hidden": [], "camera": None}
 
 
+def _later(fn, *args):
+    """fn(*args) once the current event is over, never letting an error escape."""
+
+    def run():
+        try:
+            fn(*args)
+        except Exception as exc:
+            warn("flat pattern: %s" % exc)
+
+    QtCore.QTimer.singleShot(0, run)
+
+
 # -- the environment ----------------------------------------------------------------------------
 def _ribbon(on):
     try:
@@ -156,7 +168,7 @@ class _DocWatch:
     def slotDeletedObject(self, obj):
         try:
             if STATE["fp"] is not None and obj is STATE["fp"]:
-                QtCore.QTimer.singleShot(0, leave)
+                _later(leave)
         except Exception as exc:
             warn("flat pattern watch: %s" % exc)
 
@@ -180,7 +192,7 @@ class _DocWatch:
         folded part shown)."""
         try:
             if STATE["doc"] and doc is not None and doc.Name != STATE["doc"]:
-                QtCore.QTimer.singleShot(0, leave)
+                _later(leave)
         except Exception as exc:
             warn("flat pattern watch: %s" % exc)
 
@@ -193,7 +205,7 @@ class _DocWatch:
     def _check(self, doc):
         try:
             if STATE["doc"] == doc.Name:
-                QtCore.QTimer.singleShot(0, active)
+                _later(active)
         except Exception as exc:
             warn("flat pattern watch: %s" % exc)
 
@@ -256,14 +268,14 @@ class ViewProviderFlatPattern:
     def setEdit(self, vobj, mode=0):
         if mode != 0:
             return None
-        QtCore.QTimer.singleShot(0, lambda: enter(vobj.Object))
+        _later(enter, vobj.Object)
         return True
 
     def unsetEdit(self, vobj, mode=0):
         return None
 
     def doubleClicked(self, vobj):
-        QtCore.QTimer.singleShot(0, lambda: enter(vobj.Object))
+        _later(enter, vobj.Object)
         return True
 
     def dumps(self):
@@ -360,7 +372,7 @@ class CreateFlatPatternPanel(SheetPanel):
         ok = super().accept()
         if ok and self.made is not None:
             fp = self.made
-            QtCore.QTimer.singleShot(0, lambda: enter(fp))
+            _later(enter, fp)
         return ok
 
 
