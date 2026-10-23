@@ -30,7 +30,8 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import bodies_row_ui, commands, drag_guard, extrude, handle_look, handles3d, log, preview
-from . import origin_look, profile_pick, protractor, revolve, ui_icon_path, value_limits, warn
+from . import origin_look, profile_pick, protractor, revolve, taskui, ui_icon_path
+from . import value_limits, warn
 from .compat import QtCore, QtWidgets
 from .taskui import BoxCarrier, DistanceField, Panel, ValueBoxes
 
@@ -224,6 +225,7 @@ class AngleHandle(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        self._move_poll = taskui.poll_on_move(self._poll)  # dragged: polled on every mouse move
 
     # -- geometry ------------------------------------------------------------------------------
     def point_at(self, degrees):
@@ -413,6 +415,7 @@ class AngleHandle(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        taskui.drop_poll_on_move(self)
         self._wheel.hide()
         try:
             handles3d.stop_watching(self)

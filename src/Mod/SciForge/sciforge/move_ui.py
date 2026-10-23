@@ -30,7 +30,7 @@ import FreeCADGui as Gui
 
 from . import bodies, drag_guard, handle_look, handles3d, increments, move, move_face
 from . import profile_pick
-from . import protractor, ui_icon_path, warn
+from . import protractor, taskui, ui_icon_path, warn
 from .bodies_panel import BodyPanel, edit as _edit, start as _start
 from .compat import QtCore, QtWidgets
 from .taskui import BoxCarrier, DistanceField, ValueBoxes
@@ -120,6 +120,7 @@ class Triad(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        self._move_poll = taskui.poll_on_move(self._poll)  # dragged: polled on every mouse move
 
     # -- drawing -------------------------------------------------------------------------------
     @property
@@ -454,6 +455,7 @@ class Triad(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        taskui.drop_poll_on_move(self)
         self._wheel.hide()
         try:
             handles3d.stop_watching(self)

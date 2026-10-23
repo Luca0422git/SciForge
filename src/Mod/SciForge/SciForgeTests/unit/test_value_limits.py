@@ -125,6 +125,15 @@ class Search(unittest.TestCase):
 
         self.assertEqual(vl.search(works, 0.5, 9.0, 0.01)[0], 2.5)
 
+    def test_tidy_trials(self):
+        # the trials are tidy values when one lies between: the last one that works is the
+        # answer, no build of the tidy value under an untidy one (Draft on a part of 180
+        # faces: 11 trial drafts of ~0.3 s became 8)
+        works = Counter(7.95)
+        self.assertEqual(vl.search(works, 3.0, 15.0, 0.1), (7.9, True))
+        self.assertLessEqual(len(works.calls), 8)
+        self.assertTrue(all(abs(v * 10 - round(v * 10)) < 1e-9 for v in works.calls))
+
     def test_time_budget(self):
         # a slow part: the clock jumps 1 s a build; the search stops after MIN_TRIALS and
         # still returns a value that works (safe side)
@@ -465,6 +474,137 @@ class ShowLater(unittest.TestCase):
         field = FakeField(5.0)
         vl.show_held(vl.ShowWhenLeft(), "wall", field, 5.0, 3.47)
         self.assertEqual(field.value(), 3.47)
+
+
+class FakeTimer:
+    """What Background asks of its QTimer, run by hand (tick())."""
+
+    def __init__(self):
+        self.interval = 0
+        self.running = False
+
+    def setInterval(self, ms):
+        self.interval = ms
+
+    def start(self):
+        self.running = True
+
+    def stop(self):
+        self.running = False
+
+
+def start_by_hand(job):
+    """Background.start() without Qt: the test runs job._tick() itself."""
+    job.timer = FakeTimer()
+    vl.busy(job)
+    job.timer.start()
+
+
+class SoonPanel(FakePanel):
+    """FakePanel whose refused values are looked for in the background (Draft's way)."""
+
+    def __init__(self, edge=3.4789):
+        super().__init__(edge)
+        self.dragging = False
+        self.ended = []
+
+    def edit_soon(self, value, source="dragged"):
+        self.value = self.limit_edit("wall", value, source)
+        if self.limit_searching():
+            return "waits"
+        if self.value > self.edge:
+            reason = "A %g mm wall is too thick for this part." % self.value
+            return self.limit_refused_soon(reason, self.ended.append, lambda: self.dragging)
+        self.limit_good()
+        return "ok"
+
+    def run(self, ticks=1):
+        for _ in range(ticks):
+            job = self._limit_job
+            if job is None or job.done:
+                return
+            job._tick()
+
+
+class BackgroundSearch(unittest.TestCase):
+    def setUp(self):
+        self._start = vl.Background.start
+        vl.Background.start = start_by_hand  # no Qt: the tests tick the job by hand
+
+    def tearDown(self):
+        vl.Background.start = self._start
+
+    def test_no_build_while_the_handle_is_dragged(self):
+        # review finding DRAFT-2-F1: a trial build froze the dragged handle for its length
+        p = SoonPanel()
+        self.assertEqual(p.edit_soon(2.0), "ok")
+        self.assertEqual(p.edit_soon(20.0), "later")
+        p.dragging = True
+        builds = p.builds
+        p.run(5)
+        self.assertEqual(p.builds, builds)
+        self.assertEqual(p._limit_job.timer.interval, vl.Background.PAUSE_POLL_MS)
+        p.dragging = False
+        p.run(40)
+        self.assertGreater(p.builds, builds)
+        self.assertEqual(p.ended, [3.47])
+        self.assertEqual(p.value, 3.47)  # held at the limit at the end
+
+    def test_finish_does_not_wait_for_the_drag(self):
+        p = SoonPanel()
+        p.edit_soon(2.0)
+        p.edit_soon(20.0)
+        p.dragging = True
+        p.limit_finish()  # OK pressed
+        self.assertEqual(p.value, 3.47)
+        self.assertFalse(vl.working())
+
+    def test_back_below_what_failed_cuts_the_search_off(self):
+        # review finding DRAFT-1-F2: the preview of a value that fits waited for the search
+        p = SoonPanel()
+        p.edit_soon(2.0)
+        p.edit_soon(20.0)
+        p.run(3)  # a few trials: 20 fails, something nearer is known to fail
+        job = p._limit_job
+        fails, works = job.progress["fails"], job.progress["works"]
+        self.assertLess(fails, 20.0)
+        self.assertEqual(p.edit_soon(fails + 1.0), "waits")  # still past what failed: goes on
+        self.assertIs(p._limit_job, job)
+        self.assertEqual(p.edit_soon(2.5), "ok")  # fits: no search, no wait
+        self.assertTrue(job.done)
+        self.assertIsNone(p._limit_job)
+        self.assertEqual(p.ended, [])  # a search cut off says nothing
+        self.assertEqual(p.value, 2.5)
+        self.assertFalse(vl.working())
+        # what it learnt is kept: refused again, the next search starts from there
+        good, known, bad = p._limit_bracket("wall", p.limit_key("wall"), 20.0, 2.5, True)
+        self.assertEqual((good, known, bad), (max(2.5, works), True, fails))
+
+    def test_the_next_search_starts_where_the_cut_off_one_was(self):
+        p = SoonPanel()
+        p.edit_soon(1.0)
+        p.edit_soon(50.0)
+        p.run(4)
+        fails = p._limit_job.progress["fails"]
+        p.edit_soon(1.0)  # back: cut off
+        before = p.builds
+        self.assertEqual(p.edit_soon(50.0), "later")
+        p.run(60)
+        self.assertEqual(p.value, 3.47)
+        again = p.builds - before
+        q = SoonPanel()  # the same without the cut-off search
+        q.edit_soon(1.0)
+        q.edit_soon(50.0)
+        q.run(60)
+        self.assertLess(again, q.builds - 1)
+        self.assertLess(fails, 50.0)
+
+    def test_the_other_side_of_zero_cuts_off_too(self):
+        p = SoonPanel()
+        p.edit_soon(2.0)
+        p.edit_soon(20.0)
+        p.limit_edit("wall", -2.0, "dragged")
+        self.assertIsNone(p._limit_job)
 
 
 if __name__ == "__main__":

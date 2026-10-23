@@ -25,7 +25,7 @@ import FreeCAD as App
 import FreeCADGui as Gui
 
 from . import commands, drag_guard, handle_look, handles3d, log, preview, primitives
-from . import profile_pick, ui_icon_path, value_limits, warn
+from . import profile_pick, taskui, ui_icon_path, value_limits, warn
 from .compat import QtCore, QtWidgets
 from .primitives import PrimitiveError
 from .primitives_core import nearest_snap, nice_floor, round_to
@@ -247,6 +247,7 @@ class LinearHandle(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        self._move_poll = taskui.poll_on_move(self._poll)  # dragged: polled on every mouse move
 
     SHAPE = "arrow"  # or "ball" (a point slid along a path: pipe_ui.PathHandle)
 
@@ -450,6 +451,7 @@ class LinearHandle(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        taskui.drop_poll_on_move(self)
         try:
             handles3d.stop_watching(self)
         except Exception:

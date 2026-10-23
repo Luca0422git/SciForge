@@ -44,6 +44,27 @@ def set_current(dialog):
     _OPEN["dialog"] = dialog
 
 
+def handle_released():
+    """A drag handle was let go (after its on_release): the open dialog's rebuild that waits
+    for the changes to rest runs now, not PAUSE_MS later (review finding DRAFT-2-F5: every
+    slow dialog's last result came 0.2 s late)."""
+    try:
+        dialog = current()
+        settle = getattr(dialog, "settle_now", None)
+        if settle is not None:
+            settle()
+    except Exception as exc:
+        warn("drag release: %s" % exc)
+
+
+def button_held():
+    """True while a mouse button is down (Qt keeps the state, whatever widget has it)."""
+    try:
+        return QtWidgets.QApplication.mouseButtons() != QtCore.Qt.NoButton
+    except Exception:
+        return False
+
+
 # Editors for existing features: {type key: function(obj)}. The type key is the
 # FreeCAD TypeId ("PartDesign::Fillet") or "SciForge::<SciForgeType>" for SciForge's
 # own Python features. Feature modules declare EDITORS = {...}; commands.py collects
@@ -263,6 +284,76 @@ def view_widget():
     except Exception:
         pass
     return None
+
+
+class PollOnMove:
+    """Runs a drag handle's poll right after each mouse move over the 3D view while a mouse
+    button is held, instead of up to POLL_MS later on its timer: the dialog and the value box
+    take a dragged handle's new value at once (Luca, 2026-10-22: "the angle dragger doesn't
+    even update"). Coin moves the handle itself while it handles the move; the poll queued
+    here runs just after that. At most one poll is queued at a time (a mouse can send moves
+    faster than a poll takes). The handle's timer keeps running (hover, a lost release).
+    remove() with the handle."""
+
+    def __init__(self, poll):
+        self.poll = poll
+        self.queued = False
+        self.alive = True
+        guard = self
+
+        class MoveFilter(QtCore.QObject):
+            def eventFilter(self, obj, event):
+                try:
+                    if (
+                        guard.alive
+                        and not guard.queued
+                        and event.type() == QtCore.QEvent.MouseMove
+                        and event.buttons() != QtCore.Qt.NoButton
+                    ):
+                        guard.queued = True
+                        QtCore.QTimer.singleShot(0, guard._run)
+                except Exception:
+                    pass
+                return False
+
+        self.filter = MoveFilter()
+        self.widget = view_widget()
+        if self.widget is not None:
+            self.widget.installEventFilter(self.filter)
+
+    def _run(self):
+        self.queued = False
+        if not self.alive:
+            return
+        try:
+            self.poll()
+        except Exception as exc:
+            warn("drag: %s" % exc)
+
+    def remove(self):
+        self.alive = False
+        widget, self.widget = self.widget, None
+        if widget is not None:
+            try:
+                widget.removeEventFilter(self.filter)
+            except Exception:
+                pass  # the view went with its document
+
+
+def poll_on_move(poll):
+    """A PollOnMove for a handle's poll, or None when the 3D view is not there."""
+    try:
+        return PollOnMove(poll)
+    except Exception as exc:
+        warn("drag: %s" % exc)
+        return None
+
+
+def drop_poll_on_move(handle):
+    mover = getattr(handle, "_move_poll", None)
+    handle._move_poll = None
+    if mover is not None:
+        mover.remove()
 
 
 def mm_per_pixel(view, point):
@@ -980,6 +1071,16 @@ class TypeOverView:
     def _filter(self, obj, event):
         try:
             kind = event.type()
+            if kind == QtCore.QEvent.MouseMove:
+                # a drag goes on (a handle, an orbit): a rebuild that waits for the mouse to
+                # rest keeps waiting (Panel._tick), also while the value does not change (a
+                # snapped angle)
+                try:
+                    if event.buttons() != QtCore.Qt.NoButton and self.panel is not None:
+                        self.panel._last_motion = time.perf_counter()
+                except Exception:
+                    pass
+                return False
             if kind not in (QtCore.QEvent.ShortcutOverride, QtCore.QEvent.KeyPress):
                 return False
             panel = self.panel
@@ -1152,6 +1253,7 @@ class ArrowDragger(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        self._move_poll = poll_on_move(self._poll)  # dragged: polled on every mouse move
         if value_box is not None:
             self.attach_box(value_box)  # an ArrowValueBox that follows the arrow
 
@@ -1232,8 +1334,10 @@ class ArrowDragger(BoxCarrier):
                 self._last = value
                 if self.on_drag:
                     self.on_drag(value)
-            if self._was_active and not active and self.on_release:
-                self.on_release(value)
+            if self._was_active and not active:
+                if self.on_release:
+                    self.on_release(value)
+                handle_released()
             self._was_active = active
             self._draw()
             # lighter under the mouse (the dragged arrow is the dragger's own lit part)
@@ -1257,6 +1361,7 @@ class ArrowDragger(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        drop_poll_on_move(self)
         drag_guard.before_remove(self.dragger, self.root, self.view)
         try:
             self.view.getSceneGraph().removeChild(self.root)
@@ -1300,6 +1405,28 @@ class Panel:
     PREVIEW_MS = 60
     PREVIEW_MAX_MS = 400
     STREAM_GAP = 0.15  # changes closer than this (seconds) are one stream (a drag)
+    # A rebuild that waits for the changes to rest (schedule(settle=True), or a dialog whose
+    # last rebuild took longer than SLOW_DRAG seconds) runs once no change came for PAUSE_MS:
+    # the mouse paused or was let go. Never between two mouse moves (see schedule()).
+    PAUSE_MS = 200
+    SLOW_DRAG = 0.25
+    REST_FIRST = False  # every rebuild waits for the rest (a dialog with its own live picture)
+    # While the mouse button stays down, a short stop to look is not a rest: the rebuild
+    # waits HELD_REST times its last cost (between HELD_REST_MIN_MS and HELD_REST_MAX_MS), so
+    # a hesitation on a heavy part does not start a rebuild that then freezes the next mouse
+    # moves (review finding DRAFT-2-F3); letting go rebuilds at once (handle_released).
+    # (A stop longer than HELD_REST_MAX_MS is a look: rebuilt even with the button down.)
+    HELD_REST = 1.5
+    HELD_REST_MIN_MS = 100
+    HELD_REST_MAX_MS = 450
+    # A rebuild cheaper than this tells nothing of the cost (Press Pull or Extrude at 0
+    # builds next to nothing)
+    TRIVIAL_COST = 0.03
+    # On a part with HEAVY_FACES faces or more, a drag waits for the rest until a rebuild
+    # made while a handle was held has shown it quick: the rebuild when the dialog opened
+    # (a value of 0) says nothing of one during the drag (review finding DRAFT-2-F2: the
+    # first move of a drag froze the handle for 0.5-1.3 s)
+    HEAVY_FACES = 120
 
     def __init__(self, doc, transaction):
         from . import ui_icon
@@ -1361,23 +1488,40 @@ class Panel:
                 pass
 
     # -- live preview ---------------------------------------------------------
-    def schedule(self):
+    # The handle never waits for the model (Luca, 2026-10-22: "the angle dragger doesn't even
+    # update either: it waits behind for the model to update"). A rebuild runs on the main
+    # thread and nothing else moves meanwhile, the dragged handle included. So:
+    #   * a dialog whose rebuild is quick (most: an extrude, a move) rebuilds while the handle
+    #     is dragged, at the pace below (the part grows while the button is still down);
+    #   * a dialog whose last rebuild took longer than SLOW_DRAG (a big part), and a dialog
+    #     with a live picture of its own (Draft: draft_live.py; it passes settle=True),
+    #     rebuild only once the changes have rested for PAUSE_MS (the mouse paused or was let
+    #     go): never between two mouse moves, and only for the latest value.
+    def schedule(self, settle=False):
         """Rebuild the preview soon. While changes keep coming (an arrow being dragged, keys
         typed) the preview follows them at a steady pace, like Fusion's, which moves with the
         mouse. A timer already running is left alone: restarting it on every change put the
         preview off until the mouse stopped moving. A change on its own (a click, a value
         typed) is shown after PREVIEW_MS; only while changes stream in (a drag sends one
         every few milliseconds) does the next rebuild wait for the calm gap after a slow one
-        (see _tick)."""
+        (see _tick). `settle`: the change comes from a handle being dragged and the dialog
+        shows it live by itself, so the rebuild waits until the changes rest (PAUSE_MS); a
+        dialog whose rebuild is slow (SLOW_DRAG) waits like that for every change."""
         if getattr(self, "_closed", False):
             return
         now = time.perf_counter()
         streaming = now - getattr(self, "_last_change", -1.0) < self.STREAM_GAP
         self._last_change = now
+        if settle or self.REST_FIRST or self._slow():
+            self._waits_rest = True  # kept until the rebuild runs (another change may come)
+        elif not self._timer.isActive():
+            self._waits_rest = False
         if self._timer.isActive():
             return
         wait = self.PREVIEW_MS
-        if streaming:
+        if self._waits_rest:
+            wait = self.PAUSE_MS
+        elif streaming:
             try:
                 calm = int((getattr(self, "_calm_until", 0.0) - now) * 1000.0)
                 wait = max(wait, min(self.PREVIEW_MAX_MS, calm))
@@ -1386,10 +1530,81 @@ class Panel:
         self._timer.setInterval(wait)
         self._timer.start()
 
+    def settle_now(self):
+        """The handle was let go: the waiting rebuild runs at once (not after PAUSE_MS)."""
+        if getattr(self, "_closed", False):
+            return
+        try:
+            self._waits_rest = False
+            self._last_change = time.perf_counter() - self.PAUSE_MS / 1000.0
+            self._last_motion = -1.0
+            if self._timer.isActive():
+                self._timer.stop()
+                self._timer.setInterval(0)
+                self._timer.start()
+        except Exception:
+            pass
+
+    def last_moved(self):
+        """When the value last changed or the mouse last moved with a button held."""
+        return max(getattr(self, "_last_change", -1.0), getattr(self, "_last_motion", -1.0))
+
+    def _slow(self):
+        """True when the last rebuild took so long that it would freeze a dragged handle, or
+        when its cost is not known yet (a trivial rebuild so far) and a handle is dragged on
+        a heavy part."""
+        cost = getattr(self, "_preview_cost", None)
+        if cost is not None and cost > self.SLOW_DRAG:
+            return True
+        if button_held():
+            held = getattr(self, "_held_cost", None)
+            if held is not None:
+                return held > self.SLOW_DRAG
+            return self._heavy_part()
+        return False
+
+    def _heavy_part(self):
+        """True when the design has a solid of HEAVY_FACES faces or more (kept per dialog)."""
+        heavy = getattr(self, "_heavy", None)
+        if heavy is not None:
+            return heavy
+        heavy = False
+        try:
+            for obj in self.doc.Objects:
+                if obj.TypeId != "PartDesign::Body" and not (
+                    obj.isDerivedFrom("Part::Feature") and obj.Visibility
+                ):
+                    continue
+                shape = getattr(obj, "Shape", None)
+                if shape is not None and not shape.isNull():
+                    if len(shape.Faces) >= self.HEAVY_FACES:
+                        heavy = True
+                        break
+        except Exception:
+            heavy = False
+        self._heavy = heavy
+        return heavy
+
+    def _rest_needed(self):
+        """Seconds without a change before a rebuild that waits for the rest runs: PAUSE_MS,
+        or while the mouse button stays down HELD_REST times the last rebuild's cost."""
+        rest = self.PAUSE_MS / 1000.0
+        if not button_held():
+            return rest
+        cost = getattr(self, "_preview_cost", None)
+        if cost is None or cost < self.TRIVIAL_COST:
+            return rest
+        return max(
+            self.HELD_REST_MIN_MS / 1000.0,
+            min(self.HELD_REST_MAX_MS / 1000.0, self.HELD_REST * cost),
+        )
+
     def _tick(self):
         """The preview timer fired: rebuild. While a drag streams changes in, the next
         rebuild waits for a calm gap of 1.5 times this one's time (at most PREVIEW_MAX_MS),
-        so the view and the arrow stay smooth on a heavy part."""
+        so the view and the arrow stay smooth on a heavy part. A rebuild that waits for the
+        changes to rest (schedule(settle=True), or a slow dialog) waits until no change came
+        for PAUSE_MS."""
         if getattr(self, "_closed", False):
             return
         try:
@@ -1402,13 +1617,28 @@ class Panel:
                 return
         except Exception:
             pass
+        try:
+            if getattr(self, "_waits_rest", False):
+                quiet = time.perf_counter() - self.last_moved()
+                left = self._rest_needed() - quiet
+                if left > 0.001:  # still moving: look again when it may have rested
+                    self._timer.setInterval(max(1, int(left * 1000.0)))
+                    self._timer.start()
+                    return
+        except Exception:
+            pass
         self._pending = False
+        self._waits_rest = False
+        held = button_held()
         started = time.perf_counter()
         try:
             self._recompute()
         except Exception as exc:
             warn("preview: %s" % exc)
         ended = time.perf_counter()
+        self._preview_cost = ended - started
+        if held:
+            self._held_cost = self._preview_cost  # what a rebuild during a drag costs
         gap = min(self.PREVIEW_MAX_MS / 1000.0, 1.5 * (ended - started))
         self._calm_until = ended + gap
         try:
@@ -1416,11 +1646,17 @@ class Panel:
                 return
             if self._pending or self._timer.isActive():
                 # Changes came in while it rebuilt: one more rebuild, after the calm gap when
-                # they stream in (a drag), else at once.
+                # they stream in (a drag), else at once (a rebuild that waits for the changes
+                # to rest keeps waiting: _waits_rest).
                 self._pending = False
                 streaming = ended - getattr(self, "_last_change", -1.0) < self.STREAM_GAP
                 self._timer.stop()
-                self._timer.setInterval(max(self.PREVIEW_MS, int(gap * 1000.0) if streaming else 0))
+                if getattr(self, "_waits_rest", False):
+                    self._timer.setInterval(self.PAUSE_MS)
+                else:
+                    self._timer.setInterval(
+                        max(self.PREVIEW_MS, int(gap * 1000.0) if streaming else 0)
+                    )
                 self._timer.start()
         except Exception:
             pass

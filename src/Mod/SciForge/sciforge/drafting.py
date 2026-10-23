@@ -210,22 +210,48 @@ def check(shape, plane_ref, names, options):
 
 def undrafted(base_shape, result_shape, names):
     """Faces of `names` the result left as they were (FreeCAD skips a face it cannot tilt
-    and only says so in the Report view)."""
+    and only says so in the Report view). Only the result's faces with the same box as a
+    picked face are measured (comparing every face's area and centre took 0.5 s a preview
+    on a part of 180 faces; the boxes are kept per shape: shape_checks.face_boxes)."""
+    from . import shape_checks
+
+    boxes = shape_checks.face_boxes(result_shape)
     left = []
     for name in names:
         try:
             face = base_shape.getElement(name)
         except Exception:
             continue
-        for other in result_shape.Faces:
+        box = face.BoundBox
+        kind = face.Surface.__class__
+        area = center = None
+        for other, other_box in boxes:
+            if not _same_box(box, other_box):
+                continue
+            if other.Surface.__class__ is not kind:
+                continue
+            if area is None:
+                area, center = face.Area, face.CenterOfMass
             if (
-                abs(other.Area - face.Area) < 1e-7 * max(1.0, face.Area)
-                and (other.CenterOfMass - face.CenterOfMass).Length < 1e-6
-                and other.Surface.__class__ is face.Surface.__class__
+                abs(other.Area - area) < 1e-7 * max(1.0, area)
+                and (other.CenterOfMass - center).Length < 1e-6
             ):
                 left.append(name)
                 break
     return left
+
+
+def _same_box(a, b, tol=1e-4):
+    """Two bounding boxes alike (an unchanged face keeps its box; the tolerance allows for a
+    box grown by a changed edge tolerance)."""
+    return (
+        abs(a.XMin - b.XMin) < tol
+        and abs(a.XMax - b.XMax) < tol
+        and abs(a.YMin - b.YMin) < tol
+        and abs(a.YMax - b.YMax) < tol
+        and abs(a.ZMin - b.ZMin) < tol
+        and abs(a.ZMax - b.ZMax) < tol
+    )
 
 
 # -- the angle handle --------------------------------------------------------------------
@@ -465,6 +491,34 @@ def remove(feature):
 
     modify_bodies.remove_all(feature)
     shelling.remove(feature)
+
+
+# Refusals that no other angle cures: the picks themselves (a face that cannot be drafted
+# with this pull direction, nothing on the pull side of the parting line...). The dialog
+# shows no live picture for such picks (review finding DRAFT-1-F4).
+_ANGLE_FREE = (
+    "Only faces that run along the pull direction",
+    "cannot be drafted",
+    "no longer exists",
+    "Pick the",
+    "Pick one plane",
+    "The fixed plane",
+    "None of the faces lies on the pull side",
+    "cannot be split at the parting line",
+    "Splitting the faces at the parting line",
+    "The parting line is not flat",
+    "The parting tool has no curves",
+    "Move Parting Line is not available",
+    "The draft has no pull direction",
+    "Make a solid first",
+    "The draft is not in a body",
+)
+
+
+def angle_free(reason):
+    """True when the refusal `reason` does not depend on the draft angle."""
+    text = reason or ""
+    return any(words in text for words in _ANGLE_FREE)
 
 
 def friendly(text):
@@ -760,10 +814,80 @@ def _hinge(piece, spec, pull, point):
 
 def draft_shape(shape, names, spec):
     """`shape` (body coordinates) with faces `names` drafted as `spec` says (build_spec).
-    Raises DraftError with the reason."""
+    Raises DraftError with the reason.
+
+    The last few results (and refusals) are kept per shape, faces and spec: the limit search
+    builds an angle (value_limits) and the preview then builds the same one in the document
+    (a DraftFeature's execute) - once is enough. The result is shared: callers do not change
+    it (DraftFeature refines a copy)."""
+    _check_spec(spec)
+    key = _result_key(shape, names, spec)
+    if key is not None:
+        for k, kept, result in _RESULTS:
+            if k == key and kept.isSame(shape):
+                if isinstance(result, DraftError):
+                    raise DraftError(str(result))
+                return result
+    try:
+        result = _draft_shape(shape, names, spec)
+    except DraftError as exc:
+        _remember(key, shape, DraftError(str(exc)))
+        raise
+    _remember(key, shape, result)
+    return result
+
+
+_RESULTS = []  # [(key, base shape, result or DraftError)], newest last
+_KEEP_RESULTS = 8
+
+
+def _remember(key, shape, result):
+    if key is None:
+        return
+    _RESULTS.append((key, shape, result))
+    del _RESULTS[:-_KEEP_RESULTS]
+
+
+def _result_key(shape, names, spec):
+    """What a draft_shape() result depends on, as a hashable key (None: do not keep it)."""
+    try:
+
+        def vec(v):
+            return (round(v.x, 9), round(v.y, 9), round(v.z, 9))
+
+        plane = spec.get("plane")
+        curves = spec.get("curves")
+        curve_key = None
+        if curves is not None:
+            curve_key = tuple(
+                (
+                    e.Curve.__class__.__name__,
+                    round(e.Length, 9),
+                    vec(e.valueAt(e.FirstParameter)),
+                    vec(e.valueAt(e.LastParameter)),
+                    vec(e.valueAt(0.5 * (e.FirstParameter + e.LastParameter))),
+                )
+                for e in curves.Edges
+            )
+        return (
+            shape_key(shape),
+            tuple(names),
+            spec.get("type"),
+            spec.get("sides"),
+            round(float(spec.get("angle", 0.0)), 9),
+            round(float(spec.get("angle2", 0.0)), 9),
+            vec(spec["pull"]),
+            None if plane is None else (vec(plane[0]), vec(plane[1])),
+            curve_key,
+            tuple(vec(v) for v in spec.get("sweeps") or []),
+        )
+    except Exception:
+        return None
+
+
+def _draft_shape(shape, names, spec):
     import Part
 
-    _check_spec(spec)
     faces = []
     for name in names:
         try:
@@ -913,9 +1037,12 @@ def _occ_draft(shape, names, hinge, pull, angle):
     doc = _scratch_document()
     try:
         holder = doc.addObject("Part::Feature", "Solid")
-        holder.Shape = shape
+        _unseen(holder)
+        holder.Shape = _unplaced(shape)
         body = doc.addObject("PartDesign::Body", "Body")
+        _unseen(body)
         base = body.newObject("PartDesign::FeatureBase", "Base")
+        _unseen(base)
         base.BaseFeature = holder
         origin, normal = hinge
         plane = body.newObject("PartDesign::Plane", "Hinge")
@@ -925,6 +1052,7 @@ def _occ_draft(shape, names, hinge, pull, angle):
         line.MapMode = "Deactivated"
         line.Placement = App.Placement(origin, App.Rotation(App.Vector(0, 0, 1), _unit(pull)))
         draft = body.newObject("PartDesign::Draft", "Draft")
+        _unseen(draft)
         draft.Base = (base, names)
         draft.NeutralPlane = (plane, [""])
         draft.PullDirection = (line, [""])
@@ -934,18 +1062,76 @@ def _occ_draft(shape, names, hinge, pull, angle):
         for obj in (base, plane, line, draft):
             obj.recompute()
         state = list(draft.State)
-        out = draft.Shape.copy()
+        out = draft.Shape  # a shape of its own: it outlives the scratch objects (no copy)
         status = draft.getStatusString() if ("Invalid" in state or "Error" in state) else ""
     finally:
         _release_scratch(doc)
     if status or out.isNull() or not out.Solids or not out.isValid():
         raise DraftError(friendly(status))
-    if abs(out.Volume - shape.Volume) < 1e-9:
+    if abs(out.Volume - _volume(shape)) < 1e-9:
         raise DraftError(
             "The faces could not be tilted with this plane and angle. Try another angle or "
             "pick other faces."
         )
     return out
+
+
+def _unplaced(shape):
+    """`shape` with its Placement built into its geometry (same faces, same order). A body's
+    solid made from a YZ or XZ sketch carries a turned Placement; given to the scratch
+    Part::Feature, the Placement went to the feature and the PartDesign Draft worked on the
+    shape without it: the hinge and pull (body coordinates) met the faces in the wrong frame,
+    so the trial drafts of the limit search tilted the wrong way and the dialog held angles at
+    a false limit (review finding DRAFT-1-F6). Kept for the last few shapes."""
+    try:
+        if shape.Placement.isIdentity():
+            return shape
+    except Exception:
+        return shape
+    key = shape_key(shape)
+    for k, kept, baked in _UNPLACED:
+        if k == key and kept.isSame(shape):
+            return baked
+    import FreeCAD as App
+
+    matrix = shape.Placement.toMatrix()
+    baked = shape.copy()
+    baked.Placement = App.Placement()
+    baked = baked.transformed(matrix, True)
+    _UNPLACED.append((key, shape, baked))
+    del _UNPLACED[:-4]
+    return baked
+
+
+_UNPLACED = []  # [(shape key, shape, the same shape without a Placement)], newest last
+
+
+def _unseen(obj):
+    """A scratch object is never drawn: in the GUI its view provider would tessellate every
+    shape it gets (the part, again and again during a limit search)."""
+    try:
+        view = getattr(obj, "ViewObject", None)
+        if view is not None:
+            view.Visibility = False
+        obj.Visibility = False
+    except Exception:
+        pass
+
+
+_VOLUMES = []  # [(shape key, shape, volume)], newest last
+
+
+def _volume(shape):
+    """shape.Volume, kept for the last few shapes (the part before the draft: every trial of
+    a limit search compares with it)."""
+    key = shape_key(shape)
+    for k, kept, volume in _VOLUMES:
+        if k == key and kept.isSame(shape):
+            return volume
+    volume = shape.Volume
+    _VOLUMES.append((key, shape, volume))
+    del _VOLUMES[:-4]
+    return volume
 
 
 # The throw-away document is kept and reused. In the GUI, closing a document ends the undo

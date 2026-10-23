@@ -28,6 +28,8 @@ Built on FreeCAD's PartDesign::Draft (Fixed Plane, One Side) or SciForge's Draft
 (drafting.py). Double-click the step in the timeline to edit it.
 """
 
+import time
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -40,6 +42,8 @@ from . import (
     modify_bodies,
     pickpanel,
     preview,
+    shape_checks,
+    taskui,
     ui_icon_path,
     value_limits,
     warn,
@@ -60,6 +64,7 @@ PARTING_HELP = (
     "(a whole sketch in the browser). The faces turn about where they meet it."
 )
 FACES_HELP = "Click the faces to draft (click one again to drop it), also of other bodies."
+SEARCHING = "Finding the steepest angle that fits…"
 NO_MOVE = (
     "Not available yet: moving the parting line needs a step face where the two sides meet, "
     "which OpenCASCADE's draft does not make. Use Fix Parting Line."
@@ -144,6 +149,14 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
     title = "Draft"
     icon = "draft"
     last = None  # the most recent panel (tests and diagnostics)
+    # the live picture follows every change at once (draft_live); the exact solid is built
+    # once the changes rest (taskui.Panel.schedule), never while the mouse drags something
+    REST_FIRST = True
+    # The steepest angle that fits is looked for until it is exact (to the 0.1 deg step):
+    # with the search's usual 1.5 s budget a part whose trial drafts take 0.3 s got a
+    # different, too small "largest" angle from run to run (review finding DRAFT-1-F5). The
+    # search runs in the background (the budget counts only its builds) or at OK.
+    LIMIT_BUDGET = 12.0
 
     def __init__(self, doc, feature=None, picks=None, body=None):
         super().__init__(doc, "Draft" if feature is None else "Edit Draft")
@@ -165,7 +178,18 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         self.value_boxes = ValueBoxes(self, default="angle")
         self.planes = None  # the origin squares while a plane box takes the clicks
         self._chains = {}
+        # the live picture while the angle handle is dragged (draft_live.py)
+        self._live = None  # its Overlay
+        self._live_key = None  # the picks and options its pictures were made for
+        self._live_failed = None  # a key the picture could not be made for (not retried)
+        self._live_hid = False  # the preview solid is hidden behind the picture
+        # the live picture's key while the picks are refused whatever the angle (no picture
+        # then: the refusal stays in sight, review finding DRAFT-1-F4)
+        self._refused_for = None
+        self._accepting = False  # OK is running: a limit search runs to its end at once
+        self._sound_upto = {}  # picks and options -> the steepest angle found to give a sound solid
         self.limit_init()  # an angle past what the faces take stops at the steepest that works
+        self.limits.budget = self.LIMIT_BUDGET
         if feature is not None:
             self.body = drafting.owner_body(feature)
             base, plane_ref, names, options, formula = drafting.read(feature)
@@ -665,7 +689,9 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         return len(self.picked) != before
 
     def _picks_updated(self, schedule=True):
+        self.limit_cancel()  # a search for the old picks
         self.limits.note = ""  # a limit found for the old picks no longer applies
+        self._hide_live()  # it shows the old picks
         if self.plane_ref is not None:
             self.plane_box.set_text(drafting.plane_label(self.plane_ref))
         else:
@@ -689,9 +715,14 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         self._picks_updated()
 
     def _flipped(self, *_):
-        self.options["flip"] = self.flip.isChecked()
-        self._update_handles()
-        self.schedule()
+        try:
+            self.options["flip"] = self.flip.isChecked()
+            self.limit_cancel()
+            self._hide_live()
+            self._update_handles()
+            self.schedule()
+        except Exception as exc:
+            warn("Draft flip: %s" % exc)
 
     def _arrow_clicked(self):
         """Fusion: clicking the pull direction arrow flips it."""
@@ -718,6 +749,8 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         try:
             self.options["sides"] = self.sides.currentData()
             self._rows()
+            self.limit_cancel()
+            self._hide_live()
             self._update_handles()
             self.schedule()
         except Exception as exc:
@@ -732,11 +765,13 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                 self.handle.set_angle(value)
             except Exception:
                 pass
+        self._show_live()
         self.schedule()
 
     def _typed2(self, value):
         value = self._limit_typed("angle2", self.angle2, value, self.formula2)
         self.options["angle2"] = value
+        self._show_live()
         self.schedule()
 
     def _limit_typed(self, what, field, value, formula):
@@ -747,6 +782,16 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         return held
 
     def _turned(self, degrees, released=False):
+        """The angle handle turned (on_drag) or was let go (released). The handle and the
+        boxes take the angle at once and the live picture shows it (draft_live, a few ms);
+        the exact solid is built once the mouse rests or is let go (taskui.Panel.schedule
+        with settle), never between two mouse moves."""
+        try:
+            self._turned_now(degrees, released)
+        except Exception as exc:
+            warn("Draft angle handle: %s" % exc)
+
+    def _turned_now(self, degrees, released):
         value = round(max(-89.9, min(89.9, degrees)), 1)
         held = self.limit_edit("angle", value, "dragged")
         if held != value:
@@ -763,9 +808,12 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             self._show_formula()
             changed = True
         if changed:
-            self.schedule()
+            self._show_live()
+            self.schedule(settle=True)
         elif self.limits.note and not self.error:
             self.show_status()  # held at the limit: nothing to rebuild
+        if released:
+            self.settle_now()  # let go: the exact solid now, not after the pause
 
     # -- angles past what fits (value_limits.LimitedValues) ------------------------------------
     def limit_unit(self, what):
@@ -949,6 +997,10 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                 on_release=lambda d: self._turned(d, True),
             )
             hole_common.on_top(self.handle.root)
+            # a dragged angle past a limit found is held there: the disc's snaps leave it alone
+            self.handle.hold = lambda d: self.limit_held(
+                "angle", round(max(-89.9, min(89.9, d)), 1)
+            )
             field = self.angle
             self.value_boxes.attach(
                 self.handle,
@@ -1003,8 +1055,23 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         return ""
 
     def _preview(self):
+        """The exact preview (the step built in the document); the live picture goes (it
+        stays while the steepest angle that fits is still being looked for)."""
+        built = None
+        try:
+            built = self._build_preview()
+        finally:
+            if built is not False:
+                self._hide_live()
+
+    def _build_preview(self):
+        """Build the preview; False when it waits for the search of the steepest angle that
+        fits (value_limits.Background), which previews again when it ends."""
+        if self.limit_searching() and not self._closed:
+            return False  # the search's end previews the angle then
+        value_limits.busy(self, False)  # the preview after a search: this one
         if self._closed or self.base is None:
-            return
+            return None
         self._collect()
         if self.formula_error:
             self.show_status()
@@ -1032,10 +1099,15 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             # The handle may reach Draft's own 89.9 degree stop: a dragged / typed angle there
             # is held at the steepest one the faces take, like any angle that is too steep.
             steep = "between -89.9 and 89.9" in reason
-            if steep and self.limit_refused("too steep: " + reason):
-                self._preview()
-                return
+            held = None
+            if steep:
+                held = self._limit_refuse("too steep: " + reason)
+            if held == "again":
+                return self._build_preview()
+            if held == "later":
+                return self._searching()
             self.error = reason
+            self._note_refusal()
             self.show_status()
             return
         self.error = None
@@ -1075,20 +1147,120 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
                     "%s could not be tilted with this plane and angle. Drop %s or try "
                     "another angle." % (", ".join(left), "it" if len(left) == 1 else "them")
                 )
+            elif not self._sound():
+                # FreeCAD's Draft gives a broken solid without a word past what the faces
+                # take (OK then refused it silently): the same refusal as SciForge's own
+                # draft, so the angle is held at the steepest one that works
+                self.error = drafting.friendly("")
         if not self.error:
             for member in self.members:
                 if member.target is not None and _failed(member.target):
                     self.error = "%s: %s" % (member.body.Label, _status(member.target))
                     break
-        if self.error and self.limit_refused(self.error):
-            self._preview()  # held at the steepest angle that works: preview that
-            return
+        held = self._limit_refuse(self.error) if self.error else None
+        if held == "again":
+            return self._build_preview()  # held at the steepest angle that works: preview that
+        if held == "later":
+            return self._searching()  # looked for one build at a time; it previews when found
         if self.error:
             self.error = self.limit_hint(self.error)
         else:
             self.limit_good()
+        self._note_refusal()
         self.show_preview(True)
         self.show_status()
+        self._live_soon()
+
+    def _limit_refuse(self, reason):
+        """An angle refused as too steep: held at the steepest one that fits. While OK runs
+        the search runs to its end at once (OK takes the held angle and closes in one press:
+        review finding DRAFT-1-F1), else in the background (limit_refused_soon)."""
+        if self._accepting:
+            # a part of a few hundred faces takes a few seconds (one trial draft ~0.3 s)
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+            try:
+                return "again" if self.limit_refused(reason) else None
+            finally:
+                QtWidgets.QApplication.restoreOverrideCursor()
+        return self.limit_refused_soon(reason, self._limit_searched, self._dragging)
+
+    def _dragging(self):
+        """True while a handle is being dragged (the mouse moved with a button held within
+        the rest time): the background search builds nothing then (a trial draft freezes the
+        handle for its whole length, review finding DRAFT-2-F1)."""
+        if self._closed or not taskui.button_held():
+            return False
+        return time.perf_counter() - self.last_moved() < self.PAUSE_MS / 1000.0
+
+    def _note_refusal(self):
+        """Remember the picks when they are refused for a reason that does not depend on the
+        angle (a face that cannot be drafted, nothing on the pull side of the parting line):
+        the live picture is not shown for them (_show_live)."""
+        try:
+            if self.error and drafting.angle_free(self.error):
+                self._refused_for = self._live_key_now()
+                self._hide_live()
+            else:
+                self._refused_for = None
+        except Exception:
+            self._refused_for = None
+
+    def _sound(self):
+        """True when FreeCAD's Draft made a sound solid. Checking a part of a few hundred
+        faces takes ~0.15 s, so an angle no steeper than one found sound for the same picks
+        (on the same side of zero) is taken as sound: a steeper draft is what breaks a part.
+        OK checks the solid it keeps in any case."""
+        angle = float(self.options.get("angle", 0.0))
+        try:
+            key = self.limit_key("angle")
+        except Exception:
+            key = None
+        known = self._sound_upto.get(key) if key is not None else None
+        if known is not None and 0.0 < angle / known <= 1.0 + 1e-12:
+            return True
+        if not shape_checks.is_valid(self.target.Shape):
+            return False
+        if key is not None and (known is None or abs(angle) > abs(known) or angle * known < 0):
+            if known is not None and angle * known < 0:
+                return True  # the other side of zero: keep the side that was found first
+            if len(self._sound_upto) > 16:
+                self._sound_upto.clear()
+            self._sound_upto[key] = angle
+        return True
+
+    def _searching(self):
+        """While the steepest angle that fits is looked for (one build per turn of the event
+        loop, so the handle keeps moving): the failed preview is not shown, the dialog says
+        what happens. Returns False (the preview waits)."""
+        try:
+            self._hide_results()  # the failed solid away, the part before the step see-through
+            if self._live is not None:
+                self._live.hide()  # an angle that does not work is not shown either
+            self.error = None
+            self.limits.note = SEARCHING
+            self.say("")
+        except Exception as exc:
+            warn("Draft: %s" % exc)
+        return False
+
+    def _limit_searched(self, limit):
+        """The search of the steepest angle that fits ended (the angle is held at it when it
+        was still past it): preview now, or once the mouse rests when it is being dragged."""
+        try:
+            if self._closed:
+                return
+            if self.limits.note == SEARCHING:
+                self.limits.note = ""
+            value_limits.busy(self)  # until the preview it asks for has run
+            quiet = time.perf_counter() - self.last_moved()
+            if quiet < self._rest_needed():
+                self.schedule(settle=True)
+            else:
+                self._timer.stop()
+                self._timer.setInterval(0)
+                self._timer.start()
+        except Exception as exc:
+            warn("Draft: %s" % exc)
 
     def _sync_members(self):
         try:
@@ -1131,6 +1303,151 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
         note = "" if text or limits is None else limits.note
         value_limits.show_note(getattr(self, "limit_label", None), note)
 
+    # -- the live picture (draft_live.py) ------------------------------------------------------
+    def live_shown(self, angle):
+        """Called each time the live picture shows a new angle (tests time it)."""
+
+    def _live_key_now(self):
+        options = self._spec_options()
+        for key in ("angle", "angle2", "formula2"):
+            options.pop(key, None)
+        plane = (self.plane_ref[0], self.plane_ref[1]) if self.plane_ref else None
+        return value_limits.make_key(
+            "live",
+            self.base.Shape if self.base is not None else None,
+            plane,
+            list(self.names()),
+            [(m.body.Name, m.base.Shape, list(self.member_names(m))) for m in self.members],
+            options,
+        )
+
+    def _live_overlay(self):
+        """The Overlay with pictures of the picks now (made once per set of picks), or None
+        when there is nothing to show or it cannot be made."""
+        if self._closed or self.base is None or self.plane_ref is None or self._ready():
+            return None
+        key = self._live_key_now()
+        if key == self._live_failed:
+            return None
+        if self._live is not None and key == self._live_key:
+            return self._live
+        from . import draft_live
+
+        try:
+            options = self._spec_options()
+            pictures = []
+            spec = drafting.build_spec(self.plane_ref, options, self.base)
+            placement = self.body.getGlobalPlacement() if self.body else None
+            pictures.append(
+                draft_live.Picture(self.base.Shape, list(self.names()), spec, placement)
+            )
+            for member in self.members:
+                names = list(self.member_names(member))
+                if not names or member.base is None:
+                    continue
+                spec = drafting.build_spec(self.plane_ref, options, member.base)
+                pictures.append(
+                    draft_live.Picture(
+                        member.base.Shape, names, spec, member.body.getGlobalPlacement()
+                    )
+                )
+            if self._live is None:
+                color, line = _colors(self.base)
+                self._live = draft_live.Overlay(Gui.ActiveDocument.ActiveView, color, line)
+            self._live.hide()
+            self._live.set_pictures(pictures)
+            self._live_key = key
+            return self._live
+        except Exception as exc:
+            self._live_failed = key
+            self._live_key = None
+            if self._live is not None:
+                self._live.hide()
+            log("Draft: no live picture for these faces (%s); the preview follows on pauses" % exc)
+            return None
+
+    def _live_soon(self):
+        """Make the picture of new picks while nothing happens, so the first move of the
+        handle does not wait for it (it takes up to ~0.2 s on a part of a few hundred faces)."""
+        try:
+            if self._live is not None and self._live_key == self._live_key_now():
+                return
+            QtCore.QTimer.singleShot(0, self._prepare_live)
+        except Exception:
+            pass
+
+    def _prepare_live(self):
+        try:
+            if not self._closed and not getattr(self.doc, "Recomputing", False):
+                self._live_overlay()
+        except Exception as exc:
+            warn("Draft live picture: %s" % exc)
+
+    def _show_live(self):
+        """The drafted faces at the dialog's angle now (a few milliseconds): the preview solid
+        is hidden behind the see-through part until the exact one is built."""
+        if self._closed or self.formula_error:
+            return
+        try:
+            if self._refused_for is not None and self._refused_for == self._live_key_now():
+                self._hide_live()  # refused whatever the angle: the refusal stays in sight
+                return
+            overlay = self._live_overlay()
+            if overlay is None:
+                return
+            angle = float(self.options.get("angle", 0.0))
+            angle2 = float(self.options.get("angle2", angle))
+            overlay.show(angle, angle2 if self.options.get("sides") == "two" else None)
+            self._hide_results()
+            self.live_shown(angle)
+        except Exception as exc:
+            self._drop_live()
+            warn("Draft live picture: %s" % exc)
+
+    def _hide_results(self):
+        """The preview solid(s) out of the way of the live picture; the part before the step
+        see-through around it (as with the preview)."""
+        if self._live_hid:
+            return
+        targets = [self.target] + [m.target for m in self.members]
+        for target in targets:
+            if pickpanel.alive(target) and target.ViewObject is not None:
+                target.ViewObject.makeTemporaryVisible(False)
+        bases = [self.base] + [m.base for m in self.members]
+        for base in bases:
+            if not pickpanel.alive(base) or base.ViewObject is None:
+                continue
+            base.ViewObject.makeTemporaryVisible(True)
+            if not self._looks.done("ghost:" + base.Name):
+                for node in pickpanel.nodes(base.ViewObject.RootNode, "SoMaterial"):
+                    if node.getName().getString() == "ShapeMaterial":
+                        self._looks.set(node, "transparency", pickpanel.GHOST / 100.0)
+        self._live_hid = True
+
+    def _hide_live(self):
+        """The live picture away; the preview solid back where it was hidden for it."""
+        live = getattr(self, "_live", None)
+        if live is not None:
+            try:
+                live.hide()
+            except Exception:
+                pass
+        if not getattr(self, "_live_hid", False):
+            return
+        self._live_hid = False
+        try:
+            if self._ghost:
+                for target in [self.target] + [m.target for m in self.members]:
+                    if pickpanel.alive(target) and target.ViewObject is not None:
+                        target.ViewObject.makeTemporaryVisible(True)
+        except Exception as exc:
+            warn("Draft preview display: %s" % exc)
+
+    def _drop_live(self):
+        self._hide_live()
+        self._live = None
+        self._live_key = None
+
     # -- OK / Cancel ------------------------------------------------------------------------
     def accept(self):
         try:
@@ -1142,13 +1459,24 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             if missing:
                 self.say("⚠ " + missing)
                 return False
-            self._preview()
+            self._accepting = True
+            try:
+                if self.limit_searching():  # the search still running: its end now
+                    QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+                    try:
+                        self.limit_finish()
+                    finally:
+                        QtWidgets.QApplication.restoreOverrideCursor()
+                self._timer.stop()
+                self._preview()  # an angle past what fits is held at the limit here (at once)
+            finally:
+                self._accepting = False
             obj = self.target
             if self.formula_error or self.error or obj is None:
                 self.show_status()
                 return False
             state = list(obj.State)
-            if "Invalid" in state or "Error" in state or not obj.Shape.isValid():
+            if "Invalid" in state or "Error" in state or not shape_checks.is_valid(obj.Shape):
                 self.show_status()
                 return False
             if any(m.target is None or _failed(m.target) for m in self.members):
@@ -1160,10 +1488,28 @@ class DraftPanel(pickpanel.PickPanel, value_limits.LimitedValues):
             return False
 
     def cleanup(self):
+        self.limit_cancel()
+        value_limits.busy(self, False)
+        self._drop_live()
         self._remove_handles()
         self._hide_planes()
         self.value_boxes.discard()
         super().cleanup()
+
+
+def _colors(base):
+    """(face colour, edge colour) of the part, for the live picture."""
+    face, line = (0.8, 0.8, 0.8), (0.1, 0.1, 0.1)
+    try:
+        vobj = base.ViewObject
+        try:
+            face = tuple(vobj.ShapeAppearance[0].DiffuseColor[:3])
+        except Exception:
+            face = tuple(vobj.ShapeColor[:3])
+        line = tuple(vobj.LineColor[:3])
+    except Exception:
+        pass
+    return face, line
 
 
 def _failed(obj):

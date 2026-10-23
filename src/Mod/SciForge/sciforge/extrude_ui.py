@@ -213,6 +213,9 @@ class AngleDragger(BoxCarrier):
         self._shape_arc()
         self.on_drag = on_drag
         self.on_release = on_release
+        # hold(angle): the angle the dialog holds a dragged one at (a limit it went past), or
+        # None; a snap never pulls an angle that is held (see _snap)
+        self.hold = None
         self._last = self.angle()
         self._was_active = False
         self._hover = False
@@ -222,6 +225,8 @@ class AngleDragger(BoxCarrier):
         self._timer.setInterval(self.POLL_MS)
         self._timer.timeout.connect(self._poll)
         self._timer.start()
+        # dragged: polled on every mouse move, so the dialog and the box take the angle at once
+        self._move_poll = taskui.poll_on_move(self._poll)
 
     def _shape_arc(self):
         """The arc runs handle_look_core.ARC_REACH_PX on each side of the disc (redrawn
@@ -311,6 +316,12 @@ class AngleDragger(BoxCarrier):
             self._wheel.show(self.view, self.pivot, self.axis, self.zero, self.radius)
         if held:  # the release keeps what Ctrl was while the disc was held
             self._free = protractor.ctrl_held()
+        if self._held_past(value):
+            # past the steepest angle that fits (Draft): the dialog holds it at the limit; a
+            # snap here (0 deg is a few pixels from a limit of 1.5 deg) fought the hold on
+            # every mouse move (review finding DRAFT-2-F7)
+            self._wheel.update(value, None)
+            return value
         snapped, mark = protractor.snap_angle(
             self.view,
             value,
@@ -326,20 +337,36 @@ class AngleDragger(BoxCarrier):
         self._wheel.update(value, mark)
         return value
 
+    def _held_past(self, value):
+        hold = self.hold
+        if hold is None:
+            return False
+        try:
+            held = hold(value)
+        except Exception:
+            return False
+        return held is not None and abs(held - value) > 1e-6
+
     def _poll(self):
         try:
             active = drag_guard.guard_coin_dragger(self.dragger, self.root, self.view)
             value = self.angle()
-            if active or self._was_active:  # the release keeps the snap too
+            if (active or self._was_active) and abs(value - self._last) > 1e-6:
+                # the release keeps the snap too; an angle the dialog put there (set_angle:
+                # a limit it holds) is not snapped again (it did snap a held 1.5 deg to 0)
                 value = self._snap(value, held=active)
+            elif active and not self._wheel.shown():
+                self._wheel.show(self.view, self.pivot, self.axis, self.zero, self.radius)
             if not active:
                 self._wheel.hide()
             if abs(value - self._last) > 1e-6:
                 self._last = value
                 if self.on_drag:
                     self.on_drag(value)
-            if self._was_active and not active and self.on_release:
-                self.on_release(value)
+            if self._was_active and not active:
+                if self.on_release:
+                    self.on_release(value)
+                taskui.handle_released()  # the dialog's waiting rebuild now
             self._was_active = active
             self._look(active)
             self.follow_box()
@@ -365,6 +392,7 @@ class AngleDragger(BoxCarrier):
             self._timer.stop()
         except Exception:
             pass
+        taskui.drop_poll_on_move(self)
         self._wheel.hide()
         try:
             drag_guard.before_remove(self.dragger, self.root, self.view)
@@ -1890,7 +1918,18 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
             return distance / 2.0
         return distance
 
-    def _dragged(self, value):
+    def _again(self, key, value, released):
+        """True when an arrow is let go at the value of its last drag step: that step
+        rebuilt it (or its rebuild runs now, taskui.handle_released); rebuilding it again
+        froze a heavy part a second time (review finding DRAFT-2-F6)."""
+        last = self.__dict__.setdefault("_drag_last", {})
+        raw = round(float(value), 6)
+        again = released and last.get(key) == raw
+        last[key] = None if released else raw
+        return again
+
+    def _dragged(self, value, released=False):
+        again = self._again("distance", value, released)
         self.drop_formula("distance")
         snap = self._drag_snap("distance")  # over a parallel face or a point: its height
         if snap is not None:
@@ -1901,16 +1940,21 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
                 value = abs(value)
                 if self.measurement.currentData() == "whole":
                     value *= 2.0
-        if self._snapped("distance", self.distance, value, snap):
+        if self._snapped("distance", self.distance, value, snap) and not again:
             self._changed()
+        elif again and not self._timer.isActive():
+            self.show_status()  # let go: what is said once the arrow is let go (a limit)
         self._show_note()
 
-    def _dragged2(self, value):
+    def _dragged2(self, value, released=False):
+        again = self._again("distance2", value, released)
         self.drop_formula("distance2")
         snap = self._drag_snap("distance2")
         value = snap[0] if snap is not None else round(max(value, 0.0), 2)
-        if self._snapped("distance2", self.distance2, value, snap):
+        if self._snapped("distance2", self.distance2, value, snap) and not again:
             self._changed()
+        elif again and not self._timer.isActive():
+            self.show_status()  # let go: what is said once the arrow is let go (a limit)
         self._show_note()
 
     def _show_note(self):
@@ -2613,7 +2657,7 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
                     self._arrow_value(options["distance"]),
                     size,
                     on_drag=self._dragged,
-                    on_release=self._dragged,
+                    on_release=lambda v: self._dragged(v, True),
                 )
                 self._attach_box("distance")
             if options["direction"] == "two_sides" and options["extent2"] == "distance":
@@ -2623,7 +2667,7 @@ class ExtrudePanel(Panel, value_limits.LimitedValues):
                     options["distance2"],
                     size,
                     on_drag=self._dragged2,
-                    on_release=self._dragged2,
+                    on_release=lambda v: self._dragged2(v, True),
                 )
                 self._attach_box("distance2")
             self._make_taper_handle(faces, start, normal, size)
