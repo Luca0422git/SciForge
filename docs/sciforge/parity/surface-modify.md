@@ -92,10 +92,10 @@ saved with the design.
   `surface4_misc` (Align, Combine refusal, Physical Material, Appearance),
   `surface4_component` (fillet, press pull and delete on a surface body in a moved
   component, undo / redo).
-- Golden models `surface4_*.json` (10): fillet + edit + reopen, chamfer + SURFACE delete,
+- Golden models `surface4_*.json` (11): fillet + edit + reopen, chamfer + SURFACE delete,
   press pull + edit + reopen, press pull of a tray with slanted walls, merge, merge of
   tangent faces (refit), split of a solid by a surface, split of a surface, rectangular
-  pattern of a surface body, mirror join + scale.
+  pattern and pattern on path of a surface body, mirror join + scale.
 - Unit tests: `SciForgeTests/unit/test_surfmod_core.py`.
 
 ## Known gaps

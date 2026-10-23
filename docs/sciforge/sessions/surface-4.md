@@ -66,7 +66,7 @@ change.
   fillet, fillet_chamfer, fillet2_chamfer, patterns_rect, patterns_circ, patterns_mirror,
   fixpattern_mirror, shell_draft_scale, modify2_scale, modify_align, modify_silhouette,
   misc_materials, surface_stitch, surface_misc.
-- Golden: the 10 `surface4_*` models pass; the full golden run 448 pass, 2 xfail (old
+- Golden: the 11 `surface4_*` models pass; the full golden run 448 pass, 2 xfail (old
   upstream bugs) before the last two models were added.
 - Unit: all OK (16 new in test_surfmod_core.py).
 

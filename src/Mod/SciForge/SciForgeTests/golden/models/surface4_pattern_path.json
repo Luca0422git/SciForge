@@ -1,0 +1,134 @@
+{
+  "id": "surface4_pattern_path",
+  "title": "Pattern on Path (Bodies) of an open box of surfaces along a sketch line: 3, 40 apart",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "pattern"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces, area 1600"
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "geometry": [
+        {
+          "line": [
+            15,
+            10,
+            115,
+            10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "path_pattern",
+      "id": "pp",
+      "body": true,
+      "path": {
+        "sketch": "s2"
+      },
+      "quantity": 3,
+      "distance": 40
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "pp"
+      ],
+      "comment": "the two copies"
+    }
+  ],
+  "expect": {
+    "area": 3200,
+    "faces": 10,
+    "solids": 0,
+    "bbox": [
+      20,
+      0,
+      0,
+      70,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "the path starts at the point nearest the box (its middle, x 15); Distribution Extent (Fusion's default): 3 instances over 40, so the copies are 20 and 40 along it (x 20 .. 50 and 40 .. 70), 1600 each"
+  }
+}
