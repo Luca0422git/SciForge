@@ -130,3 +130,42 @@ thickness and a groove block where no wall is found (research G rows) are not bu
 - Scenario setups clear the plastic library preferences plastic-1 adds
   (`Mod/SciForge/Plastic`: Library, Default), so a user default left by another scenario
   cannot change the checked sizes.
+
+## QA pass (2026-10-23, `sf/plastic-2-qa`)
+
+Run on the builder's head (85def97): unit 1883 OK, golden 459 pass + 2 old xfails, the
+four `plastic2_*` scenarios and `ribbon_sweep` (`SWEEP_TABS=plastic`) all pass. The diff was
+read for escaping exceptions, log prefixes, recomputes in callbacks, Cancel leaving changes,
+undo steps, save / reopen names and the maths (catch profile, groove / slot / loop boxes,
+strain factors with the critic's 0.92 taper, knife-edge angle 2 atan(1/2), draft) against
+the research: those hold. Headless probes (scratch, not committed): Lip and Snap Fit inside
+two moved and turned components give the same volumes as unmoved (lip +188, groove
+-227.964, hook +252.80, groove -21.824); a deleted sketch leaves the Snap Fit with "The Snap
+Fit's sketch is gone"; a lip on the outside edges puts the reveal inside (196 mm3), as the
+help's tip implies.
+
+Fixed (details in the parity doc's QA section): Hide Other Body ticked first; Hook Body in
+an edit refused with the reason; a note when no body is in front of the catches (a sketch
+facing away from the hook body); Manual points kept by the sketch's geometry ids too (an
+earlier point deleted no longer moves the snap fit); Design Advice's Display change and OK
+no longer check the design again, and showing it again recomputes only it; its default
+pull is each body's component's Z (research 2.11), not the design's. New scenario
+`plastic2_qa`; before the fixes it failed exactly on those checks (5 of them on the
+builder's code).
+
+FreeCAD facts found:
+
+- `setPropertyStatus(prop, "NoRecompute")` does not keep a FeaturePython from running
+  again: the object is still touched and FeaturePython's mustExecute returns 1 for a
+  touched object. The "Output" status is what keeps a change from touching it (the change
+  is still in the undo step and still reaches the view provider's updateData).
+- A sketch's `getGeometryId(index)` is stable when other geometry is deleted (indices
+  shift down, ids stay) and is saved with the file: the way to keep picked sketch points.
+- A recompute error in a scenario prints "Failed to recompute" / a traceback, which the
+  harness and run_tests.sh count as failures: test a feature's error state headlessly.
+
+Left (not fixed): the Lip's edges are kept by name on the step before it (FreeCAD 1.1's
+element map follows most changes, but an edit that renumbers the rim's edges can still
+move or refuse the lip); a hook that runs through another body (no groove found) is
+noted but not refused.
+

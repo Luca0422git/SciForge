@@ -97,6 +97,47 @@ def chosen_points(sketch, indices):
     return found
 
 
+def _geometry_ids(sketch, indices):
+    """The sketch's own ids of the geometry at `indices` (they stay when other geometry is
+    deleted, unlike the indices), or None when the sketch has none."""
+    try:
+        return [int(sketch.getGeometryId(int(i))) for i in indices]
+    except Exception:
+        return None
+
+
+def remember_points(feature, sketch, indices):
+    """Keep the picked points (Manual) by the sketch's geometry ids too."""
+    meta = bodies.load_meta(feature, META)
+    ids = _geometry_ids(sketch, indices) if indices and sketch is not None else None
+    if meta.get("point_ids") != ids:
+        meta["point_ids"] = ids
+        bodies.save_meta(feature, META, meta)
+
+
+def indices_of(feature):
+    """The geometry indices of the picked points (Manual; [] for Automatic), followed through
+    edits of the sketch: deleting a point before them shifts the indices, the ids stay."""
+    indices = [int(i) for i in feature.PointIndices]
+    if not indices:
+        return []
+    ids = bodies.load_meta(feature, META).get("point_ids")
+    sketch = feature.Sketch
+    if not ids or sketch is None or len(ids) != len(indices):
+        return indices
+    try:
+        where = {int(sketch.getGeometryId(i)): i for i in range(len(sketch.Geometry))}
+    except Exception:
+        return indices
+    found = [where[g] for g in ids if g in where]
+    if not found:
+        raise SnapError(
+            "The points picked for this Snap Fit are gone from %s: edit the Snap Fit and "
+            "pick points." % sketch.Label
+        )
+    return found
+
+
 def frames(sketch, options, indices=()):
     """[(origin, (ex, ey, ez))] of every snap fit (App.Vectors, design coordinates)."""
     points = chosen_points(sketch, indices)
@@ -506,7 +547,7 @@ def build_hooks(obj, options, base):
     sketch = obj.Sketch
     if sketch is None or not bodies.alive(sketch):
         raise SnapError("The Snap Fit's sketch is gone: edit the Snap Fit and pick a sketch.")
-    placed = frames(sketch, options, list(obj.PointIndices))
+    placed = frames(sketch, options, indices_of(obj))
     if not placed:
         raise SnapError("The sketch has no points: add sketch points where the snap fits go.")
     body = bodies.body_of(obj)
@@ -634,7 +675,7 @@ class SnapGrooveFollower(modify_bodies._Follower):
 
 def other_side(lead, options, shape):
     """(the other body's solid with the grooves cut / loops joined, design coordinates; note)."""
-    placed = frames(lead.Sketch, options, list(lead.PointIndices))
+    placed = frames(lead.Sketch, options, indices_of(lead))
     if options["hook"]:
         skipped = skipped_of(lead)
         placed = [frame for k, frame in enumerate(placed) if k not in skipped]
@@ -801,6 +842,7 @@ def make(sketch, options=None, indices=(), hook_body=None, groove_body=None, nam
     feature.Sketch = sketch
     feature.PointIndices = [int(i) for i in indices]
     write_options(feature, opts)
+    remember_points(feature, sketch, list(indices))
     _hide_sketch(sketch)
     set_other_body(feature, groove_body, opts)
     log("snap fit '%s' made in %s" % (feature.Label, hook_body.Label))
@@ -817,7 +859,7 @@ def set_other_body(feature, groove_body, options=None):
             hook_body,
             feature.Sketch,
             options,
-            list(feature.PointIndices),
+            indices_of(feature),
             lead=feature,
         )
     members = [(groove_body, None)] if groove_body is not None and options.get("groove") else []
@@ -837,6 +879,8 @@ def update(feature, sketch=None, options=None, indices=None, groove_body=False):
         feature.Sketch = sketch
     if indices is not None:
         feature.PointIndices = [int(i) for i in indices]
+    if sketch is not None or indices is not None:
+        remember_points(feature, feature.Sketch, list(feature.PointIndices))
     merged = options_of(feature)
     merged.update(options or {})
     merged = _unlink_given(merged, options)
@@ -854,7 +898,11 @@ def update(feature, sketch=None, options=None, indices=None, groove_body=False):
 
 def read(feature):
     """(sketch, point indices, options, other body) of an existing Snap Fit."""
-    return feature.Sketch, list(feature.PointIndices), options_of(feature), other_body(feature)
+    try:
+        indices = indices_of(feature)
+    except SnapError:
+        indices = []
+    return feature.Sketch, indices, options_of(feature), other_body(feature)
 
 
 def remove(feature):

@@ -200,6 +200,18 @@ def pull_of(obj):
     return vector
 
 
+def pull_for(obj, body, pull):
+    """The pull direction for one body: the picked one, else the Z of the body's component
+    (research 2.11: "Z of the component"; a turned component's part is moulded along its
+    own Z), turned round with Flip."""
+    if obj.PullDirection:
+        return pull
+    from . import surface_analysis
+
+    z = surface_analysis.parent_placement(body).Rotation.multVec(V(0, 0, 1))
+    return z * -1.0 if obj.Flip else z
+
+
 def checks_of(obj):
     return [c for c, prop in CHECK_PROPS.items() if bool(getattr(obj, prop, True))]
 
@@ -214,7 +226,7 @@ def measure(obj):
     start = time.time()
     for body in owners:
         rule = plastic.rule_for_body(body)
-        data = measure_shape(bodies.global_shape(body), rule, pull, checks)
+        data = measure_shape(bodies.global_shape(body), rule, pull_for(obj, body, pull), checks)
         data.update({"name": body.Name, "label": body.Label, "rule": rule["name"]})
         out["bodies"].append(data)
     log(

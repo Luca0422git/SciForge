@@ -19,7 +19,12 @@ Double-click: Lip Height 1.5, OK; Undo: as before; Redo: the taller lip.
 
 Design Advice on that design: the Display switched to Thickness redraws the colours from the
 results kept without checking the design again; OK does not check it again either (seconds
-on a big part). Esc on a second Design Advice leaves only the first.
+on a big part). Esc on a second Design Advice leaves only the first. A plate in a component
+turned 90 degrees about X: its pull is the component's Z (the design's -Y), so its own four
+sides lack draft; Esc leaves nothing.
+
+Manual points: three points, the second picked; the first deleted from the sketch (the
+indices shift): the snap fit stays on its point, and its edit shows it.
 """
 
 import FreeCAD as App
@@ -281,13 +286,101 @@ def down_esc():
     h.check("still one Snap Fit", len(ps.snap_steps()) == 1, ps.titles())
 
 
+def ids_design():
+    """Manual points followed through a sketch edit: three points, the second one picked;
+    the first point deleted from the sketch afterwards (its indices shift down by one)."""
+    App.closeDocument(ps.doc().Name)
+    base, lid = ps.enclosure("SnapIds", lid="plate")
+    ps.points_sketch(base, [(57, 10), (57, 30), (4, 20)], label="IdPoints")
+    s["base"], s["lid"] = base, lid
+    h.fit()
+
+
+def hide_lid():
+    """The lid hidden with its eye (a step of its own: the browser shows the new design
+    first)."""
+    ps.click_eye("Lid")
+
+
+def ids_open():
+    h.check("the lid is hidden", not s["lid"].ViewObject.Visibility)
+    ps.plastic_tab()
+    h.ribbon("Snap Fit")
+
+
+def ids_manual():
+    p = ps.snap_panel()
+    if not h.check("the Snap Fit dialog", p is not None):
+        return
+    ps.click_row("IdPoints")
+    ps.settle(ps.snap_panel)
+    ps.choose(p.selection, "Manual")
+
+
+def ids_click_point():
+    ps.settle(ps.snap_panel)
+    h.fit()
+    h.click(V(57, 30, 20))
+
+
+def ids_picked():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    if not h.check("still open", p is not None):
+        return
+    h.check("Manual: the second point (index 1)", p.indices == [1], (p.indices, ps.message(p)))
+    ps.ok()
+
+
+def hook_y(lid):
+    below = lid.Shape.common(Part.makeBox(60, 40, 15, V(0, 0, 5)))
+    return below.BoundBox.Center.y if below.Volume > 1e-6 else None
+
+
+def ids_point_deleted():
+    h.check("the dialog closed", ps.snap_panel() is None)
+    s["ids_ok"] = bodies_volumes()
+    h.check("the hook at y = 30", abs((hook_y(s["lid"]) or 0) - 30) < 0.5, hook_y(s["lid"]))
+    # the design changes: the first point is deleted from the sketch (Sketcher renumbers
+    # the points after it)
+    sk = ps.by_label("IdPoints")
+    sk.delGeometry(0)
+    ps.doc().recompute()
+    h.check("the sketch has 2 points left", len(sk.Geometry) == 2)
+    h.check(
+        "the snap fit stays on its point (y = 30)",
+        abs((hook_y(s["lid"]) or 0) - 30) < 0.5,
+        hook_y(s["lid"]),
+    )
+    h.check("the same hook and groove", same(bodies_volumes(), s["ids_ok"], 1e-7))
+    bad = [o.Name for o in ps.doc().Objects if "Invalid" in o.State or "Error" in o.State]
+    h.check("every step computed", not bad, bad)
+    h.check("double-click opens the edit", ps.double_click_timeline("Snap Fit 1"))
+
+
+def ids_edit_reads():
+    p = ps.snap_panel()
+    if not h.check("the edit dialog", p is not None and p.editing):
+        return
+    h.check("the edit shows the same point (now index 0)", p.indices == [0], p.indices)
+    h.check("1 point", p.field.button.text().startswith("1 point"), p.field.button.text())
+    ps.esc()
+
+
+def ids_esc():
+    h.check("Esc closed it", ps.snap_panel() is None)
+    h.check("Esc: the same hook and groove", same(bodies_volumes(), s["ids_ok"], 1e-7))
+
+
 # -- Lip -----------------------------------------------------------------------------------------
 def lip_design():
     App.closeDocument(ps.doc().Name)
     base, lid = ps.enclosure("LipQA", lid="shell")
     s["base"], s["lid"] = base, lid
+    # hidden as setup (the eye click is plastic2_lip's): an eye click right after the
+    # previous design closed selected the row instead in xvfb
+    lid.ViewObject.Visibility = False
     h.fit()
-    ps.click_eye("Lid")
 
 
 def open_lip():
@@ -459,6 +552,60 @@ def restore_measure():
         del plastic_advice._qa_measure
 
 
+def turned_design():
+    """A plate (20 x 20 x 2) in a component turned 90 degrees about X: moulded along its own
+    Z, which is the design's -Y now."""
+    App.closeDocument(ps.doc().Name)
+    ps.clear_plastic_prefs()
+    d = App.newDocument("AdviceTurned")
+    comp = d.addObject("App::Part", "Comp")
+    comp.Label = "Comp"
+    comp.Placement = App.Placement(V(0, 0, 0), App.Rotation(V(1, 0, 0), 90))
+    body = d.addObject("PartDesign::Body", "Plate")
+    body.Label = "Plate"
+    comp.addObject(body)
+    box = body.newObject("PartDesign::AdditiveBox", "PlateBox")
+    box.Length, box.Width, box.Height = 20, 20, 2
+    body.Tip = box
+    d.recompute()
+    s["plate"] = body
+    h.fit()
+
+
+def turned_open():
+    ps.plastic_tab()
+    ps.menu("INSPECT", "Design Advice")
+
+
+def turned_checked():
+    from sciforge import plastic_advice
+
+    ps.settle(ps.advice_panel)
+    p = ps.advice_panel()
+    if not h.check("the Design Advice dialog", p is not None):
+        return
+    found = plastic_advice.results(p.analysis).get("bodies", [])
+    if not h.check("the plate checked", len(found) == 1, (found, ps.message(p))):
+        ps.esc()
+        return
+    pull = V(*found[0]["pull"])
+    h.check("the pull is the component's Z (the design's -Y)", (pull - V(0, -1, 0)).Length < 1e-9)
+    drafty = sorted(n for n, f in found[0]["faces"].items() if "draft" in f.get("issues", {}))
+    # the plate's own sides (its Face1..4) run along its Z: no draft; its top and bottom
+    # (Face5, Face6) are square to the pull
+    h.check(
+        "the plate's 4 sides lack draft", drafty == ["Face1", "Face2", "Face3", "Face4"], drafty
+    )
+    ps.esc()
+
+
+def turned_esc():
+    from sciforge import plastic_advice
+
+    h.check("Esc closed it", ps.advice_panel() is None)
+    h.check("Esc left nothing", not plastic_advice.advices(ps.doc()))
+
+
 h.run(
     "plastic2_qa",
     [
@@ -487,6 +634,15 @@ h.run(
         no_groove_body_note,
         flipped_finds_groove,
         down_esc,
+        ids_design,
+        hide_lid,
+        ids_open,
+        ids_manual,
+        ids_click_point,
+        ids_picked,
+        ids_point_deleted,
+        ids_edit_reads,
+        ids_esc,
         lip_design,
         open_lip,
         click_edge(0),
@@ -509,5 +665,9 @@ h.run(
         second_advice_esc,
         esc_leaves_one,
         restore_measure,
+        turned_design,
+        turned_open,
+        turned_checked,
+        turned_esc,
     ],
 )
