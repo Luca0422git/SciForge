@@ -29,6 +29,8 @@ from collections import OrderedDict
 BUDGET = 1.5  # seconds the bisection may take (it runs once per set of inputs)
 MIN_TRIALS = 3  # ... but at least this many builds, even on a slow part
 VERIFY_TRIES = 6  # tidy candidates tried toward the safe side before giving up on tidiness
+SEARCHING_VALUE = "Finding the largest value that fits…"
+SEARCHING_ANGLE = "Finding the largest angle that fits…"
 NOTE_STYLE = "color: #8cc4ff;"  # the note is information, not an error (theme.py swaps it)
 
 # Words of the "this value is too big here" refusals (fillet, chamfer, shell, draft, press pull,
@@ -629,6 +631,31 @@ class Limiter:
         )
 
 
+class _WaitCursor:
+    """A wait cursor while a search runs at once (OK pressed during a search)."""
+
+    def __enter__(self):
+        self.on = False
+        try:
+            from .compat import QtCore, QtWidgets
+
+            QtWidgets.QApplication.setOverrideCursor(QtCore.Qt.WaitCursor)
+            self.on = True
+        except Exception:
+            pass
+        return self
+
+    def __exit__(self, *exc):
+        if self.on:
+            try:
+                from .compat import QtWidgets
+
+                QtWidgets.QApplication.restoreOverrideCursor()
+            except Exception:
+                pass
+        return False
+
+
 _WORKING = set()  # Background searches running, and dialogs with a preview still to come after one
 
 
@@ -1067,6 +1094,105 @@ class LimitedValues:
         except Exception:
             return None
 
+    # -- the search in the background, for any dialog (taskui.Panel subclasses) -------------
+    # Luca's request (2026-10-23): a limit search never freezes a dragged handle, in every
+    # dialog with value limits, the way Draft does it (2026-10-22). The dialog calls
+    # limit_refuse() where it called limit_refused(), limit_waits() at the start of its
+    # preview, and limit_accept() at the start of OK.
+
+    def limit_searching_text(self, what=None):
+        """What the dialog says while the search runs."""
+        if what is None and self._limit_edit is not None:
+            what = self._limit_edit[0]
+        unit = self.limit_unit(what) if what is not None else "mm"
+        if unit == "deg":
+            return SEARCHING_ANGLE
+        return SEARCHING_VALUE
+
+    def limit_refuse(self, reason):
+        """limit_refused() that never freezes the dialog: "again" when the value is held at
+        its limit now (preview again), "later" when the limit is looked for one trial build
+        per turn of the event loop (the preview waits: limit_waits(); it runs again when the
+        search ends), None when the refusal stays. While OK runs (limit_accept) the search
+        runs to its end at once, with a wait cursor."""
+        if getattr(self, "_limit_accepting", False):
+            with _WaitCursor():
+                return "again" if self.limit_refused(reason) else None
+        held = self.limit_refused_soon(reason, self._limit_found_soon, self._limit_paused)
+        if held == "later":
+            self._limit_show_searching()
+        return held
+
+    def limit_waits(self):
+        """At the start of the dialog's preview: True while a search runs (the preview waits;
+        the search's end previews again). Else the preview asked for by a search's end is
+        this one (value_limits.working() stops counting it)."""
+        if self.limit_searching() and not getattr(self, "_closed", False):
+            return True
+        busy(self, False)
+        return False
+
+    def limit_accept(self):
+        """At the start of OK: a search still running ends now (wait cursor), and until
+        limit_accepted() a refused value is searched at once (limit_refuse). True when a
+        search ended here (the dialog previews the held value before deciding)."""
+        self._limit_accepting = True
+        if not self.limit_searching():
+            return False
+        with _WaitCursor():
+            self.limit_finish()
+        try:
+            self._timer.stop()  # the preview the search's end asked for: OK runs it
+        except Exception:
+            pass
+        return True  # the value may have been held at the limit: OK previews it first
+
+    def limit_accepted(self):
+        self._limit_accepting = False
+
+    def _limit_paused(self):
+        """True while a handle is being dragged (the mouse moved with a button held within
+        the rest time): the search builds nothing then (a trial build would freeze the handle
+        for its whole length)."""
+        try:
+            from . import taskui
+
+            if getattr(self, "_closed", False) or not taskui.button_held():
+                return False
+            return time.perf_counter() - self.last_moved() < self.PAUSE_MS / 1000.0
+        except Exception:
+            return False
+
+    def _limit_show_searching(self):
+        """The search started: the dialog says so (the error of the refused value is not
+        shown: the value is about to be held at the limit)."""
+        try:
+            self.limits.note = self.limit_searching_text()
+            if hasattr(self, "error"):
+                self.error = None
+            self.show_status()
+        except Exception:
+            pass
+
+    def _limit_found_soon(self, limit):
+        """The search ended (the value is held at the limit if still past it): preview now,
+        or once the mouse rests when a handle is being dragged."""
+        try:
+            if getattr(self, "_closed", False):
+                return
+            if self.limits.note in (SEARCHING_VALUE, SEARCHING_ANGLE):
+                self.limits.note = ""
+            busy(self)  # until the preview it asks for has run (limit_waits)
+            quiet = time.perf_counter() - self.last_moved()
+            if quiet < self._rest_needed():
+                self.schedule(settle=True)
+            else:
+                self._timer.stop()
+                self._timer.setInterval(0)
+                self._timer.start()
+        except Exception:
+            busy(self, False)
+
     def _limit_ended(self, what, key, value, source, limit):
         """A Background search ended: the value is held at the limit if it is still past it
         and the inputs are the same."""
@@ -1107,6 +1233,8 @@ class LimitedValues:
         value that stopped fitting because the picks changed)."""
         if self._limit_busy or self._limit_edit is None or not is_limit_error(error):
             return error
+        if self.limit_searching():
+            return error  # never a second search at once beside the one in the background
         what = self._limit_edit[0]
         self._limit_busy = True
         try:

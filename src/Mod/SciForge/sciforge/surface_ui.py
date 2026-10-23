@@ -2016,21 +2016,46 @@ class ThickenPanel(SurfacePanel, value_limits.LimitedValues):
         super()._dragged(key, value)
 
     def _recompute(self):
+        if self.limit_waits():
+            return  # the search of the thickest that fits rebuilds when it ends
         super()._recompute()
         if self._closed:
             return
         try:
             text = self.error or (self.failure() if not self.waiting else "")
-            if text and self.limit_refused(text):
+            held = self.limit_refuse(text) if text else None
+            if held == "again":
                 super()._recompute()  # held at the thickest that fits: rebuild with it
+            elif held == "later":
+                self.dirty = True  # looked for one trial per event-loop turn; built when found
             elif not text and not self.waiting and self.step is not None:
                 self.limit_good()
         except Exception as exc:
             warn("%s limit: %s" % (self.title, exc))
 
+    def accept(self):
+        self.limit_accept()  # a limit search still running ends now
+        try:
+            if not self._closed and self.dirty:
+                self._timer.stop()
+                self._recompute()  # a thickness past what fits is held at the limit here
+            return super().accept()
+        finally:
+            self.limit_accepted()
+
+    def cleanup(self):
+        self.limit_cancel()
+        value_limits.busy(self, False)
+        super().cleanup()
+
     def show_status(self):
         super().show_status()
         try:
+            if self.limit_searching():
+                # the refused thickness is about to be held at the limit: say what happens
+                self.message.setText("")
+                value_limits.show_note(getattr(self, "limit_label", None), self.limits.note)
+                return
             text = self.message.text()
             if text.startswith("⚠ "):
                 hinted = self.limit_hint(text[2:])
