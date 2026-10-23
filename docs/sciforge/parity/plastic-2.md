@@ -189,7 +189,8 @@ a 1.5 mm boss wall reads 1.5 mm from both of its round sides).
   thin spot smaller than the points' spacing can be missed, and points right beside the
   edge where two walls meet give no reading (the Thickness display blends the samples into
   a smooth map). No alert badge on the component in the browser (a shared file). A hidden
-  Design Advice waits and checks again when shown. A check takes about 2 s for a 60-face
-  enclosure with bosses and 9 s for a 130-face one (measured in the sandbox under load); it
-  runs in the recompute, so FreeCAD waits that long after a change to a checked body.
+  Design Advice waits and checks again when shown. A check takes about 1.5 s for a 60-face
+  enclosure with bosses, 3.5 s for a 130-face one and 25 s for a plate with 400 small holes
+  (406 faces; measured in the sandbox under load); it runs in the recompute, so FreeCAD
+  waits that long after a change to a checked body.
 - **Injection-moulding simulation** is out of scope (outline 8).

@@ -364,6 +364,29 @@ class RayGrid:
         parts = [self.owners[self.starts[p] : self.ends[p]] for p in pos]
         return np.unique(np.concatenate(parts))
 
+    def nearest(self, point, radius):
+        """(distance, triangle index) of the triangle nearest to `point` if one comes within
+        `radius` of it, else None."""
+        np = self.np
+        p = np.asarray(point, dtype=float)
+        lo = self._cell(p - radius)
+        hi = self._cell(p + radius)
+        ranges = [np.arange(lo[k], hi[k] + 1) for k in range(3)]
+        cx, cy, cz = np.meshgrid(*ranges, indexing="ij")
+        flat = np.unique(self._flat(cx.ravel(), cy.ravel(), cz.ravel()))
+        pos = np.searchsorted(self.keys, flat)
+        inside = pos < len(self.keys)
+        pos, flat = pos[inside], flat[inside]
+        pos = pos[self.keys[pos] == flat]
+        if not len(pos):
+            return None
+        cand = np.unique(np.concatenate([self.owners[self.starts[q] : self.ends[q]] for q in pos]))
+        dist = _point_triangle_distances(np, p, self.A[cand], self.E1[cand], self.E2[cand])
+        k = int(np.argmin(dist))
+        if dist[k] > radius:
+            return None
+        return (float(dist[k]), int(cand[k]))
+
     def cast(self, origins, directions, near=1e-6, index=False):
         """first_hits for these rays; near: one distance for all, or one for each ray."""
         np = self.np
@@ -389,13 +412,13 @@ class RayGrid:
         if cand is None or not len(cand):
             return (None, None)
         A, E1, E2 = self.A[cand], self.E1[cand], self.E2[cand]
-        pvec = np.cross(d[None, :], E2)
+        pvec = _cross(np, d[None, :], E2)
         det = (E1 * pvec).sum(axis=1)
         good = np.abs(det) > 1e-14
         inv = np.where(good, 1.0 / np.where(good, det, 1.0), 0.0)
         s = o[None, :] - A
         u = (s * pvec).sum(axis=1) * inv
-        q = np.cross(s, E1)
+        q = _cross(np, s, E1)
         v = (q * d[None, :]).sum(axis=1) * inv
         t = (q * E2).sum(axis=1) * inv
         hit = good & (u >= -1e-9) & (u <= 1 + 1e-9) & (v >= -1e-9) & (u + v <= 1 + 1e-9)
@@ -404,6 +427,69 @@ class RayGrid:
         if not math.isfinite(t[k]):
             return (None, None)
         return (float(t[k]), int(cand[k]))
+
+
+def _cross(np, a, b):
+    """Row-wise cross products of (n, 3) arrays (one row is spread over the other's rows);
+    numpy's own cross is several times slower on these sizes."""
+    return np.stack(
+        (
+            a[:, 1] * b[:, 2] - a[:, 2] * b[:, 1],
+            a[:, 2] * b[:, 0] - a[:, 0] * b[:, 2],
+            a[:, 0] * b[:, 1] - a[:, 1] * b[:, 0],
+        ),
+        axis=1,
+    )
+
+
+def point_triangle_distance(p, tri):
+    """The distance from point p to the triangle tri ((x, y, z) x 3), plain Python."""
+    a, b, c = tri
+
+    def sub(x, y):
+        return (x[0] - y[0], x[1] - y[1], x[2] - y[2])
+
+    def cross(x, y):
+        return (x[1] * y[2] - x[2] * y[1], x[2] * y[0] - x[0] * y[2], x[0] * y[1] - x[1] * y[0])
+
+    def segment(p0, p1):
+        d = sub(p1, p0)
+        t = max(0.0, min(1.0, _dot(sub(p, p0), d) / max(_dot(d, d), 1e-30)))
+        q = (p0[0] + t * d[0], p0[1] + t * d[1], p0[2] + t * d[2])
+        return math.sqrt(_dot(sub(p, q), sub(p, q)))
+
+    e1, e2 = sub(b, a), sub(c, a)
+    n = cross(e1, e2)
+    nn = _dot(n, n)
+    w = sub(p, a)
+    if nn > 1e-30:
+        u = _dot(cross(w, e2), n) / nn
+        v = _dot(cross(e1, w), n) / nn
+        if u >= 0 and v >= 0 and u + v <= 1:
+            return abs(_dot(w, n)) / math.sqrt(nn)
+    return min(segment(a, b), segment(a, c), segment(b, c))
+
+
+def _point_triangle_distances(np, p, A, E1, E2):
+    """The distance from point p to each triangle (A, A + E1, A + E2), numpy arrays (n, 3)."""
+    N = _cross(np, E1, E2)
+    nn = (N * N).sum(axis=1)
+    w = p[None, :] - A
+    ok = nn > 1e-30
+    safe = np.where(ok, nn, 1.0)
+    u = (_cross(np, w, E2) * N).sum(axis=1) / safe
+    v = (_cross(np, E1, w) * N).sum(axis=1) / safe
+    plane = np.abs((w * N).sum(axis=1)) / np.sqrt(safe)
+    inside = ok & (u >= 0) & (v >= 0) & (u + v <= 1)
+
+    def segment(P0, D):
+        dd = np.maximum((D * D).sum(axis=1), 1e-30)
+        t = np.clip(((p[None, :] - P0) * D).sum(axis=1) / dd, 0.0, 1.0)
+        q = P0 + t[:, None] * D
+        return np.sqrt(((p[None, :] - q) ** 2).sum(axis=1))
+
+    edges = np.minimum(np.minimum(segment(A, E1), segment(A, E2)), segment(A + E1, E2 - E1))
+    return np.where(inside, plane, edges)
 
 
 def _first_hit_py(origin, direction, triangles, near, index=False):

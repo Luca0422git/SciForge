@@ -242,6 +242,19 @@ class AdviceChecks(unittest.TestCase):
         self.assertEqual([h[1] for h in hits], [0, 1])
         self.assertAlmostEqual(hits[1][0], 9.0)
 
+    def test_nearest_triangle(self):
+        tri = ((0, 0, 0), (10, 0, 0), (0, 10, 0))
+        self.assertAlmostEqual(advice.point_triangle_distance((2, 2, 3), tri), 3.0)  # above
+        self.assertAlmostEqual(advice.point_triangle_distance((-3, 2, 4), tri), 5.0)  # an edge
+        self.assertAlmostEqual(advice.point_triangle_distance((13, -4, 0), tri), 5.0)  # a corner
+        far = ((0, 0, 9), (10, 0, 9), (0, 10, 9))
+        grid = advice.RayGrid([tri, far])
+        found = grid.nearest((2, 2, 3), 3.5)
+        self.assertAlmostEqual(found[0], 3.0)
+        self.assertEqual(found[1], 0)
+        self.assertEqual(grid.nearest((2, 2, 7), 2.5)[1], 1)
+        self.assertIsNone(grid.nearest((2, 2, 4.5), 2.0))
+
     def test_ray_grid_agrees_with_every_triangle(self):
         """The grid only tests the triangles near a ray: it must find what testing every
         triangle finds (a cube's 12 triangles, rays from all over in all directions)."""

@@ -37,6 +37,7 @@ CHECK_PROPS = {
 }
 SAMPLES = 8  # points on a small face
 MAX_SAMPLES = 32  # points on a big face (one every SPACING wall thicknesses or so)
+BUDGET = 4000  # points in all: a body of many faces gets fewer a face (the check stays short)
 SPACING = 3.0
 
 
@@ -214,19 +215,22 @@ def measure(obj):
 
 
 # -- measuring one body ---------------------------------------------------------------------------
-def _normal(face, point):
+def _normal(face, point, surface=None):
+    """(outward normal, the point moved onto the face's surface) at a point near the face;
+    surface: face.Surface when the caller has it (it is made anew at each call)."""
     try:
-        u, v = face.Surface.parameter(point)
+        surface = surface if surface is not None else face.Surface
+        u, v = surface.parameter(point)
         n = face.normalAt(u, v)
-        return V(n.x, n.y, n.z), face.Surface.value(u, v)
+        return V(n.x, n.y, n.z), surface.value(u, v)
     except Exception:
         return None, point
 
 
-def face_samples(face, tolerance, count=SAMPLES, spacing=0.0):
+def face_samples(face, tolerance, count=SAMPLES, spacing=0.0, most=MAX_SAMPLES):
     """[(point, outward normal)] spread over the face: centroids of its display triangles,
     split finer on a big face so it gets about one point every `spacing` (at least `count`,
-    at most MAX_SAMPLES points)."""
+    at most `most` points)."""
     try:
         pts, tris = face.tessellate(tolerance)
     except Exception:
@@ -238,7 +242,7 @@ def face_samples(face, tolerance, count=SAMPLES, spacing=0.0):
     want = count
     if spacing > 0:
         try:
-            want = int(min(MAX_SAMPLES, max(count, math.ceil(face.Area / (spacing * spacing)))))
+            want = int(min(most, max(count, math.ceil(face.Area / (spacing * spacing)))))
         except Exception:
             want = count
         if len(tris) < want:
@@ -246,18 +250,49 @@ def face_samples(face, tolerance, count=SAMPLES, spacing=0.0):
 
             points, tris = analysis_core.subdivide(points, tris, spacing)
     step = max(1, int(math.ceil(len(tris) / float(want))))
+    try:
+        surface = face.Surface
+    except Exception:
+        return []
     found = []
     for k in range(0, len(tris), step):
         a, b, c = (points[i] for i in tris[k])
         centre = V(
             (a[0] + b[0] + c[0]) / 3.0, (a[1] + b[1] + c[1]) / 3.0, (a[2] + b[2] + c[2]) / 3.0
         )
-        n, on = _normal(face, centre)
+        n, on = _normal(face, centre, surface)
         if n is None or n.Length < 1e-12:
             continue
         n.normalize()
         found.append((on, n))
     return found
+
+
+def premeshed(shape, tolerance):
+    """A copy of the shape with its display triangles made once, at `tolerance` and a 0.5 rad
+    angular deflection: the faces' tessellate() then takes these. FreeCAD's own tessellate
+    splits small circles far finer: a plate with 400 small holes took 46 s to mesh, 5 s
+    this way. (A copy: the model's own triangles, which the 3D view draws, stay as they
+    are; its faces and edges keep their numbers.)"""
+    try:
+        import MeshPart
+
+        copy = shape.copy()
+        MeshPart.meshFromShape(
+            Shape=copy, LinearDeflection=tolerance, AngularDeflection=0.5, Relative=False
+        )
+        return copy
+    except Exception:
+        return shape
+
+
+def sample_counts(faces):
+    """(points on a small face, at most on a big one) for a body of `faces` faces: SAMPLES
+    and MAX_SAMPLES, fewer when that would pass BUDGET points in all (at least 2 a face)."""
+    if faces * SAMPLES <= BUDGET:
+        return SAMPLES, MAX_SAMPLES
+    count = max(2, int(BUDGET // max(1, faces)))
+    return count, max(count, min(MAX_SAMPLES, 2 * count))
 
 
 def _triangles(shape, tolerance):
@@ -291,9 +326,10 @@ class Rays:
             return []
         if self.grid is not None:
             return self.grid.cast(origins, directions, near, True)
+        nears = near if isinstance(near, (list, tuple)) else [near] * len(origins)
         return [
-            core._first_hit_py(o, d, self.triangles, near, True)
-            for o, d in zip(origins, directions)
+            core._first_hit_py(o, d, self.triangles, n, True)
+            for o, d, n in zip(origins, directions, nears)
         ]
 
     def distances(self, origins, directions, near, own=None):
@@ -326,6 +362,17 @@ class Rays:
             if not todo:
                 break
         return out
+
+    def nearest(self, point, radius):
+        """(distance, triangle index) of the nearest display triangle within radius, or None."""
+        if self.grid is not None:
+            return self.grid.nearest(tuple(point), radius)
+        best = None
+        for k, tri in enumerate(self.triangles):
+            d = core.point_triangle_distance(tuple(point), tri)
+            if d <= radius and (best is None or d < best[0]):
+                best = (d, k)
+        return best
 
     def blocked(self, origins, direction, near):
         found = self.cast(origins, [direction] * len(origins), near)
@@ -367,11 +414,13 @@ def measure_shape(shape, rule, pull, checks):
     size = max(shape.BoundBox.DiagonalLength, 1e-6)
     tolerance = max(0.005, size / 400.0)
     eps = max(1e-4, size * 1e-6)
+    shape = premeshed(shape, tolerance)
     p = (pull.x, pull.y, pull.z)
     samples = []  # (face index, point, normal)
     spacing = max(SPACING * rule.get("thickness", 0.0), size / 30.0)
+    count, most = sample_counts(len(shape.Faces))
     for i, face in enumerate(shape.Faces):
-        for point, normal in face_samples(face, tolerance, SAMPLES, spacing):
+        for point, normal in face_samples(face, tolerance, count, spacing, most):
             samples.append((i, point, normal))
     need_t = any(c in checks for c in ("thickness", "variation"))
     rays = Rays(shape, tolerance) if samples and (need_t or "undercut" in checks) else None
@@ -442,22 +491,22 @@ def inscribed(shape, rays, samples, thick, rule):
     the nearest face is much closer than half the ray); then the wall across there: from the
     nearest face straight through to the face opposite. Where that way across runs along
     inside a wall again (a point beside the edge where two walls meet), no reading."""
-    import Part
-
     out = list(thick)
-    boundary = None
     across = []  # (sample, distance to the nearest face, middle, away)
     for k, ((_i, point, normal), t) in enumerate(zip(samples, thick)):
         if not _long(t, rule):
             continue
-        if boundary is None:
-            boundary = Part.makeCompound(list(shape.Faces))
         middle = point - normal * (0.5 * t)
         try:
-            d, pairs, _info = boundary.distToShape(Part.Vertex(middle))
+            found = rays.nearest(middle, 0.25 * t)
+            if found is None:
+                continue
+            face = rays.faces[rays.owners[found[1]]]
+            _n, foot = _normal(face, middle)
+            away = middle - foot
+            d = away.Length
             if not (1e-9 < 2.0 * d < 0.5 * t):
                 continue
-            away = middle - pairs[0][0]
             away.normalize()
             across.append((k, d, middle, away))
         except Exception:
@@ -501,16 +550,17 @@ def knife_edges(shape, eps):
             between = math.degrees(math.acos(max(-1.0, min(1.0, n1.dot(n2)))))
             if between < 1.0:
                 continue  # tangent faces
+            angle = 180.0 - between
+            if not core.knife_issue(angle):
+                continue
             into = (n1 + n2) * -1.0
             if into.Length < 1e-9:
                 continue
             into.normalize()
             probe = mid + into * (eps * 20)
             if not shape.isInside(probe, eps, False):
-                continue  # concave: no knife edge
-            angle = 180.0 - between
-            if core.knife_issue(angle):
-                found["Edge%d" % (i + 1)] = angle
+                continue  # concave (a deep notch): no knife edge
+            found["Edge%d" % (i + 1)] = angle
         except Exception:
             continue
     return found

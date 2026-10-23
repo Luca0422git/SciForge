@@ -14,8 +14,8 @@ edited (this file is the session log entry).
   and catch profile, the groove / slot / loop boxes, the strain check (tapered factor
   1 / 1.09 per the research's critic pass C5), the lip and groove sections as offsets from
   the picked edges, the Design Advice checks, colours, list rows, a smooth thickness blend
-  and a numpy ray caster (triangles in a grid of cubes: a 130-face part checks in 9 s with 8 to 32 points a face,
-  95 s when every ray tested every triangle).
+  and a numpy ray caster (triangles in a grid of cubes: a 130-face part checks in 3.5 s with 8 to 32 points a
+  face, 95 s when every ray tested every triangle; a plate with 400 small holes 25 s).
 - `sciforge/plastic_snap.py`, `plastic_lip.py`: the steps. A lead step in one body
   (`SnapFitFeature`, `LipFeature`) and a hidden follower in the other body
   (`SnapGrooveFollower`, `LipGrooveFollower`, subclasses of `modify_bodies._Follower`, role
@@ -73,6 +73,13 @@ edited (this file is the session log entry).
   where two walls meet sends its ray along inside the other wall (a box's outside read 20 or
   40 mm thick), and the way across from there runs along inside a wall again; such a point
   gives no reading now.
+- `Part.Shape.tessellate` meshes small circles very finely: one face of a plate with 400
+  holes of 1 mm took 20 s, the whole plate 46 s. `MeshPart.meshFromShape` with a 0.5 rad
+  angular deflection meshes it in 5 s and leaves its triangles on the shape, where the
+  faces' `tessellate` then takes them (done on a copy, not on the model the view draws).
+  The nearest face to a point is found on the same triangle grid (OCC `distToShape` took
+  60 ms a point on that plate). `numpy.cross` is several times slower than writing the
+  three components out on arrays of a few hundred rows.
 - `Wire.makeOffset2D` refuses a single straight edge (no plane of its own): the band beside
   a straight chain is made as a rectangle in the rim's plane.
 - Which side a `makeOffset2D` with a positive distance grows to depends on the wire's
@@ -98,7 +105,7 @@ the Parallel / Perpendicular geometry are SciForge's reading); Face Guide on a c
 walls have different drafts (refused); lip edges not in one plane (refused); Snap Fit
 visibility controls (read as Hide Other Body); Aligned to a face uses its centre; Root
 Radius defaults to 0; Design Advice is sampled (8 to 32 points a face) and checks in the
-recompute (about 9 s for a 130-face part), no browser alert badge; injection-moulding simulation out
+recompute (3.5 s for a 130-face part, 25 s for 406 faces), no browser alert badge; injection-moulding simulation out
 of scope.
 
 ## Notes for the integrator
