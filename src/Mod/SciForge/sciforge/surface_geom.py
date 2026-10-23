@@ -1205,7 +1205,10 @@ def loft_surface(items, options, rails=None, centerline=None, profiles=None):
                     )
                 )
             return surface_result(_loft_rows(items, kinds, profiles, o))
-        return surface_result(_thru_shell(items, closed))
+        # a plain loft (no rails, centerline or end conditions): corner meets corner. The
+        # rail stations keep the pairing their rails give (_rail_stations reads the plain
+        # loft of the profiles as given)
+        return surface_result(_thru_shell(match_corners(items), closed))
     except loft_ends.EndError as exc:
         raise SurfaceError(str(exc))
 
@@ -1282,7 +1285,6 @@ def match_corners(items):
 
 
 def _thru_shell(items, closed):
-    items = match_corners(list(items))
     try:
         return Part.makeLoft(list(items), False, False, bool(closed))
     except Exception as exc:
