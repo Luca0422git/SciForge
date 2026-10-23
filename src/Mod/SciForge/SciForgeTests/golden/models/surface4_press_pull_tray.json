@@ -1,0 +1,132 @@
+{
+  "id": "surface4_press_pull_tray",
+  "title": "Press Pull of the floor of a tray of surfaces with walls slanted 45 degrees: the corners slide down the slanted edges",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10,
+        "taper": 45
+      },
+      "comment": "walls leaning out 45 degrees: the top is 50 x 40"
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 2579.898987322333,
+        "faces": 5,
+        "solids": 0,
+        "rel_tol": 1e-06,
+        "source": "analytic",
+        "note": "floor 600, walls trapezoids 30 / 50 and 20 / 40 wide, 10 sqrt 2 slanted"
+      }
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "pp",
+      "kind": "surface_press_pull",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          -1
+        ],
+        "count": 1
+      },
+      "options": {
+        "distance": 2
+      },
+      "comment": "the floor's normal points down, out of the tray (the stitch turned it to match the walls): +2 is 2 down"
+    }
+  ],
+  "expect": {
+    "area": 2656.114282798983,
+    "faces": 5,
+    "solids": 0,
+    "bbox": [
+      -10,
+      -10,
+      -2,
+      40,
+      30,
+      10
+    ],
+    "rel_tol": 1e-06,
+    "source": "analytic",
+    "note": "the floor 2 down: its corners slide down the 45 degree edges, so it is 26 x 16; the walls are 12 sqrt 2 slanted trapezoids 26 / 50 and 16 / 40 wide: 416 + 2 x 38 x 12 sqrt 2 + 2 x 28 x 12 sqrt 2"
+  }
+}

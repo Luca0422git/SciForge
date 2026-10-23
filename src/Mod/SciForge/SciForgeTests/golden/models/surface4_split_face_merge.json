@@ -1,0 +1,137 @@
+{
+  "id": "surface4_split_face_merge",
+  "title": "Split Face of a surface body's floor by the YZ plane (two floor faces, still one surface body), then Merge of the two halves: one floor again",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "split-face",
+    "merge"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              -15,
+              -10
+            ],
+            [
+              15,
+              -10
+            ],
+            [
+              15,
+              10
+            ],
+            [
+              -15,
+              10
+            ],
+            [
+              -15,
+              -10
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            0,
+            -10
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            0,
+            -10
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces, 30 x 20 x 10, centred on the origin: area 1600"
+    },
+    {
+      "op": "split_face",
+      "id": "f1",
+      "faces": {
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "tool": "YZ"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 1600,
+        "faces": 6,
+        "solids": 0,
+        "source": "analytic",
+        "note": "the floor in two halves: one face more, the same area"
+      }
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "m1",
+      "kind": "surface_merge",
+      "faces": {
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 2
+      }
+    }
+  ],
+  "expect": {
+    "area": 1600,
+    "faces": 5,
+    "solids": 0,
+    "bbox": [
+      -15,
+      -10,
+      0,
+      15,
+      10,
+      10
+    ],
+    "source": "analytic",
+    "note": "merged back: the open box's 5 faces, area 600 + 2 x 300 + 2 x 200"
+  }
+}

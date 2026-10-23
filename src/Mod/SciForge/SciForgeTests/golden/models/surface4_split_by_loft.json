@@ -1,0 +1,123 @@
+{
+  "id": "surface4_split_by_loft",
+  "title": "Split Body of a 40 x 30 x 20 box with a lofted surface body (a twisted loft between two lines that cross the box)",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "split-body",
+    "hybrid",
+    "loft"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            40,
+            30
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s0",
+      "distance": 20
+    },
+    {
+      "op": "sf_curves",
+      "id": "a",
+      "plane": "XZ",
+      "offset": 5,
+      "curves": [
+        {
+          "line": [
+            -5,
+            5,
+            45,
+            5
+          ]
+        }
+      ],
+      "comment": "the XZ plane's normal is -y: offset 5 puts the line at y = -5, z = 5"
+    },
+    {
+      "op": "sf_curves",
+      "id": "b",
+      "plane": "XZ",
+      "offset": -35,
+      "curves": [
+        {
+          "line": [
+            -5,
+            10,
+            45,
+            18
+          ]
+        }
+      ],
+      "comment": "at y = 35, rising from z 10 to z 18"
+    },
+    {
+      "op": "sf_surface",
+      "id": "l1",
+      "kind": "loft",
+      "refs": [
+        {
+          "sketch": "a",
+          "at": [
+            20,
+            5
+          ]
+        },
+        {
+          "sketch": "b",
+          "at": [
+            20,
+            14
+          ]
+        }
+      ]
+    },
+    {
+      "op": "split_body",
+      "id": "x1",
+      "body": "e1",
+      "tool": {
+        "body": "l1"
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "x1": {
+          "volume": 12600.0,
+          "solids": 1
+        },
+        "l1": {
+          "solids": 0
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 24000,
+    "solids": 2,
+    "bbox": [
+      0,
+      0,
+      0,
+      40,
+      30,
+      20
+    ],
+    "source": "analytic",
+    "note": "the two pieces make the box; below the loft (z = 5 + 5v + 8uv) 11400.0, above it (kept by the box's body, the bigger one) 12600.0"
+  }
+}

@@ -736,10 +736,14 @@ class ScalePanel(pickpanel.PickPanel):
 
 
 def scale_base(body):
-    """The step a new scale builds on (the body's current end, if it is a solid)."""
-    from . import shelling
+    """The step a new scale builds on: the body's current end, if it is a solid or a
+    surface body (Fusion's SURFACE > MODIFY > Scale; surface-4)."""
+    from . import shelling, surfmod
 
-    return shelling.solid_base(body)
+    base = shelling.solid_base(body)
+    if base is None and body is not None and surfmod.is_surface_body(body):
+        return body.Tip
+    return base
 
 
 # -- command -----------------------------------------------------------------------------

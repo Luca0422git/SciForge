@@ -271,12 +271,39 @@ def split(base, faces, options):
         result, _map = base.generalFuse([Part.makeCompound(edges)])
     except Exception as exc:
         raise SplitFaceError("The faces cannot be split there: %s" % exc)
+    if not base.Solids:
+        return _split_open(base, result)  # a surface body (surface-4)
     solids = [s for s in result.Solids if s.Volume > TOL]
     if len(solids) != len(base.Solids) or not solids:
         raise SplitFaceError("Splitting the faces broke the solid. Try another splitting tool.")
     out = solids[0] if len(solids) == 1 else Part.makeCompound(solids)
     if not out.isValid():
         raise SplitFaceError("Splitting the faces gave an invalid solid. Try another tool.")
+    if len(out.Faces) <= len(base.Faces):
+        raise SplitFaceError(
+            "The splitting tool only touches the faces' edges: nothing to split. Pick a tool "
+            "that crosses them."
+        )
+    return out
+
+
+def _split_open(base, result):
+    """A surface body's faces divided (Fusion's Split Face on the SURFACE tab, surface-4): the
+    divided faces sewn together again, so it stays as many surfaces as it was."""
+    import Part
+
+    from . import surfmod
+
+    faces = [f for f in result.Faces if f.Area > TOL]
+    out = surfmod.sew(faces) if faces else Part.Shape()
+    pieces = len(out.Shells) + len([f for f in out.Faces if not out.ancestorsOfType(f, Part.Shell)])
+    before = len(base.Shells) + len(
+        [f for f in base.Faces if not base.ancestorsOfType(f, Part.Shell)]
+    )
+    if out.isNull() or not out.Faces or pieces != before:
+        raise SplitFaceError("Splitting the faces broke the surface. Try another splitting tool.")
+    if abs(out.Area - base.Area) > 1e-6 * max(1.0, base.Area):
+        raise SplitFaceError("Splitting the faces changed the surface. Try another tool.")
     if len(out.Faces) <= len(base.Faces):
         raise SplitFaceError(
             "The splitting tool only touches the faces' edges: nothing to split. Pick a tool "
@@ -323,8 +350,8 @@ class SplitFaceFeature:
 
     def _build(self, obj):
         base = obj.BaseFeature
-        if base is None or base.Shape.isNull() or not base.Shape.Solids:
-            raise SplitFaceError("There is no solid before this step.")
+        if base is None or base.Shape.isNull() or not base.Shape.Faces:
+            raise SplitFaceError("There is no solid or surface before this step.")
         curves.refind(obj, ("Faces",))
         link = obj.Faces
         if not link or not link[1]:

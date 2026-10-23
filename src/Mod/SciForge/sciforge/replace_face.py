@@ -220,6 +220,8 @@ def replace(base, sources, target, refine=True, report=None):
     the target face ``target`` (a Part.Face, body coordinates). Raises ReplaceFaceError."""
     if not sources:
         raise ReplaceFaceError("Select the faces to replace.")
+    if not base.isNull() and base.Faces and not base.Solids:
+        return _replace_open(base, sources, target)  # a surface body (surface-4)
     if base.isNull() or not base.Solids:
         raise ReplaceFaceError("There is no solid before this step.")
     direction = _direction(sources)
@@ -280,6 +282,16 @@ def replace(base, sources, target, refine=True, report=None):
     if not result.isValid():
         raise ReplaceFaceError("The result is not a valid solid. Try another target.")
     return result
+
+
+def _replace_open(base, sources, target):
+    """Replace Face on a surface body (SURFACE > MODIFY, surface-4): surfmod.replace_open."""
+    from . import surfmod
+
+    try:
+        return surfmod.replace_open(base, sources, target)
+    except surfmod.SurfaceModifyError as exc:
+        raise ReplaceFaceError(str(exc))
 
 
 def _fuse_all(shapes):
@@ -362,8 +374,8 @@ class ReplaceFaceFeature:
 
     def _build(self, obj):
         base = obj.BaseFeature
-        if base is None or base.Shape.isNull() or not base.Shape.Solids:
-            raise ReplaceFaceError("There is no solid before this step.")
+        if base is None or base.Shape.isNull() or not base.Shape.Faces:
+            raise ReplaceFaceError("There is no solid or surface before this step.")
         curves.refind(obj, ("Faces",))
         link = obj.Faces
         if not link or not link[1]:

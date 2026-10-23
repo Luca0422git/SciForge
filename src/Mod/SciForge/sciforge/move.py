@@ -188,8 +188,9 @@ class MoveFeature:
 
     def _build(self, obj):
         base = obj.BaseFeature
-        if base is None or base.Shape.isNull() or not base.Shape.Solids:
-            raise MoveError("There is no solid before this step to move.")
+        if base is None or base.Shape.isNull() or not base.Shape.Faces:
+            # (a surface body moves too: Fusion's SURFACE > MODIFY > Move/Copy, surface-4)
+            raise MoveError("There is nothing before this step to move.")
         body = bodies.body_of(obj)
         moved = _moved(bodies.global_shape(base), obj.Movement)
         obj.Shape = bodies.to_local(moved, body)
@@ -221,8 +222,8 @@ class CopyFeature:
         source = obj.Source
         if source is None:
             return  # the original was deleted: the copy keeps its shape, as in Fusion
-        if source.Shape.isNull() or not source.Shape.Solids:
-            raise MoveError("The body it copies has no solid here.")
+        if source.Shape.isNull() or not source.Shape.Faces:
+            raise MoveError("The body it copies has nothing here.")
         shape = _moved(bodies.global_shape(source), obj.Movement)
         # The new body takes this shape in its own coordinates: a body in a moved
         # component would otherwise be moved twice (components-2).
@@ -289,9 +290,11 @@ def check(options):
         raise NeedsPick("Select the bodies to move.")
     if options["move_type"] not in MOVE_TYPES:
         raise MoveError("Pick a move type.")
+    from . import surfmod
+
     for body in options["bodies"]:
-        if not bodies.has_solid(body):
-            raise MoveError("%s has no solid to move." % body.Label)
+        if not surfmod.body_has_faces(body):  # a solid or a surface body (surface-4)
+            raise MoveError("%s has nothing to move yet." % body.Label)
     transform(options)  # raises NeedsPick while an axis or a point is still missing
 
 

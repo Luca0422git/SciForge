@@ -1,0 +1,151 @@
+{
+  "id": "surface4_mirror_join_scale",
+  "title": "Mirror (Join) of half an open box of surfaces about the YZ plane: the copy is stitched on; then Scale x 2",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "mirror",
+    "stitch",
+    "scale"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ],
+          "chain": false
+        },
+        {
+          "sketch": "s1",
+          "at": [
+            30,
+            10
+          ],
+          "chain": false
+        },
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            20
+          ],
+          "chain": false
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "half an open box: walls on three sides, open at x = 0, area 1400"
+    },
+    {
+      "op": "fusion_mirror",
+      "id": "m1",
+      "body": true,
+      "plane": "YZ",
+      "operation": "join"
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 2800,
+        "faces": 8,
+        "solids": 0,
+        "bbox": [
+          -30,
+          0,
+          0,
+          30,
+          20,
+          10
+        ],
+        "source": "analytic",
+        "note": "twice 1400, stitched into one surface along x = 0"
+      }
+    },
+    {
+      "op": "sf_scale",
+      "id": "k1",
+      "factor": 2
+    }
+  ],
+  "expect": {
+    "area": 11200,
+    "faces": 5,
+    "solids": 0,
+    "bbox": [
+      -60,
+      0,
+      0,
+      60,
+      40,
+      20
+    ],
+    "source": "analytic",
+    "note": "scaled x 2 about the origin: 4 x the area; Scale merges faces that end up in one plane (Refine, as on solids): the two floor halves and the two long walls on each side, 8 faces become 5"
+  }
+}

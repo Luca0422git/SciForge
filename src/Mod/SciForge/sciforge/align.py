@@ -257,8 +257,9 @@ class AlignFeature:
     def execute(self, obj):
         try:
             base = obj.BaseFeature
-            if base is None or base.Shape.isNull() or not base.Shape.Solids:
-                raise AlignError("There is no solid before this step to move.")
+            if base is None or base.Shape.isNull() or not base.Shape.Faces:
+                # (a surface body aligns too: SURFACE > MODIFY > Align, surface-4)
+                raise AlignError("There is nothing before this step to move.")
             body = bodies.body_of(obj)
             moved = bodies.baked(bodies.global_shape(base))
             if not _identity(obj.Movement):
@@ -398,8 +399,10 @@ def build(options, steps=None, align_id=None, target=None):
         if not thing.Placement.isSame(new, 1e-12):
             thing.Placement = new
         return [step]
-    if not bodies.has_solid(thing):
-        raise AlignError("%s has no solid to move." % thing.Label)
+    from . import surfmod
+
+    if not surfmod.body_has_faces(thing):  # a solid or a surface body (surface-4)
+        raise AlignError("%s has nothing to move yet." % thing.Label)
     step = None
     for other in steps:
         if is_component_step(other) or bodies.body_of(other) is not thing:

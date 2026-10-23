@@ -91,8 +91,16 @@ def tool_shape(tool, extend, around, fit=False):
         return _sketch_tool(obj, sub, extend, around, size, fit)
     if bodies.is_body(obj) or (not sub and obj.isDerivedFrom("Part::Feature")):
         shape = bodies.global_shape(obj)
-        if shape.isNull() or not shape.Solids:
-            raise SplitError("%s has no solid to split with." % obj.Label)
+        if shape.isNull() or not shape.Faces:
+            raise SplitError("%s has nothing to split with." % obj.Label)
+        if not shape.Solids:
+            # A surface body as the Splitting Tool (Fusion: "body (solid or open)", the
+            # classic hybrid workflow: cut a solid with a sculpted surface). Extend
+            # Splitting Tool carries its open edges on (surfmod, surface-4); the red preview
+            # shows it carried on too, where it cuts.
+            from . import surfmod
+
+            return surfmod.extended_tool(shape, around, clip=fit) if extend else shape
         return shape
     if not sub.startswith("Face"):
         raise SplitError("Split with a plane, a face or a body.")
@@ -209,7 +217,8 @@ def _global_face(obj, sub):
 
 def split_shape(shape, tool):
     """The solids `shape` falls into when split by `tool` (both in design coordinates; a list
-    of tools splits by all of them at once)."""
+    of tools splits by all of them at once). A surface body (faces, no solid: Fusion's
+    "open body") falls into surfaces: its connected pieces (surface-4)."""
     import BOPTools.SplitAPI as split_api
 
     tools = list(tool) if isinstance(tool, (list, tuple)) else [tool]
@@ -217,7 +226,16 @@ def split_shape(shape, tool):
         result = split_api.slice(shape, tools, "Split")
     except Exception as exc:
         raise SplitError("The body cannot be split there: %s" % exc)
+    if not shape.Solids:
+        from . import surfmod
+
+        return surfmod.open_pieces(result)
     return [s for s in result.Solids if s.Volume > 1e-9]
+
+
+def _size(shape):
+    """A piece's size: its volume, or its area for a surface piece."""
+    return shape.Volume if shape.Solids else shape.Area
 
 
 def order(pieces, centers=None):
@@ -227,7 +245,7 @@ def order(pieces, centers=None):
 
     def key(s):
         c = s.CenterOfMass
-        return (-round(s.Volume, 6), round(c.x, 6), round(c.y, 6), round(c.z, 6))
+        return (-round(_size(s), 6), round(c.x, 6), round(c.y, 6), round(c.z, 6))
 
     pieces = sorted(pieces, key=key)
     if not centers:
@@ -278,8 +296,8 @@ class SplitFeature:
     def execute(self, obj):
         body = bodies.body_of(obj)
         base = obj.BaseFeature
-        if base is None or base.Shape.isNull() or not base.Shape.Solids:
-            raise SplitError("There is no solid before this step to split.")
+        if base is None or base.Shape.isNull() or not base.Shape.Faces:
+            raise SplitError("There is no body before this step to split.")
         refs = feature_tools(obj)
         if not refs:
             raise SplitError(
@@ -295,7 +313,7 @@ class SplitFeature:
             )
         meta = bodies.load_meta(obj, META)
         pieces = order(pieces, meta.get("centers"))
-        refine = bool(obj.Refine)
+        refine = bool(obj.Refine) and bool(shape.Solids)  # surface pieces keep their faces
         first = bodies.as_result([pieces[0]], refine)
         obj.Shape = bodies.to_local(first, body)
         others = [bodies.as_result([p], refine) for p in pieces[1:]]
@@ -329,7 +347,7 @@ class SplitPiece:
         split = obj.Split
         if split is None:
             return  # the body that was split is gone: this body keeps its shape
-        others = split.OtherPieces.Solids if not split.OtherPieces.isNull() else []
+        others = _pieces_in(split.OtherPieces)
         if obj.Index - 1 >= len(others):
             return  # fewer pieces now: keeps its last shape (the dialog says so)
         # The pieces are in design coordinates; the new body takes its piece in its own (a
@@ -374,11 +392,27 @@ def check(options):
         raise NeedsPick(
             "Select the splitting tool: a plane, a face, another body or a sketch curve."
         )
-    if not bodies.has_solid(body):
-        raise SplitError("%s has no solid to split." % body.Label)
+    if not _has_faces(body):
+        raise SplitError("%s has nothing to split." % body.Label)
     for obj, sub in tools:
         if bodies.is_body(obj) and obj is body:
             raise SplitError("A body cannot split itself. Pick a plane, a face or another body.")
+
+
+def _has_faces(body):
+    """A solid or a surface body (Fusion's Body to Split: "solid or open bodies")."""
+    from . import surfmod
+
+    return surfmod.body_has_faces(body)
+
+
+def _pieces_in(compound):
+    """The pieces kept in OtherPieces: solids, or the surface pieces of a split surface."""
+    if compound is None or compound.isNull():
+        return []
+    if compound.Solids:
+        return list(compound.Solids)
+    return list(compound.childShapes())
 
 
 def tool_link(tool):

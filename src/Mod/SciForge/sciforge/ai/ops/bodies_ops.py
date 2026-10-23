@@ -310,7 +310,10 @@ def shape(self):
     for name in names:
         body = self.doc.getObject(name)
         if body is not None and not body.Shape.isNull():
-            solids.extend(body.Shape.Solids)
+            if body.Shape.Solids:
+                solids.extend(body.Shape.Solids)
+            else:  # a surface body (Split Body / Move of a surface, surface-4): its faces
+                solids.extend(body.Shape.Shells or body.Shape.Faces)
     if not solids:
         return Part.Shape()
     return solids[0] if len(solids) == 1 else Part.makeCompound(solids)

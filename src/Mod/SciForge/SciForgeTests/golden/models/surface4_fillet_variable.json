@@ -1,0 +1,131 @@
+{
+  "id": "surface4_fillet_variable",
+  "title": "Variable radius Fillet (1 at the edge's start, 3 at its end) of a corner edge of an open box of surfaces",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "fillet"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces, area 1600"
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "f1",
+      "kind": "surface_fillet",
+      "edges": {
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 0
+          },
+          {
+            "axis": "y",
+            "value": 0
+          }
+        ],
+        "count": 1
+      },
+      "options": {
+        "radius": 1,
+        "radius_type": "variable",
+        "radius2": 3
+      }
+    }
+  ],
+  "expect": {
+    "area": 1591.4480880397077,
+    "faces": 6,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      30,
+      20,
+      10
+    ],
+    "rel_tol": 1e-05,
+    "source": "baseline-freecad-1.1.4",
+    "note": "measured with FreeCAD 1.1.4 (OpenCASCADE's variable fillet is an approximation); cross-check: the two walls lose (1 + 3) / 2 x 10 each = 40, the floor a corner of 1 - pi / 4 (or 9 - 9 pi / 4 at the other end), and the round face is about pi / 2 x 2 x 10 sqrt(1.04) = 32.0: 1600 - 40 - 0.2 + 32.0 = 1591.8, within 0.1 %"
+  }
+}

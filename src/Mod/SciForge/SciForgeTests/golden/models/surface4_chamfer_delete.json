@@ -1,0 +1,154 @@
+{
+  "id": "surface4_chamfer_delete",
+  "title": "Chamfer (two distances 2 and 4) of a corner of an open box of surfaces, then SURFACE Delete of its floor (no healing)",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "chamfer",
+    "delete"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces: four 10 high walls round a 30 x 20 floor, area 1600"
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "c1",
+      "kind": "surface_chamfer",
+      "edges": {
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "at": [
+          {
+            "axis": "x",
+            "value": 0
+          },
+          {
+            "axis": "y",
+            "value": 0
+          }
+        ],
+        "count": 1
+      },
+      "options": {
+        "chamfer_type": "two",
+        "distance": 2,
+        "distance2": 4
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 1580.721359549996,
+        "faces": 6,
+        "solids": 0,
+        "source": "analytic",
+        "note": "the walls lose 2 x 10 and 4 x 10, the bevel is sqrt(2^2 + 4^2) x 10, the floor loses the 2 x 4 / 2 triangle"
+      }
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "d1",
+      "kind": "surface_delete_face",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      }
+    }
+  ],
+  "expect": {
+    "area": 984.7213595499959,
+    "faces": 5,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      30,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "the floor (600 - the 4 the chamfer took) goes and the hole stays open"
+  }
+}

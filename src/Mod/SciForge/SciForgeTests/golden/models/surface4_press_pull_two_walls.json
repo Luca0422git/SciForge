@@ -1,0 +1,131 @@
+{
+  "id": "surface4_press_pull_two_walls",
+  "title": "Press Pull of two slanted walls of a tray of surfaces at once (they face different ways): each moves along its own normal, the floor and the other walls follow, the rim stays flat",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10,
+        "taper": 45
+      },
+      "comment": "walls leaning out 45 degrees: the top is 50 x 40"
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ]
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "pp",
+      "kind": "surface_press_pull",
+      "faces": {
+        "any_of": [
+          {
+            "at": {
+              "axis": "y",
+              "value": "min"
+            },
+            "count": 1
+          },
+          {
+            "at": {
+              "axis": "x",
+              "value": "max"
+            },
+            "count": 1
+          }
+        ]
+      },
+      "options": {
+        "distance": 2.0
+      },
+      "comment": "the front wall (y + z = 0, its middle the lowest in y) and the right wall (x - z = 30); their normals point out of the tray (0 -1 -1 and 1 0 -1, probed): +2 is outward"
+    }
+  ],
+  "expect": {
+    "area": 2889.320343559643,
+    "faces": 5,
+    "solids": 0,
+    "bbox": [
+      -10,
+      -12.82842712474619,
+      0,
+      42.82842712474619,
+      30,
+      10
+    ],
+    "rel_tol": 1e-06,
+    "source": "analytic",
+    "note": "each wall's plane moves 2 along its normal, i.e. 2 sqrt 2 = 2.8284 across at the floor and at the rim: the floor (30 + e) x (20 + e), the walls 10 sqrt 2 slanted trapezoids: front and back (30 + e) / (50 + e), left and right (20 + e) / (40 + e)"
+  }
+}

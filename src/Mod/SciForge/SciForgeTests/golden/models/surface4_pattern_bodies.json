@@ -1,0 +1,118 @@
+{
+  "id": "surface4_pattern_bodies",
+  "title": "Rectangular Pattern (Bodies) of an open box of surfaces: 3 along X, spacing 50: two new surface bodies",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "pattern"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15.0,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15.0,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces: walls 10 high round a 30 x 20 floor, area 1600"
+    },
+    {
+      "op": "rectangular_pattern",
+      "id": "rp",
+      "body": true,
+      "direction": "X",
+      "quantity": 3,
+      "distance": 50,
+      "distribution": "spacing"
+    },
+    {
+      "op": "measure_bodies",
+      "steps": [
+        "rp"
+      ],
+      "comment": "the two copies"
+    }
+  ],
+  "expect": {
+    "area": 3200,
+    "faces": 10,
+    "solids": 0,
+    "bbox": [
+      50,
+      0,
+      0,
+      130,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "two copies of 1600 at x 50 and 100"
+  }
+}

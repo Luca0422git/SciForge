@@ -87,6 +87,8 @@ DEFAULTS = {
     # mirror
     "plane": None,
     "operation": "new_body",  # Mirror of a body: "new_body" or "join"
+    # Join of a surface body: the copies are stitched, gaps up to this closed (surface-4)
+    "stitch_tolerance": 1.0,
     # pattern on path
     "path": None,
     "orientation": "identical",  # or "path": copies turn with the path
@@ -441,9 +443,22 @@ def implementation(kind, options):
     kind_type = options["pattern_type"]
     if kind_type == "faces":
         return "engine"
+    if kind_type == "bodies" and _surface_pick(options):
+        return "engine"  # FreeCAD's Mirrored needs a solid; SciForge's stitches (surface-4)
     if kind_type == "features" and not natively_patternable(_features(options)):
         return "engine"
     return "native"
+
+
+def _surface_pick(options):
+    """True when the body picked for a pattern of bodies is a surface body (surface-4)."""
+    try:
+        from . import surfmod
+
+        picked = _bodies(options)
+        return bool(picked) and surfmod.is_surface_body(picked[0])
+    except Exception:
+        return False
 
 
 def total_instances(kind, options):
@@ -1281,12 +1296,19 @@ class PatternFeature:
             "end); -1 = nearest the objects",
         ):
             obj.StartPoint = -1.0
+        # Mirror / pattern with Operation Join of a surface body: the copies are stitched to
+        # it, gaps up to this closed (Fusion's Stitch Tolerance; surface-4)
+        if add("App::PropertyLength", "StitchTolerance", "Stitch Tolerance (surface bodies)"):
+            obj.StitchTolerance = 1.0
 
     def onDocumentRestored(self, obj):
         self.ensure_properties(obj)
 
     def execute(self, obj):
         base = obj.BaseFeature
+        if base is not None and _is_open(base.Shape) and _enum_get(obj, "PatternType") == "bodies":
+            obj.Shape = _surface_join(obj, base)  # a surface body mirrored and stitched
+            return
         if base is None or base.Shape.isNull() or not base.Shape.Solids:
             raise PatternError("A pattern needs a solid before it in the timeline.")
         if orphaned(obj):  # every feature it repeated was deleted: it adds nothing
@@ -1324,6 +1346,33 @@ class PatternFeature:
 
     __getstate__ = dumps
     __setstate__ = loads
+
+
+def _is_open(shape):
+    try:
+        return not shape.isNull() and bool(shape.Faces) and not shape.Solids
+    except Exception:
+        return False
+
+
+def _surface_join(obj, base):
+    """Mirror (or a pattern) of a surface body with Operation Join: the copies stitched to the
+    body with the Stitch Tolerance (Fusion, A: the mirrored surface bodies are stitched; a
+    stitch that closes is a solid). surface-4."""
+    from . import surfmod
+
+    kind = kind_of(obj)
+    try:
+        options = read_engine(obj)
+        center = objects_center(options)[0] if kind == "path" else None
+        moves = placements(kind, options, [(base.Shape.copy(), "add")], center)
+        copies = [_moved(base.Shape, move) for move in moves]
+        tolerance = float(getattr(obj, "StitchTolerance", 1.0) or 1.0)
+        return surfmod.stitch_join(base.Shape, copies, tolerance)
+    except PatternError:
+        raise
+    except Exception as exc:
+        raise PatternError(kernel_message(exc))
 
 
 def _adjusted(obj, base_shape, moves):
@@ -1390,6 +1439,12 @@ def _update_engine(obj, kind, options):
     _enum_set(obj, "ComputeOption", options.get("compute", "optimized"))
     start = options.get("start_point")
     _set(obj, "StartPoint", -1.0 if start is None else float(start))
+    tolerance = float(options.get("stitch_tolerance", 1.0) or 1.0)
+    if (
+        "StitchTolerance" in obj.PropertiesList
+        and abs(obj.StitchTolerance.Value - tolerance) > 1e-12
+    ):
+        obj.StitchTolerance = tolerance
     for prop, key in (
         ("Direction", "direction"),
         ("Direction2", "direction2"),
@@ -1905,6 +1960,10 @@ def read(feature):
         options = read_body_pattern(feature)
     elif feature.TypeId == ENGINE:
         options = read_engine(feature)
+        if kind == "mirror" and options["pattern_type"] == "bodies":
+            options["operation"] = "join"  # a mirrored surface body stitched (surface-4)
+        if "StitchTolerance" in feature.PropertiesList:
+            options["stitch_tolerance"] = feature.StitchTolerance.Value
     else:
         options = _read_native(feature, kind, meta)
         options["compute"] = meta.get("compute", "identical")
@@ -2396,10 +2455,10 @@ class BodyPatternFeature:
                 "the steps that make %s." % (body.Label, body.Label)
             )
         shape = _source_shape(step)
-        if shape.isNull() or not shape.Solids:
+        if shape.isNull() or not shape.Faces:  # a solid or a surface body (surface-4)
             body = owner_body(step)
             raise PatternError(
-                "%s has no solid before this step to copy."
+                "%s has nothing before this step to copy."
                 % (body.Label if body is not None else "The body")
             )
         set_note(obj, "")

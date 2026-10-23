@@ -1,0 +1,139 @@
+{
+  "id": "surface4_fillet_box",
+  "title": "SURFACE > MODIFY > Fillet of the four corner edges of an open box of surfaces, radius 3, then edited to 2",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "fillet"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces: four 10 high walls round a 30 x 20 floor, area 1600"
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "f1",
+      "kind": "surface_fillet",
+      "edges": {
+        "parallel": [
+          0,
+          0,
+          1
+        ],
+        "count": 4
+      },
+      "options": {
+        "radius": 3
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 1540.7698930976958,
+        "faces": 9,
+        "solids": 0,
+        "source": "analytic",
+        "note": "each corner: the walls lose 2 x 3 x 10, a quarter cylinder pi 3/2 x 10 comes in, the floor loses 9 - 9 pi / 4"
+      }
+    },
+    {
+      "op": "sf_surface_modify_edit",
+      "target": "f1",
+      "set": {
+        "radius": 2
+      }
+    },
+    {
+      "op": "reopen",
+      "comment": "saved and opened again: the step computes from the file"
+    }
+  ],
+  "expect": {
+    "area": 1562.2300767579509,
+    "faces": 9,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      0,
+      30,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "1600 - 4 (2 x 2 x 10) + 4 (pi x 10) - 4 (4 - pi): four corners of radius 2"
+  }
+}

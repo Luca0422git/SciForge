@@ -19,6 +19,7 @@ when they have the keyboard. One undo step. The document side is delete.py.
 
 Double-clicking a Delete Face step in the timeline opens a small dialog to change its faces.
 """
+
 import FreeCAD as App
 import FreeCADGui as Gui
 
@@ -68,7 +69,7 @@ def run():
         return
     bodies_gui.clear_selection()
     try:
-        made = delete.run(doc, found, _title(found))
+        made = delete.run(doc, found, _title(found), heal=_heals())
     except delete.DeleteError as exc:
         commands.tell(str(exc))
         return
@@ -78,6 +79,19 @@ def run():
     log("deleted: %s" % _title(found))
     if found["refused"]:
         commands.tell(found["refused"])
+
+
+def _heals():
+    """Fusion decides by the tab Delete runs from: SOLID heals a solid's faces, SURFACE
+    removes them (surfmod_core.delete_heals; surface-4)."""
+    try:
+        from . import shell
+
+        ribbon = shell.ribbon()
+        tab = ribbon.current_tab() if ribbon is not None else "solid"
+    except Exception:
+        tab = "solid"
+    return tab != "surface"
 
 
 def _title(found):

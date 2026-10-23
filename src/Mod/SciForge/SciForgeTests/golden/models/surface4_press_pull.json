@@ -1,0 +1,147 @@
+{
+  "id": "surface4_press_pull",
+  "title": "Press Pull of the floor of an open box of surfaces: -5 (the walls grow), edited to +3 (the walls are cut back)",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "press-pull"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces: four 10 high walls round a 30 x 20 floor, area 1600"
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "pp",
+      "kind": "surface_press_pull",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "options": {
+        "distance": -5
+      }
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 2100,
+        "faces": 5,
+        "solids": 0,
+        "bbox": [
+          0,
+          0,
+          -5,
+          30,
+          20,
+          10
+        ],
+        "source": "analytic",
+        "note": "the floor (normal up into the box) moves 5 down, the 100 long wall ring grows by 5: 1600 + 500"
+      }
+    },
+    {
+      "op": "sf_surface_modify_edit",
+      "target": "pp",
+      "set": {
+        "distance": 3
+      }
+    },
+    {
+      "op": "reopen",
+      "comment": "saved and opened again"
+    }
+  ],
+  "expect": {
+    "area": 1300,
+    "faces": 5,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      3,
+      30,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "the floor 3 up: the walls 7 high, 600 + 700"
+  }
+}

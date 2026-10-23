@@ -1,0 +1,154 @@
+{
+  "id": "surface4_move_faces",
+  "title": "Move Object Faces on an open box of surfaces: the floor moved 5 down (the walls grow), then turned 10 degrees about its front edge (the walls follow it)",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "move"
+  ],
+  "steps": [
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ],
+      "comment": "an open box of surfaces, area 1600"
+    },
+    {
+      "op": "move_face",
+      "id": "m1",
+      "faces": {
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "move": [
+        0,
+        0,
+        -5
+      ]
+    },
+    {
+      "op": "check",
+      "expect": {
+        "area": 2100,
+        "faces": 5,
+        "solids": 0,
+        "source": "analytic",
+        "note": "the floor 5 down: 600 + 2 x 30 x 15 + 2 x 20 x 15"
+      }
+    },
+    {
+      "op": "move_face",
+      "id": "m2",
+      "faces": {
+        "at": {
+          "axis": "z",
+          "value": "min"
+        },
+        "count": 1
+      },
+      "rotate": {
+        "center": [
+          0,
+          0,
+          -5
+        ],
+        "axis": [
+          1,
+          0,
+          0
+        ],
+        "angle": 10
+      },
+      "comment": "turned about its front edge: its back edge rises 20 tan 10"
+    }
+  ],
+  "expect": {
+    "area": 1932.928986422982,
+    "faces": 5,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      -5,
+      30,
+      20,
+      10
+    ],
+    "rel_tol": 1e-06,
+    "source": "analytic",
+    "note": "the floor 600 / cos 10; the walls 15 high at the front, 15 - 20 tan 10 at the back: 100 x 15 - 1000 tan 10 in all"
+  }
+}

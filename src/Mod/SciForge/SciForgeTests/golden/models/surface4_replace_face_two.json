@@ -1,0 +1,184 @@
+{
+  "id": "surface4_replace_face_two",
+  "title": "Replace Face of two touching faces of a surface box (its floor and the fillet round its front edge) onto a block's top 4 up: one floor takes their place",
+  "tags": [
+    "surface",
+    "surface-modify",
+    "replace-face",
+    "fillet"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s0",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            40,
+            0,
+            60,
+            20
+          ]
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s0",
+      "distance": 4
+    },
+    {
+      "op": "sf_curves",
+      "id": "s1",
+      "plane": "XY",
+      "curves": [
+        {
+          "polyline": [
+            [
+              0,
+              0
+            ],
+            [
+              30,
+              0
+            ],
+            [
+              30,
+              20
+            ],
+            [
+              0,
+              20
+            ],
+            [
+              0,
+              0
+            ]
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "w1",
+      "kind": "extrude",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ],
+      "options": {
+        "distance": 10
+      }
+    },
+    {
+      "op": "sf_surface",
+      "id": "p1",
+      "kind": "patch",
+      "refs": [
+        {
+          "sketch": "s1",
+          "at": [
+            15,
+            0
+          ]
+        }
+      ]
+    },
+    {
+      "op": "sf_surface",
+      "id": "st",
+      "kind": "stitch",
+      "refs": [
+        {
+          "step": "w1"
+        },
+        {
+          "step": "p1"
+        }
+      ]
+    },
+    {
+      "op": "sf_surface_modify",
+      "id": "f1",
+      "kind": "surface_fillet",
+      "edges": {
+        "parallel": [
+          1,
+          0,
+          0
+        ],
+        "at": [
+          {
+            "axis": "z",
+            "value": 0
+          },
+          {
+            "axis": "y",
+            "value": 0
+          }
+        ],
+        "count": 1
+      },
+      "options": {
+        "radius": 3
+      },
+      "comment": "the floor's front edge rounded: the floor and the fillet meet smoothly"
+    },
+    {
+      "op": "replace_face",
+      "id": "r1",
+      "of": "st",
+      "faces": {
+        "any_of": [
+          {
+            "at": {
+              "axis": "z",
+              "value": "min"
+            },
+            "count": 1
+          },
+          {
+            "type": "cylinder",
+            "count": 1
+          }
+        ]
+      },
+      "tangent_chain": false,
+      "target": {
+        "face": {
+          "type": "plane",
+          "normal": [
+            0,
+            0,
+            1
+          ],
+          "count": 1
+        },
+        "of": "e2"
+      },
+      "comment": "the floor and its fillet picked (Tangent Chain would also take the front wall the fillet runs into)"
+    }
+  ],
+  "expect": {
+    "area": 1200,
+    "faces": 5,
+    "solids": 0,
+    "bbox": [
+      0,
+      0,
+      4,
+      30,
+      20,
+      10
+    ],
+    "source": "analytic",
+    "note": "the floor and its fillet replaced by one floor at z = 4, the walls cut back to it: 600 + 2 x 30 x 6 + 2 x 20 x 6"
+  }
+}

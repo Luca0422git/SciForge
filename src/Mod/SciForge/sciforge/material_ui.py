@@ -136,7 +136,7 @@ class MaterialPanel(BodyPanel):
     def _fill_design(self):
         self.design.clear()
         used = {}
-        for body in bodies.solid_bodies(self.doc):
+        for body in _material_bodies(self.doc):
             label, _rho = material.effective(body)
             used.setdefault((material.key_of(body), label), []).append(body)
         for (key, label), found in sorted(used.items(), key=lambda kv: kv[0][1]):
@@ -277,3 +277,16 @@ class MaterialCommand:
 
 
 COMMANDS = {"SciForge_PhysicalMaterial": MaterialCommand}
+
+
+def _material_bodies(doc):
+    """The bodies whose materials the dialog lists: solids and surface bodies (a surface
+    body has a material and a look too, only no mass; surface-4)."""
+    found = list(bodies.solid_bodies(doc))
+    try:
+        from . import surface
+
+        found += [b for b in surface.surface_bodies(doc) if b not in found]
+    except Exception:
+        pass
+    return found

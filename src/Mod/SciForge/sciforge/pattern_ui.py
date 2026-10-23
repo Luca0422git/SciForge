@@ -665,7 +665,11 @@ class PatternPanel(Panel):
             except Exception as exc:
                 warn("could not read %s: %s" % (feature.Label, exc))
         else:
-            self.body = commands.find_body()
+            self.body = (
+                _surface_body(preselection or [])
+                or commands.find_body()
+                or _shown_surface(self.doc)
+            )
             self.base = self.body.Tip if self.body is not None else None
         self.active = "objects"
         self.escape = preview.EscapeCancels(self)
@@ -841,6 +845,12 @@ class PatternPanel(Panel):
             self.operation_label = QtWidgets.QLabel("Operation")
             form.addRow(self.operation_label, self.operation)
             self.operation.currentIndexChanged.connect(self._typed)
+            # Join of a surface body stitches the copy to it (Fusion's Stitch Tolerance)
+            self.stitch_field = DistanceField(
+                self.options.get("stitch_tolerance", 1.0), on_change=lambda v: self._typed()
+            )
+            self.stitch_label = QtWidgets.QLabel("Stitch Tolerance")
+            form.addRow(self.stitch_label, self.stitch_field.widget)
 
     def _show_options(self):
         """Put self.options into the widgets (without reacting)."""
@@ -889,6 +899,20 @@ class PatternPanel(Panel):
             bodies = self.options["pattern_type"] == "bodies"
             self.operation.setVisible(bodies)
             self.operation_label.setVisible(bodies)
+            stitch = bodies and self._surface_join()
+            self.stitch_field.widget.setVisible(stitch)
+            self.stitch_label.setVisible(stitch)
+
+    def _surface_join(self):
+        """Mirror of a surface body with Operation Join: the Stitch Tolerance shows."""
+        try:
+            from . import surfmod
+
+            joined = self.operation.currentData() == "join"
+            picked = [o for o, _s in self.options.get("objects") or [] if o is not None]
+            return joined and bool(picked) and surfmod.is_surface_body(picked[0])
+        except Exception:
+            return False
 
     def _collect(self):
         options = self.options
@@ -905,6 +929,9 @@ class PatternPanel(Panel):
                 options[name] = box.currentData()
         if getattr(self, "circular_type", None) is not None:
             options["circular_type"] = self.circular_type.currentData()
+        if getattr(self, "stitch_field", None) is not None:
+            options["stitch_tolerance"] = max(self.stitch_field.value(), 1e-4)
+            self._update_visibility()
         options["compute"] = self.compute.currentData() or "optimized"
         for name in ("quantity", "quantity2"):
             spin = getattr(self, name, None)
@@ -1104,6 +1131,11 @@ class PatternPanel(Panel):
                     bodies.append((obj, ""))
                     continue
                 obj = obj.Tip
+            surface = _surface_body([(obj, sub)])
+            if surface is not None:  # a surface body is patterned as a body (surface-4)
+                if (surface, "") not in bodies:
+                    bodies.append((surface, ""))
+                continue
             if sub.startswith("Face"):
                 ref = self._base_face(obj, sub)
                 if ref is not None and ref not in faces:
@@ -1244,6 +1276,13 @@ class PatternPanel(Panel):
             return
         if obj.TypeId == "PartDesign::Body" and short:
             obj = obj.Tip
+        if ptype in ("features", "faces") and _surface_body([(obj, short)]) is not None:
+            # a surface body is patterned as a body (Fusion; surface-4): the type follows
+            self.options["pattern_type"] = ptype = "bodies"
+            self._quiet = True
+            common.set_combo(self.pattern_type, ptype)
+            self._quiet = False
+            self._update_visibility()
         if ptype == "bodies":
             body = pattern.owner_body(obj)
             if body is None:
@@ -2261,6 +2300,31 @@ def _selected_body(selection):
     return None
 
 
+def _surface_body(selection):
+    """The surface body picked before the command (Fusion patterns and mirrors surface bodies
+    as bodies: SURFACE > CREATE > Pattern, Mirror; surface-4), or None."""
+    try:
+        from . import surfmod
+
+        for obj, _sub in selection:
+            body = obj if obj.TypeId == "PartDesign::Body" else pattern.owner_body(obj)
+            if body is not None and surfmod.is_surface_body(body):
+                return body
+    except Exception:
+        pass
+    return None
+
+
+def _shown_surface(doc):
+    """With no solid to repeat: a shown surface body (it is repeated as a body), or None."""
+    try:
+        from . import surfmod_ui
+
+        return surfmod_ui.shown_surface_body(doc)
+    except Exception:
+        return None
+
+
 def start(kind, panel_class=None):
     """Run a pattern command; things selected before it starts are its objects."""
     panel_class = panel_class or PatternPanel
@@ -2277,9 +2341,12 @@ def start(kind, panel_class=None):
             Gui.ActiveDocument.ActiveView.setActiveObject("pdbody", body)
         except Exception as exc:
             warn("could not activate %s: %s" % (body.Label, exc))
-    body = commands.find_body()
+    surface = _surface_body(selection)
+    body = surface or commands.find_body()  # a surface body is patterned as a body (surface-4)
     tip = body.Tip if body is not None else None
-    if tip is None or tip.Shape.isNull() or not tip.Shape.Solids:
+    if surface is None and (tip is None or tip.Shape.isNull() or not tip.Shape.Solids):
+        surface = _shown_surface(doc)
+    if surface is None and (tip is None or tip.Shape.isNull() or not tip.Shape.Solids):
         commands.tell(
             "%s needs a solid to repeat: make one first (Create Sketch, then Extrude)."
             % pattern.TITLES[kind]
