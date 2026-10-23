@@ -59,8 +59,9 @@ SIDE_NUMBERS = {
 schema.STEP_KEYS["sf_plastic_rule"] = ({"rule"}, {"set", "comment"})
 schema.STEP_KEYS["sf_boss"] = (
     {"id", "points"},
-    {"plane", "offset", "screw", "flip", "position", "side1", "side2", "comment"},
+    {"plane", "offset", "screw", "flip", "position", "side1", "side2", "fastener", "comment"},
 )
+schema.STEP_KEYS["sf_boss_fastener"] = ({"id", "boss"}, {"head", "length", "comment"})
 schema.STEP_KEYS["sf_rest"] = (
     {"id", "rect"},
     {"plane", "offset", "thickness", "draft", "flip", "comment"},
@@ -92,9 +93,12 @@ def _side(here, values):
 
 def check_steps(model):
     where = model.get("id", "<no id>")
+    seen = {}
     for i, step in enumerate(model["steps"]):
         here = "%s.steps[%d]" % (where, i)
         op = step["op"]
+        if "id" in step:
+            seen.setdefault(step["id"], op)
         if op == "sf_plastic_rule":
             if not isinstance(step["rule"], str) or not step["rule"]:
                 schema._fail(here, "'rule' is a rule's name")
@@ -119,6 +123,25 @@ def check_steps(model):
             for side in ("side1", "side2"):
                 if side in step:
                     _side(here + "." + side, step[side])
+            fastener = step.get("fastener", {})
+            if not isinstance(fastener, dict):
+                schema._fail(here, "'fastener' is an object")
+            for key, value in fastener.items():
+                if key == "create" and not isinstance(value, bool):
+                    schema._fail(here, "'fastener.create' is true or false")
+                elif key == "head" and value not in ("pan", "flat", "hex"):
+                    schema._fail(here, "'fastener.head' is pan, flat or hex")
+                elif key == "length":
+                    schema._check_number(here + ".fastener.length", value)
+                elif key not in ("create", "head", "length"):
+                    schema._fail(here, "unknown fastener setting %r" % key)
+        elif op == "sf_boss_fastener":
+            if seen.get(step["boss"]) != "sf_boss":
+                schema._fail(here, "'boss' names an earlier sf_boss step")
+            if step.get("head", "pan") not in ("pan", "flat", "hex"):
+                schema._fail(here, "'head' is pan, flat or hex")
+            if "length" in step:
+                schema._check_number(here + ".length", step["length"])
         elif op == "sf_rest":
             _plane(here, step)
             rect = step["rect"]

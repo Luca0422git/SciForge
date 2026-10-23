@@ -7,11 +7,13 @@ is checked by SciForgeTests/golden/plastic_schema.py.
       Assign Plastic Rule (the root component; a library rule is copied into the design),
       optionally editing the design's copy (Manage Plastic Rules > Edit).
   {"op": "sf_boss", "id": "b1", "plane": "XY", "offset": 20, "points": [[10, 10]],
-   "screw": 3, "flip": false, "position": 0, "side1": {...}, "side2": {...}}
+   "screw": 3, "flip": false, "position": 0, "side1": {...}, "side2": {...},
+   "fastener": {"create": true, "head": "pan", "length": 0}}
       A sketch with the points on the plane (offset along its normal), then the Boss (both
       sides find their bodies). side1 / side2 change that side's settings
       (plastic_boss.side_defaults keys). objects[id] is the head side's step (else the
-      thread side's), objects[id + "_head"] / objects[id + "_thread"] each side's.
+      thread side's), objects[id + "_head"] / objects[id + "_thread"] each side's,
+      objects[id + "_fastener"] the screws' step (in their own component).
   {"op": "sf_rest", "id": "r1", "plane": "XY", "offset": 22, "rect": [x0, y0, x1, y1],
    "thickness": 2, "draft": 0, "flip": false}
       A rectangle sketched on the plane, then the Rest on the current body; thickness /
@@ -69,6 +71,8 @@ def op_sf_boss(self, step):
         options = plastic_boss.default_options(rule, float(step.get("screw", 3.0)))
         options["flip"] = bool(step.get("flip", False))
         options["offset"] = float(step.get("position", 0.0))
+        if "fastener" in step:
+            options["fastener"].update(step["fastener"])
         for side in ("side1", "side2"):
             for key, value in (step.get(side) or {}).items():
                 options[side][key] = value
@@ -93,6 +97,13 @@ def op_sf_boss(self, step):
     self.doc.recompute()
     for feature in steps:
         self._recompute(step, feature)
+    from sciforge import plastic_boss_fastener
+
+    fastener = plastic_boss_fastener.find(self.doc, steps[0].BossGroup)
+    if fastener is not None:
+        self.objects[step["id"] + "_fastener"] = fastener
+        self.ops[step["id"] + "_fastener"] = "sf_boss"
+        self._recompute(step, fastener)
     return _settle(self, step, head or thread, "sf_boss")
 
 
@@ -122,3 +133,35 @@ def op_sf_rest(self, step):
 Builder.op_sf_plastic_rule = op_sf_plastic_rule
 Builder.op_sf_boss = op_sf_boss
 Builder.op_sf_rest = op_sf_rest
+
+
+def op_sf_boss_fastener(self, step):
+    """{"op": "sf_boss_fastener", "id": "f1", "boss": "b1", "head": "pan", "length": 0}:
+    edit the boss and switch on its fastener (Create Component). objects[id] is the screws'
+    step; the body worked on stays the boss's."""
+    from sciforge import plastic_boss, plastic_boss_fastener
+
+    target = self.objects.get(step["boss"])
+    if target is None or not plastic_boss.is_boss(target):
+        raise BuildError("sf_boss_fastener: %r is not a boss step" % step["boss"])
+    try:
+        refs, options, participants, steps = plastic_boss.read(target)
+        options["fastener"] = {
+            "create": True,
+            "head": step.get("head", "pan"),
+            "length": float(step.get("length", 0.0)),
+        }
+        steps = plastic_boss.make(refs, options, participants=participants, steps=steps)
+    except (plastic_boss.BossError, plastic_boss_fastener.FastenerError) as exc:
+        raise BuildError("sf_boss_fastener %r: %s" % (step["id"], exc))
+    self.doc.recompute()
+    fastener = plastic_boss_fastener.find(self.doc, steps[0].BossGroup)
+    if fastener is None:
+        raise BuildError("sf_boss_fastener %r: no fastener was made" % step["id"])
+    self.objects[step["id"]] = fastener
+    self.ops[step["id"]] = "sf_boss_fastener"
+    self._recompute(step, fastener)
+    return fastener
+
+
+Builder.op_sf_boss_fastener = op_sf_boss_fastener

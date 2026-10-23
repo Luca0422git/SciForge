@@ -32,6 +32,7 @@ STEP_LABELS = [("None", "none"), ("In", "in"), ("Out", "out")]
 # Fusion's rib shapes: chamfered or filleted top corner (its None means no ribs: the Side
 # check boxes here)
 RIB_PROFILE_LABELS = [("Chamfer", "chamfer"), ("Fillet", "fillet")]
+HEAD_LABELS = [("Pan", "pan"), ("Flat (countersunk)", "flat"), ("Hex", "hex")]
 RIB_EXTENT_LABELS = [("Length", "length"), ("To Next", "to_next")]
 
 SIDE_FIELDS = [
@@ -170,6 +171,21 @@ class BossPanel(Panel):
             )
             self.body_fields[side] = field
             grid.addRow("Side %d Body" % side, field.widget)
+        # Fusion's Fastener section: a screw at every boss, in a component of its own
+        self.fastener = curve_pick.checkbox("Create Component (screws)", False)
+        self.fastener.setObjectName("SciForgeBoss_fastener")
+        self.fastener.setToolTip("A simple screw at every boss, in a new component")
+        grid.addRow("Fastener", self.fastener)
+        self.head = curve_pick.combo(HEAD_LABELS, "pan")
+        self.head.setObjectName("SciForgeBoss_head")
+        self.head_label = QtWidgets.QLabel("Head Type")
+        grid.addRow(self.head_label, self.head)
+        self.length = self._distance(0.0, "mm", self._fastener_typed, "SciForgeBoss_length")
+        self.length.widget.setToolTip("The screw's length; 0 = to 0.5 mm above the hole's bottom")
+        self.length_label = QtWidgets.QLabel("Length (0 = Auto)")
+        grid.addRow(self.length_label, self.length.widget)
+        self.fastener.toggled.connect(self._fastener_typed)
+        self.head.currentIndexChanged.connect(self._fastener_typed)
         self.bodies_label = QtWidgets.QLabel("")
         self.bodies_label.setObjectName("SciForgeBoss_bodies")
         self.bodies_label.setWordWrap(True)
@@ -271,6 +287,11 @@ class BossPanel(Panel):
             self.flip.setChecked(bool(o.get("flip")))
             self.offset.set_value(float(o.get("offset", 0.0)))
             self.screw.set_value(float(o.get("screw", 3.0)))
+            f = dict(pb.FASTENER_DEFAULTS)
+            f.update(o.get("fastener") or {})
+            self.fastener.setChecked(bool(f["create"]))
+            curve_pick.set_combo(self.head, f["head"])
+            self.length.set_value(float(f["length"]))
             for side in (1, 2):
                 s = o["side%d" % side]
                 w = self.side_widgets[side]
@@ -347,6 +368,9 @@ class BossPanel(Panel):
             w["labels"]["major_depth"].setText(
                 "Material Under Head" if side == 1 else "Counterbore Depth"
             )
+        making = self.fastener.isChecked()
+        for widget in (self.head, self.head_label, self.length.widget, self.length_label):
+            widget.setVisible(making)
         s = self.options["side%d" % self._rib_side()]
         for key in ("rib_cut",):
             self.rib_labels[key].setVisible(s["rib_profile"] != "none")
@@ -424,6 +448,17 @@ class BossPanel(Panel):
             ):
                 s[key] = fresh[key]
         self._show_options()
+        self._changed()
+
+    @safe
+    def _fastener_typed(self, *_):
+        if self._quiet:
+            return
+        self.options["fastener"] = {
+            "create": bool(self.fastener.isChecked()),
+            "head": self.head.currentData(),
+            "length": float(self.length.value()),
+        }
         self._changed()
 
     @safe
@@ -889,6 +924,54 @@ class ViewProviderBoss:
     __setstate__ = loads
 
 
+class ViewProviderFastener:
+    """View provider of a boss's screws (saved as "sciforge.plastic_boss_ui.
+    ViewProviderFastener": never rename). Editing opens the boss."""
+
+    def __init__(self, vobj):
+        vobj.Proxy = self
+
+    def attach(self, vobj):
+        self.Object = vobj.Object
+
+    def getIcon(self):
+        return ui_icon_path("hardware")
+
+    def setEdit(self, vobj, mode=0):
+        if mode != 0:
+            return None
+        edit_fastener(vobj.Object)
+        return True
+
+    def unsetEdit(self, vobj, mode=0):
+        return None
+
+    def doubleClicked(self, vobj):
+        edit_fastener(vobj.Object)
+        return True
+
+    def dumps(self):
+        return None
+
+    def loads(self, state):
+        return None
+
+    __getstate__ = dumps
+    __setstate__ = loads
+
+
+def edit_fastener(obj):
+    """The screws are the boss's: editing them opens the Boss dialog."""
+    try:
+        steps = [s for s in getattr(obj, "Bosses", []) if pb.is_boss(s)]
+        if not steps:
+            commands.tell("The boss of these screws is gone.")
+            return
+        edit(steps[0])
+    except Exception as exc:
+        warn("could not edit %s: %s" % (obj.Label, exc))
+
+
 def _start():
     try:
         if not commands.finish_open_dialog():
@@ -938,6 +1021,7 @@ def _register():
 
         timeline_core.KINDS.setdefault("boss", ("Boss", "pl_boss"))
         timeline_core.KINDS.setdefault("rest", ("Rest", "pl_rest"))
+        timeline_core.KINDS.setdefault("boss_fastener", ("Fastener", "hardware"))
         parameters.SCIFORGE_PROPS.setdefault(
             "Rest", [("Thickness", "Thickness"), ("Draft", "Draft")]
         )
@@ -948,4 +1032,4 @@ def _register():
 _register()
 
 COMMANDS = {"SciForge_Boss": BossCommand}
-EDITORS = {"SciForge::Boss": edit}
+EDITORS = {"SciForge::Boss": edit, "SciForge::BossFastener": edit_fastener}

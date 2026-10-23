@@ -144,6 +144,7 @@ def default_options(rule, screw=3.0):
         "side1": side_defaults(1, rule, screw),
         "side2": side_defaults(2, rule, screw),
         "links": links,
+        "fastener": dict(FASTENER_DEFAULTS),
     }
 
 
@@ -165,8 +166,25 @@ def apply_rule(options, rule):
     return out
 
 
+FASTENER_HEADS = ("pan", "flat", "hex")
+FASTENER_DEFAULTS = {"create": False, "head": "pan", "length": 0.0}
+
+
 def check_options(options):
     """Raise BossError for options that cannot make a boss (dialog texts)."""
+    fastener = dict(FASTENER_DEFAULTS)
+    fastener.update(options.get("fastener") or {})
+    if fastener["head"] not in FASTENER_HEADS:
+        raise BossError("Fastener: unknown head type %r" % fastener["head"])
+    try:
+        fastener["length"] = float(fastener["length"])
+    except (TypeError, ValueError):
+        raise BossError("Fastener: the length must be a number (0 = auto).")
+    if fastener["length"] < 0:
+        raise BossError("Fastener: the length cannot be negative (0 = auto).")
+    if fastener["create"] and options["side1"]["shape"] == "blank":
+        raise BossError("Fastener: Side 1 is blank (no hole), there is no screw to place.")
+    options["fastener"] = fastener
     for side in (1, 2):
         s = options["side%d" % side]
         for key, allowed in SIDE_CHOICES.items():

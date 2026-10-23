@@ -46,6 +46,8 @@ from .plastic_boss_core import (  # noqa: F401  (the Boss's settings, re-exporte
     RIB_EXTENTS,
     SIDE_NUMBERS,
     SIDE_CHOICES,
+    FASTENER_DEFAULTS,
+    FASTENER_HEADS,
     RULE_LINKS,
     BossError,
     side_defaults,
@@ -619,7 +621,7 @@ class BossFeature:
         add("App::PropertyLinkSubListGlobal", "Points", "The sketch points")
         if add("App::PropertyInteger", "Toward", "+1: the body lies along the sketch normal"):
             obj.Toward = 1
-        add("App::PropertyString", "Group", "The boss both sides belong to")
+        add("App::PropertyString", "BossGroup", "The boss both sides belong to")
         if add("App::PropertyBool", "Refine", "Merge coplanar faces, like Fusion"):
             obj.Refine = True
         bodies.mark(obj, TYPE)
@@ -700,7 +702,7 @@ def _new_step(body, name, refs, toward, group, options):
     BossFeature(obj)
     _attach_view_provider(obj)
     obj.Toward = toward
-    obj.Group = group
+    obj.BossGroup = group
     _write(obj, refs, options)
     return obj
 
@@ -714,11 +716,11 @@ def _write(obj, refs, options):
 
 
 def group_steps(doc, group):
-    return [o for o in doc.Objects if is_boss(o) and o.Group == group]
+    return [o for o in doc.Objects if is_boss(o) and o.BossGroup == group]
 
 
 def _new_group_id(doc):
-    taken = {getattr(o, "Group", "") for o in doc.Objects if is_boss(o)}
+    taken = {getattr(o, "BossGroup", "") for o in doc.Objects if is_boss(o)}
     i = 1
     while "Boss%d" % i in taken:
         i += 1
@@ -750,7 +752,7 @@ def make(refs, options, participants=None, name="Boss", steps=None):
             "No body found on either side of the sketch: draw the boss points on the parting "
             "plane between the two halves (or on a face of the part)."
         )
-    group = steps[0].Group if steps else _new_group_id(doc)
+    group = steps[0].BossGroup if steps else _new_group_id(doc)
     kept = []
     for toward in (1, -1):
         body = participants.get(toward)
@@ -775,13 +777,17 @@ def make(refs, options, participants=None, name="Boss", steps=None):
         kept.append((side, existing))
     kept.sort(key=lambda item: item[0])
     log("boss %s: %d side(s)" % (group, len(kept)))
-    return [step for _side, step in kept]
+    result = [step for _side, step in kept]
+    from . import plastic_boss_fastener
+
+    plastic_boss_fastener.sync(doc, result, options)
+    return result
 
 
 def read(step):
     """(refs, options, participants) of an existing boss (any of its steps)."""
     doc = step.Document
-    steps = group_steps(doc, step.Group) or [step]
+    steps = group_steps(doc, step.BossGroup) or [step]
     options = load_meta(step).get("options") or {}
     participants = {1: None, -1: None}
     for s in steps:
