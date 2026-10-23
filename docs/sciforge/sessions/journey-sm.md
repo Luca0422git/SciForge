@@ -40,12 +40,16 @@ Flat Pattern, Export DXF, Convert to Sheet Metal, Rip), only real clicks and key
 headless as well: the flat pattern follows the rule's K factor and Bend Radius, and an edit
 of Flange 2's height rebuilds the hem and the Corner Closure exactly as a fresh build.
 
-**Fixed**
+**Found and fixed**
 
-- `flatpattern.refind`: the flat pattern's stationary face was only looked for in its old
-  plane, so changing the rule's Thickness made the Flat Pattern red ("the stationary face
-  is gone after an edit"). It now follows a face that moved along its normal. Golden model
-  `sm_flat_thickness_follow` (1 mm then 2 mm L bracket, analytic sizes).
+- The Flat Pattern turned red after the rule's Thickness changed ("the stationary face is
+  gone after an edit"): the stationary face was looked for only in its old plane, and a
+  thicker rule moves the plate's top face up. Fixed on this branch in
+  `flatpattern.refind` (a face that moved along its normal is followed), then found fixed
+  the same way by the sm-flat QA pass merged into `wave6-integration` meanwhile
+  (`flatpattern._moved`, golden `sm_flat_thickness_change`): the merge keeps the QA's code
+  (no SciForge code differs from `wave6-integration` now) and this branch's golden
+  `sm_flat_thickness_follow` (an L bracket, 1 mm then 2 mm, analytic sizes).
 
 **Not bugs (documented gaps, worked around in the journey)**
 

@@ -143,8 +143,16 @@ class RipPanel(SheetPanel):
         self.say("")
 
     def ready(self):
-        if self.target is None:
+        # OK keeps what the dialog shows now (QA: after a refused pick or value the step
+        # still held the last good rip, and OK kept that one under the error message)
+        spec = self.spec()
+        if not all(spec[k] for k in self.TYPE_SLOTS[spec["type"]]) or self.target is None:
             return "Finish the picks first."
+        try:
+            rip.build(self.base.Shape, spec)
+        except rip.RipError as exc:
+            return str(exc)
+        rip.apply(self.target, self.base, spec)
         return None
 
 

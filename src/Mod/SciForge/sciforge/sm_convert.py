@@ -38,7 +38,9 @@ def detect(shape, face):
     try:
         result = unfolder.unfold(shape, face, 0.44, bends=[], check=True, lay_flat=False)
     except unfolder.UnfoldError as exc:
-        raise ConvertError(str(exc))
+        # (QA: the unfolder's "or Rip it" sent a part that is not sheet metal yet to Rip,
+        # which refuses it until it is converted: a loop for a beginner)
+        raise ConvertError(str(exc).replace(" or Rip it", ", then convert it"))
     bends = {}
     for fmap in result.maps:
         if fmap.kind != "kept":
