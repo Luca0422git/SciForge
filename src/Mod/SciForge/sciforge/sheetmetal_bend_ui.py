@@ -240,8 +240,15 @@ class BendPanel(smp.SmPanel):
         if not self.ready() or self.target is None:
             return
         opts = self.collect()
+        lines = self._lines()
+        chosen = self.value("line") if "line" in self.fields else ""
+        if chosen:  # the handle sits on the line whose values are shown
+            for obj, short, _p in self.picks["lines"]:
+                if sb.line_key(obj, short) == chosen:
+                    lines = [(obj, [short])]
+                    opts.update(opts.get("lines", {}).get(chosen, {}))
         frame = bend_frame(
-            self.base, self.picks["stationary"][0][1], self._local_point(), self._lines(), opts
+            self.base, self.picks["stationary"][0][1], self._local_point(), lines, opts
         )
         if frame is None:
             return
