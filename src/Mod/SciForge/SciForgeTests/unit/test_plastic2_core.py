@@ -116,7 +116,7 @@ class SnapGeometry(unittest.TestCase):
         # 1.5 t y / L^2 = 1.5 x 2 x 1 / 144 = 2.08 %
         self.assertAlmostEqual(snap.strain_percent(self.o), 100 * 3.0 / 144.0)
         taper = dict(self.o, tip_thickness=1.0)
-        self.assertAlmostEqual(snap.strain_percent(taper), 100 * 1.09 * 2.0 / 144.0)
+        self.assertAlmostEqual(snap.strain_percent(taper), 100 * 2.0 / 1.09 / 144.0)
         state, text = snap.strain_note(dict(self.o, length=6.0, catch_length=2.0), "ABS", 2.5)
         self.assertEqual(state, "warn")
         self.assertIn("ABS", text)

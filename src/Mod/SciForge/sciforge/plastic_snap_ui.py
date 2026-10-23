@@ -105,6 +105,9 @@ class SnapFitPanel(Panel):
         self.error = ""
         self.dirty = False
         self.find_other = False
+        self.other_pick = None  # the other body picked in its box (None: found)
+        self.active = "points"
+        self.hidden_other = None  # (body, was visible) while Hide Other Body is on
         self.arrows = {}
         self.value_boxes = ValueBoxes(self, default="length")
         self.observer = None
@@ -160,6 +163,11 @@ class SnapFitPanel(Panel):
         self.inward.setObjectName("SciForgeSnap_inward")
         self.inward.setToolTip("Aligned: the catches face the middle of the points")
         form.addRow("", self.inward)
+        self.align_field = SelectionField(self, "align", "Middle of the points")
+        self.align_field.button.setObjectName("SciForgeSnap_align")
+        self.align_field.clear.setObjectName("SciForgeSnap_clear_align")
+        self.align_label = QtWidgets.QLabel("Align To")
+        form.addRow(self.align_label, self.align_field.widget)
         self.flip = curve_pick.checkbox("Flip", self.options["flip"])
         self.flip.setObjectName("SciForgeSnap_flip")
         self.flip.setToolTip("The hook on the other side of the sketch plane")
@@ -190,7 +198,15 @@ class SnapFitPanel(Panel):
             self._add_field(other, key, unit)
         self.other_label = QtWidgets.QLabel("")
         self.other_label.setObjectName("SciForgeSnap_other_body")
-        other.addRow("Body", self.other_label)
+        self.other_field = SelectionField(self, "other", "Found")
+        self.other_field.button.setObjectName("SciForgeSnap_other")
+        self.other_field.clear.setObjectName("SciForgeSnap_clear_other")
+        other.addRow("Body", self.other_field.widget)
+        other.addRow("", self.other_label)
+        self.hide_other = curve_pick.checkbox("Hide Other Body", False)
+        self.hide_other.setObjectName("SciForgeSnap_hide_other")
+        self.hide_other.setToolTip("See the hooks: the other body hidden while the dialog is open")
+        other.addRow("", self.hide_other)
         form.addRow(self.other_box)
         self.rule_label = QtWidgets.QLabel(self._rule_text())
         self.rule_label.setObjectName("SciForgeSnap_rule")
@@ -205,6 +221,7 @@ class SnapFitPanel(Panel):
             box.currentIndexChanged.connect(self._choice_changed)
         for box in (self.flip, self.hook, self.groove, self.inward):
             box.toggled.connect(self._choice_changed)
+        self.hide_other.toggled.connect(self._hide_other_toggled)
 
     def _add_field(self, layout, key, unit):
         field = DistanceField(self.options[key], unit=unit, on_change=self._typed(key))
@@ -232,6 +249,7 @@ class SnapFitPanel(Panel):
             self.hook.setChecked(self.options["hook"])
             self.groove.setChecked(self.options["groove"])
             self.inward.setChecked(bool(self.options.get("align_inward")))
+            self.align_field.set_text("Picked point" if self.options.get("align_point") else "")
             for key, field in self.fields.items():
                 field.set_value(self.options[key])
         finally:
@@ -250,6 +268,8 @@ class SnapFitPanel(Panel):
             (self.angles_label, rotation == "independent"),
             (self.angles, rotation == "independent"),
             (self.inward, rotation == "aligned"),
+            (self.align_label, rotation == "aligned"),
+            (self.align_field.widget, rotation == "aligned"),
             (self.labels["extent_distance"], self.options["extent"] == "distance"),
             (self.fields["extent_distance"].widget, self.options["extent"] == "distance"),
             (self.labels["loop_thickness"], kind == "loop"),
@@ -313,12 +333,78 @@ class SnapFitPanel(Panel):
 
     # -- picking -----------------------------------------------------------------------------------
     def activate(self, name):
-        self.field.set_active(True)
+        self.active = name
+        self.field.set_active(name == "points")
+        self.align_field.set_active(name == "align")
+        self.other_field.set_active(name == "other")
 
     def clear_field(self, name):
+        if name == "align":
+            self.options["align_point"] = None
+            self.align_field.set_text("")
+            self.activate("points")
+            self._changed()
+            return
+        if name == "other":
+            self.other_pick = None
+            self.other_field.set_text("")
+            self.find_other = True
+            self.activate("points")
+            self._changed()
+            return
         self.sketch = None
         self.indices = []
         self._picks_changed()
+
+    def _align_picked(self, obj, short):
+        try:
+            shape = bodies.global_shape(obj)
+            item = shape.getElement(short) if short else shape
+            if item.ShapeType == "Vertex":
+                at = item.Point
+            else:
+                at = item.CenterOfMass if hasattr(item, "CenterOfMass") else item.BoundBox.Center
+        except Exception as exc:
+            self.message.setText("⚠ Pick a point, an edge or a face to align to: %s" % exc)
+            return
+        self.options["align_point"] = (at.x, at.y, at.z)
+        self.align_field.set_text("%s %s" % (obj.Label, short) if short else obj.Label)
+        self.activate("points")
+        self._changed()
+
+    def _other_picked(self, obj, short):
+        body = obj if bodies.is_body(obj) else bodies.body_of(obj)
+        hook_body = bodies.body_of(self.target) if self.target is not None else None
+        if body is None or not bodies.has_solid(body):
+            self.message.setText("⚠ Click a solid body for the groove, slot or loop.")
+            return
+        if body is hook_body:
+            self.message.setText("⚠ The other body cannot be the hook's own body.")
+            return
+        self.other_pick = body
+        self.other_field.set_text(body.Label)
+        self.activate("points")
+        self._changed()
+
+    @safe
+    def _hide_other_toggled(self, on):
+        self._show_other()
+        if on:
+            other = plastic_snap.other_body(self.target) if self.target is not None else None
+            if other is not None and other.ViewObject is not None:
+                self.hidden_other = (other, bool(other.ViewObject.Visibility))
+                other.ViewObject.Visibility = False
+
+    def _show_other(self):
+        if self.hidden_other is None:
+            return
+        body, was = self.hidden_other
+        self.hidden_other = None
+        try:
+            if bodies.alive(body) and body.ViewObject is not None:
+                body.ViewObject.Visibility = was
+        except Exception:
+            pass
 
     def _start(self):
         if not bodies.solid_bodies(self.doc):
@@ -374,6 +460,12 @@ class SnapFitPanel(Panel):
             warn("Snap Fit pick: %s" % exc)
 
     def _picked(self, obj, short):
+        if self.active == "align":
+            self._align_picked(obj, short)
+            return
+        if self.active == "other":
+            self._other_picked(obj, short)
+            return
         if not extrude.is_sketch(obj):
             self.message.setText(
                 "⚠ Snap fits go at sketch points: click a sketch with points on the parting "
@@ -473,15 +565,19 @@ class SnapFitPanel(Panel):
         if self.sketch is None or self._count() == 0:
             return
         try:
+            other = self.other_pick if bodies.alive(self.other_pick) else None
             if self.target is None:
-                self.target = plastic_snap.make(self.sketch, dict(self.options), self.indices)
+                self.target = plastic_snap.make(
+                    self.sketch, dict(self.options), self.indices, groove_body=other
+                )
             else:
+                keep = other if other is not None else (None if self.find_other else False)
                 plastic_snap.update(
                     self.target,
                     sketch=self.sketch,
                     options=dict(self.options),
                     indices=self.indices,
-                    groove_body=None if self.find_other else False,
+                    groove_body=keep,
                 )
             self.find_other = False
             self.error = ""
@@ -672,6 +768,7 @@ class SnapFitPanel(Panel):
         self._remove_arrows()
         self.value_boxes.discard()
         self._hide_shown()
+        self._show_other()
         super().cleanup()
 
 

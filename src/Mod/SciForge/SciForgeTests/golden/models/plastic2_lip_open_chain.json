@@ -1,0 +1,168 @@
+{
+  "id": "plastic2_lip_open_chain",
+  "title": "Lip And Groove along an open chain of three rim edges (front, back, left)",
+  "tags": [
+    "plastic",
+    "lip"
+  ],
+  "steps": [
+    {
+      "op": "sketch",
+      "id": "s1",
+      "plane": "XY",
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s1r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e1",
+      "profile": "s1",
+      "distance": 20
+    },
+    {
+      "op": "shell",
+      "id": "sh1",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sketch",
+      "id": "s2",
+      "plane": "XY",
+      "offset": 20,
+      "geometry": [
+        {
+          "rect": [
+            0,
+            0,
+            60,
+            40
+          ],
+          "name": "s2r"
+        }
+      ]
+    },
+    {
+      "op": "extrude",
+      "id": "e2",
+      "profile": "s2",
+      "distance": 10,
+      "operation": "new_body"
+    },
+    {
+      "op": "shell",
+      "id": "sh2",
+      "faces": {
+        "normal": [
+          0,
+          0,
+          -1
+        ],
+        "count": 1
+      },
+      "thickness": 2
+    },
+    {
+      "op": "sf_lip",
+      "id": "l1",
+      "of": "sh1",
+      "edges": {
+        "any_of": [
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 2
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              1,
+              0,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "y",
+                "value": 38
+              }
+            ],
+            "count": 1
+          },
+          {
+            "type": "line",
+            "parallel": [
+              0,
+              1,
+              0
+            ],
+            "at": [
+              {
+                "axis": "z",
+                "value": 20
+              },
+              {
+                "axis": "x",
+                "value": 2
+              }
+            ],
+            "count": 1
+          }
+        ],
+        "count": 3
+      },
+      "options": {
+        "inner_draft": 0,
+        "outer_draft": 0
+      }
+    },
+    {
+      "op": "expect_bodies",
+      "bodies": {
+        "e2": {
+          "volume": 7690.258,
+          "solids": 1
+        }
+      }
+    }
+  ],
+  "expect": {
+    "volume": 11862.0,
+    "solids": 1,
+    "source": "analytic",
+    "note": "Lip 1 x 1 beside the chain, square at its open ends (x = 58): strips 57 + 57 + 38 less the two 1 x 1 corners = 150. Groove -0.1 .. 1.1 in the lid's wall (0 .. 1.1 is material): 1.1 x 57.1 twice + 1.1 x 38.2 less the corners 2 x 1.21 = 165.22, 1.1 deep: 181.742."
+  }
+}

@@ -132,6 +132,76 @@ def independent_angles():
     h.check("the angles taken", p.options["angles"] == [0.0, 180.0, 90.0], p.options["angles"])
     cut = -base_change()
     h.check("Independent 0 / 180: the same two grooves", ps.near(cut, 2 * ps.GROOVE, 1e-6), cut)
+    ps.choose(p.rotation, "Aligned")
+
+
+def align_box():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check("Align To shown for Aligned", p.align_field.widget.isVisible())
+    ps.ui.click(p.align_field.button)
+
+
+def click_right_face():
+    h.check("the Align To box takes the clicks", ps.snap_panel().active == "align")
+    h.fit()
+    h.shot("plastic2_snap_align_click")
+    h.click(V(60, 34, 4))
+
+
+def aligned_to_face():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check(
+        "aligned to the right wall's face",
+        "Face" in p.align_field.button.text(),
+        p.align_field.button.text(),
+    )
+    cut = -base_change()
+    # the right hook now faces into the box: its groove box only grazes the right wall (the
+    # 0.1 clearance behind the catch: 0.1 x 6.2 x 3.2); the left one cuts its groove; the
+    # middle one finds no wall
+    graze = 0.1 * 6.2 * 3.2
+    h.check("the catches face away from it", ps.near(cut, ps.GROOVE + graze, 1e-6), cut)
+    h.check("the note: one found no wall", "1 of 3" in ps.message(p), ps.message(p))
+    ps.ui.click(p.align_field.clear)
+
+
+def align_cleared():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    cut = -base_change()
+    h.check("cleared: the middle of the points again", ps.near(cut, 2 * ps.GROOVE, 1e-6), cut)
+    ps.ui.click(p.other_field.button)
+
+
+def click_base_as_other():
+    h.check("the Body box takes the clicks", ps.snap_panel().active == "other")
+    h.fit()
+    h.click(V(60, 34, 4))
+
+
+def other_picked():
+    ps.settle(ps.snap_panel)
+    p = ps.snap_panel()
+    h.check(
+        "the other body picked: Base",
+        p.other_field.button.text() == "Base",
+        p.other_field.button.text(),
+    )
+    h.check("still the grooves", ps.near(-base_change(), 2 * ps.GROOVE, 1e-6), base_change())
+    ps.toggle(p.hide_other)
+
+
+def other_hidden():
+    p = ps.snap_panel()
+    h.check("Hide Other Body hides the base", not s["base"].ViewObject.Visibility)
+    ps.toggle(p.hide_other)
+
+
+def other_shown():
+    p = ps.snap_panel()
+    h.check("and shows it again", s["base"].ViewObject.Visibility)
     ps.type_field(p, "catch_length", "1")
 
 
@@ -230,6 +300,14 @@ h.run(
         aligned,
         independent,
         independent_angles,
+        align_box,
+        click_right_face,
+        aligned_to_face,
+        align_cleared,
+        click_base_as_other,
+        other_picked,
+        other_hidden,
+        other_shown,
         refused,
         ok_refused,
         esc_leaves_nothing,

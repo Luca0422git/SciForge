@@ -284,11 +284,13 @@ def loop_boxes(options, reach=None):
 
 # -- strain check (cantilever beam theory, resin suppliers' design guides) --------------------
 def strain_factor(options):
-    """1.5 for a beam of even thickness, 1.09 when it tapers to half at the catch (linear in
-    between, clamped)."""
+    """1.5 for a beam of even thickness, 1/1.09 = 0.917 when it tapers to half at the catch
+    (resin suppliers' tables: deflection y = 0.67 e L^2 / t and y = 1.09 e L^2 / t; research
+    critic pass C5), linear in between, clamped."""
     ratio = options["tip_thickness"] / options["thickness"]
     ratio = max(0.5, min(1.0, ratio))
-    return 1.09 + (ratio - 0.5) / 0.5 * (1.5 - 1.09)
+    tapered = 1.0 / 1.09
+    return tapered + (ratio - 0.5) / 0.5 * (1.5 - tapered)
 
 
 def strain_percent(options):

@@ -109,6 +109,12 @@ class LipPanel(Panel):
         self.guide = curve_pick.combo(GUIDE_LABELS, self.options["guide"])
         self.guide.setObjectName("SciForgeLip_guide")
         form.addRow("Guide Type", self.guide)
+        self.direction_field = SelectionField(self, "direction", "Rim normal")
+        self.direction_field.button.setObjectName("SciForgeLip_direction")
+        self.direction_field.clear.setObjectName("SciForgeLip_clear_direction")
+        self.direction_label = QtWidgets.QLabel("Direction")
+        form.addRow(self.direction_label, self.direction_field.widget)
+        self.active = "edges"
         self.swap = curve_pick.checkbox("Swap Lip and Groove", self.options["swap"])
         self.swap.setObjectName("SciForgeLip_swap")
         self.swap.setToolTip("Lip And Groove: the lip on the other body, the groove on this one")
@@ -170,6 +176,10 @@ class LipPanel(Panel):
             self.labels[key].setVisible(show)
         self.swap.setVisible(kind == "lip_and_groove")
         self.mate_label.setVisible(kind == "lip_and_groove")
+        pull = self.options["guide"] == "pull"
+        self.direction_label.setVisible(pull)
+        self.direction_field.widget.setVisible(pull)
+        self.direction_field.set_text("Picked direction" if self.options.get("direction") else "")
 
     def _typed(self, key):
         def typed(value):
@@ -204,11 +214,35 @@ class LipPanel(Panel):
 
     # -- picking -----------------------------------------------------------------------------------
     def activate(self, name):
-        self.field.set_active(True)
+        self.active = name
+        self.field.set_active(name == "edges")
+        self.direction_field.set_active(name == "direction")
 
     def clear_field(self, name):
+        if name == "direction":
+            self.options.pop("direction", None)
+            self.activate("edges")
+            self._update_visibility()
+            self._changed()
+            return
         self.names = []
         self._picks_changed()
+
+    def _direction_picked(self, obj, short):
+        from . import construct, surface_analysis
+
+        if not surface_analysis.fits_direction(obj, short):
+            self.message.setText("⚠ Pick a plane, a flat face or a straight edge for the pull.")
+            return
+        try:
+            vector = surface_analysis.direction_of(construct.normalize_pick(obj, short))
+        except Exception as exc:
+            self.message.setText("⚠ %s" % exc)
+            return
+        self.options["direction"] = (vector.x, vector.y, vector.z)
+        self.activate("edges")
+        self._update_visibility()
+        self._changed()
 
     def _start(self):
         if not bodies.solid_bodies(self.doc):
@@ -264,6 +298,9 @@ class LipPanel(Panel):
             warn("Lip pick: %s" % exc)
 
     def _picked(self, obj, short, refresh=True, point=None):
+        if getattr(self, "active", "edges") == "direction":
+            self._direction_picked(obj, short)
+            return
         if not short.startswith("Edge"):
             self.message.setText("⚠ A lip runs along edges: click the rim's inside edges.")
             return

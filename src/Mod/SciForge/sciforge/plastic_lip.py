@@ -76,6 +76,8 @@ class Rim:
         if len(wire.Edges) != len(edges):
             raise LipError("The picked edges must join end to end into one chain.")
         self.wire = wire
+        self.shape = shape
+        self.edges = list(edges)
         self.closed = wire.isClosed()
         self.face = self._rim_face(shape, edges)
         u0, u1, v0, v1 = self.face.ParameterRange
@@ -482,15 +484,47 @@ def rim_of_names(feature, names=None):
 
 
 def pull_of(rim, options):
+    """The unit pull vector of the options: Face Guide checks the walls first; with Pull
+    Direction a picked direction (meta "direction") or the rim's normal."""
     if options.get("guide") == "face":
-        _check_face_guide(rim)
+        check_face_guide(rim)
+        return V(rim.normal)
     return direction_of(rim, V(*options["direction"]) if options.get("direction") else None)
 
 
-def _check_face_guide(rim):
-    """Face Guide follows each wall's slope; SciForge builds it where the walls stand square
-    to the rim (then it is the pull direction) and refuses slanted walls."""
-    # the walls next to the chain: faces sharing an edge with it, other than the rim
+def check_face_guide(rim):
+    """Face Guide keeps the section at the angle of the wall beside the edges. SciForge builds
+    it where every such wall stands square to the rim (then it is the rim's normal) and
+    refuses a leaning wall with the reason."""
+    import Part
+
+    n = rim.normal
+    for edge in rim.edges:
+        try:
+            faces = rim.shape.ancestorsOfType(edge, Part.Face)
+        except Exception:
+            continue
+        for face in faces:
+            if face.isSame(rim.face):
+                continue
+            surface = face.Surface
+            kind = type(surface).__name__
+            if kind == "Plane":
+                u0, u1, v0, v1 = face.ParameterRange
+                m = face.normalAt(0.5 * (u0 + u1), 0.5 * (v0 + v1))
+                square = abs(V(m.x, m.y, m.z).dot(n)) < 1e-6
+            elif kind == "Cylinder":
+                axis = V(surface.Axis)
+                axis.normalize()
+                square = abs(abs(axis.dot(n)) - 1.0) < 1e-9
+            else:
+                square = False
+            if not square:
+                raise LipError(
+                    "Face Guide follows the wall beside the edges, and this wall leans: "
+                    "SciForge builds Face Guide on walls square to the rim only. Use Pull "
+                    "Direction."
+                )
     return True
 
 
@@ -702,6 +736,7 @@ def preflight(source, names, options, mate=None):
     refusal = check_fit(rim, opts)
     if refusal:
         raise LipError(refusal)
+    pull_of(rim, opts)
     if opts["type"] == "lip_and_groove" and mate is None:
         mate = find_mate(source.Document, body, rim, opts)
         if mate is None:
@@ -753,9 +788,11 @@ def update(feature, names=None, options=None, mate=False):
     problems = core.validate(merged)
     if problems:
         raise LipError(problems[0])
-    refusal = check_fit(rim_of_names(feature, names), merged)
+    rim = rim_of_names(feature, names)
+    refusal = check_fit(rim, merged)
     if refusal:
         raise LipError(refusal)
+    pull_of(rim, merged)
     write_options(feature, merged)
     if mate is False:
         mate = mate_of(feature)
