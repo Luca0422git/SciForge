@@ -99,6 +99,7 @@ class BossPanel(Panel):
         self.observer = None
         self._quiet = False
         self.value_boxes = ValueBoxes(self, default="offset")
+        self.face_sketch = None  # the point sketch made by clicks on a face
         self.body = commands.find_body() if feature is None else curves.owner_body(feature)
         self.rule = plastic.rule_for_body(self.body) if self.body is not None else None
         if self.rule is None:
@@ -465,18 +466,21 @@ class BossPanel(Panel):
         if self._closed:
             return
         try:
-            picks = [(o, s) for o, s in profile_pick.picks() if o.Document is self.doc]
+            picks = [p for p in _picks_with_points() if p[0].Document is self.doc]
             if not picks:
                 return
             Gui.Selection.clearSelection()
             if self.arrow is not None and _dragging(self.arrow):
                 return
-            for obj, short in picks:
-                self._picked(obj, short)
+            for obj, short, point in picks:
+                self._picked(obj, short, point)
         except Exception as exc:
             warn("boss pick: %s" % exc)
 
-    def _picked(self, obj, short):
+    def _picked(self, obj, short, point=None):
+        if not curves.is_sketch(obj) and short.startswith("Face") and point is not None:
+            self._face_point(obj, short, point)
+            return
         if not curves.is_sketch(obj):
             self.message.setText(
                 "⚠ A boss sits on sketch points: draw points on the parting plane and click "
@@ -497,6 +501,63 @@ class BossPanel(Panel):
             self.refs = [r for r in self.refs if (r[0].Name, r[1]) != (obj.Name, names[0])]
         else:
             self.refs = self.refs + [(obj, n) for n in names if (obj.Name, n) not in keys]
+        self._picks_changed()
+
+    def _face_point(self, obj, short, point):
+        """A click on a flat face of the part: a boss point there. SciForge keeps the points
+        in a sketch on that face (made the first time, as Fusion's boss sits on sketch
+        points); the parting plane starts 3 x the screw above the face (a standoff), the
+        blue arrow moves it."""
+        import Part
+
+        body = pb.bodies.body_of(obj)
+        if body is None:
+            self.message.setText("⚠ Click a face of a part's body.")
+            return
+        face = obj.Shape.getElement(short)
+        if face.Surface.TypeId != "Part::GeomPlane":
+            self.message.setText("⚠ A boss on a face needs a flat face (or sketch points).")
+            return
+        sketch = self.face_sketch if pb.bodies.alive(self.face_sketch) else None
+        if self.refs and (sketch is None or self.refs[0][0] is not sketch):
+            self.message.setText(
+                "⚠ The points must be in one sketch. Clear the box to start with another one."
+            )
+            return
+        if sketch is not None:
+            # the same face, also when the click lands on the preview's copy of it
+            place = sketch.getGlobalPlacement()
+            normal = place.Rotation.multVec(App.Vector(0, 0, 1))
+            gface = curves.to_global(face, obj)
+            n = gface.normalAt(*gface.Surface.parameter(App.Vector(point)))
+            off = abs((App.Vector(point) - place.Base).dot(normal))
+            if abs(abs(n.dot(normal)) - 1.0) > 1e-6 or off > 1e-4:
+                self.message.setText("⚠ The points of one boss must lie on one face.")
+                return
+        if sketch is None:
+            sketch = body.newObject("Sketcher::SketchObject", "BossPoints")
+            sketch.Label = "Boss Points"
+            sketch.AttachmentSupport = [(obj, short)]
+            sketch.MapMode = "FlatFace"
+            self.doc.recompute()
+            self.face_sketch = sketch
+            if abs(float(self.options.get("offset", 0.0))) < 1e-9:
+                height = round(3.0 * float(self.options.get("screw", 3.0)), 2)
+                self.options["offset"] = height
+                quiet, self._quiet = self._quiet, True
+                try:
+                    self.offset.set_value(height)
+                finally:
+                    self._quiet = quiet
+        local = sketch.getGlobalPlacement().inverse().multVec(App.Vector(point))
+        sketch.addGeometry(Part.Point(App.Vector(local.x, local.y, 0)))
+        self.doc.recompute()
+        names = pb.point_names(sketch)
+        taken = {s for o, s in self.refs}
+        new = [n for n in names if n not in taken]
+        self.refs = [(sketch, n) for n in names]
+        self.message.setText("")
+        log("boss point on %s.%s (%s)" % (obj.Label, short, ", ".join(new)))
         self._picks_changed()
 
     def _refresh_picks(self):
@@ -708,6 +769,19 @@ class BossPanel(Panel):
         self._remove_arrow()
         self.value_boxes.discard()
         super().cleanup()
+
+
+def _picks_with_points():
+    """[(object, short element name, global picked point or None)] of the selection."""
+    found = []
+    for sel in Gui.Selection.getSelectionEx():
+        names = list(sel.SubElementNames) or [""]
+        points = list(getattr(sel, "PickedPoints", []) or [])
+        for i, name in enumerate(names):
+            obj, short = profile_pick.resolve(sel.Object, name)
+            if obj is not None:
+                found.append((obj, short, points[i] if i < len(points) else None))
+    return found
 
 
 def _hide_sketch(refs):
