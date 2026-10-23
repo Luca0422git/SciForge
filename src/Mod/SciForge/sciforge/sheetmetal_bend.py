@@ -534,7 +534,7 @@ def _concave_in_band(result, origin, along, across, normal, s0, s1, thickness):
         edges = list(face.OuterWire.OrderedEdges)
         pts = []
         cur = None
-        for k, edge in enumerate(edges):
+        for edge in edges:
             if isinstance(edge.Curve, (Part.Line, Part.LineSegment)):
                 seq = [v.Point for v in edge.Vertexes]
             else:
@@ -599,7 +599,12 @@ def _moving_spans(result, zone, origin, along, across, normal, s0, s1, thickness
     # the outline narrows gradually. A tab narrows in a step: the outline turns inward (a
     # concave corner, the tab's root) in the bend's band, and the sheet beyond is narrower
     # than the zone. Otherwise the whole zone bends (no tab, no relief)
-    if not _concave_in_band(result, origin, along, across, normal, s0, s1, thickness):
+    try:
+        concave = _concave_in_band(result, origin, along, across, normal, s0, s1, thickness)
+    except Exception as exc:  # an outline that cannot be read: the width test decides
+        log("bend: outline not read (%s)" % exc)
+        concave = True
+    if not concave:
         return None
     width = sum(hi - lo for lo, hi in merged)
     widest = 0.0
