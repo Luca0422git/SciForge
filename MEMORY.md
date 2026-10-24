@@ -1589,6 +1589,10 @@ restart; `update_core.plan`); what was missing was publishing a release without 
   `make_release_files.py --patch-of` ("**A patch release.**" first in the notes, unit test).
 - The first patch: `0.1.0-beta.2.1` (VERSION, `_FALLBACK_VERSION`, README, known-issues title,
   CHANGELOG "Fixed": sketch on a reshaped face, From Sketch holes and the face's circles).
+- Results: CI #269 on 1f6d18f9 green; the patch trial run (push-triggered, run 40044888155)
+  green in 23 minutes (prepare 1 min; Linux AppImage repack 6 min + its tests 4; Windows
+  portable repack 6 min, installer and golden models; release files). Not pushed until the
+  patch is out (a new develop commit would need its own green tests first).
 - **workflow_dispatch needs the workflow on the default branch (`Release`)**: the button shows
   only after Release is moved to develop once (Luca's go). Docs for Luca:
   `docs/sciforge/patch-release.md`; CLAUDE.md has the rule.
