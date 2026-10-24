@@ -1605,6 +1605,18 @@ and offset from the face.
     keeps it); follow then projects the face without the step, and back on unsuppress.
   - `hole.sketch_targets` leaves Auto project's circles out (a hole already in the face, a
     boss on it); a circle projected with P still counts (`hole_qa_part` P12).
+  - **CI #267 found two more (the 33 local scenarios had passed):** `revolve_qa_part` P6 (a
+    rectangle hanging from the front face's top edge, the face a Press Pull made taller:
+    with the right outline the face around the rectangle is a second area; the revolve was
+    right, the test's `rect_size` / `ring` wanted exactly one area: now they measure what
+    Revolve takes by itself, `ri.taken`). `extrude_multibody_edit` A (a boss sketched on
+    Body2's top; the earlier cut edited deeper reaches Body2 and notches that top; follow
+    re-projected the notched outline, it split the boss rectangle and the boss Extrude lost
+    its area: Body2 1700 instead of 1736). Rule since: an intact link is re-projected only
+    while nothing is built on the sketch (`_built_on`: anything but its body in InList); a
+    link that broke (its step suppressed or deleted) is always re-projected. So a sketch
+    with a boss keeps the outline it was made with when earlier steps are edited (as before
+    this fix), and keeps the stand-in face after an unsuppress.
   - Undo/redo of suppress or delete puts the old projection back (the follow runs inside the
     operation's transaction); FreeCAD prints "Duplicated external reference" warnings while
     undoing (transient, nothing broken, no pop-up in the scenarios).

@@ -301,11 +301,11 @@ def _state(sketch, step):
 
 def follow(sketch):
     """Auto project's curves show the face as it is at the sketch's place in the timeline,
-    as Fusion's projected edges do: after a step before the sketch reshaped the face, was
-    suppressed or deleted, the face found at the kept point (face_now) is projected again in
-    their place, and the constraints on them move to the new curves on the same line or
-    circle. The sketch keeps hanging on the step it was made on. True when the curves
-    changed. Never raises."""
+    as Fusion's projected edges do: when the step they come from is suppressed or deleted,
+    or (while nothing is built on the sketch) a step before it reshaped the face, the face
+    found at the kept point (face_now) is projected again in their place, and the
+    constraints on them move to the new curves that stand in their place. The sketch keeps
+    hanging on the step it was made on. True when the curves changed. Never raises."""
     try:
         body = _followable(sketch)
         if body is None:
@@ -335,7 +335,12 @@ def _follow(sketch, body, step):
     if obj is want[0] and sub == want[1]:
         return False
     if obj is not None and sub is not None and not _suppressed(obj):
-        # still linked: only a face of another outline is projected again
+        # Still linked: a face of another outline is projected again only while nothing is
+        # built on the sketch. The new curves split its areas differently, and an Extrude
+        # of one of them lost it (extrude_multibody_edit: a boss on a face an earlier cut
+        # was made to reach).
+        if _built_on(sketch):
+            return False
         try:
             now = want[0].Shape.getElement(want[1])
             if hole.same_outer_boundary(obj.Shape.getElement(sub), now):
@@ -343,6 +348,15 @@ def _follow(sketch, body, step):
         except Exception:
             pass
     return _reproject(sketch, want)
+
+
+def _built_on(sketch):
+    """True when another object uses the sketch (an Extrude of it, a sketch projecting it)."""
+    try:
+        body = sketch.getParentGeoFeatureGroup()
+        return any(o is not body for o in sketch.InList)
+    except Exception:
+        return True
 
 
 def _suppressed(obj):

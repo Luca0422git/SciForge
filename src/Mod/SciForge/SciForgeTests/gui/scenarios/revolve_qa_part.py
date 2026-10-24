@@ -102,13 +102,15 @@ def ring(sketch, point, direction=V(1, 0, 0)):
     """Volume a full turn of the sketch's one area about the line (point, direction) makes
     (Pappus: area x the path of its centre). The area is drawn with the mouse next to an
     edge of the part, so it may sit a hair off the edge: a ring, not a full bar."""
-    areas = ri.regions(sketch)
+    areas = ri.taken(sketch)
     return ri.pappus(areas[0][1], point, direction) if len(areas) == 1 else 0.0
 
 
 def rect_size(sketch):
-    """(width along the edge, height away from it) of the one area of a sketch."""
-    areas = ri.regions(sketch)
+    """(width along the edge, height away from it) of the one area of a sketch Revolve takes
+    by itself (what was drawn: with the face's edges projected, the face around a
+    rectangle drawn on it is an area too)."""
+    areas = ri.taken(sketch)
     if len(areas) != 1:
         return None
     bb = areas[0][1].BoundBox
@@ -239,7 +241,7 @@ def p6_finish():
 def p6_revolve():
     s["rect"] = rect_size(s["sk"])
     h.check("P6 one 6 x 4 area", s["rect"] is not None and near(s["rect"][0], 6.0), s["rect"])
-    areas = ri.regions(s["sk"])
+    areas = ri.taken(s["sk"])
     if areas:
         bb = areas[0][1].BoundBox
         h.check("P6 just under the top edge", 14.0 < bb.ZMax <= 15.0 and near(bb.YMax, 0.0), bb)
