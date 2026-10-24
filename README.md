@@ -27,7 +27,7 @@ the timeline, the navigation bar, `S` for command search and Fusion's keys and m
 there. It is built on [FreeCAD](https://www.freecad.org), which does the heavy geometry work, and
 adds its own interface and tools on top.
 
-**This is a beta (0.1.0-beta.2).** Every feature is tested automatically by driving the real
+**This is a beta (0.1.0-beta.2.1).** Every feature is tested automatically by driving the real
 program with clicks and keys, but SciForge has had little use by anyone except the person
 building it, so expect rough edges. Save often, and read the
 [known issues](docs/sciforge/known-issues.md) before you start. Your feedback is what makes the

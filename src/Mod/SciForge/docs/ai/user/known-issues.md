@@ -1,6 +1,6 @@
 <!-- A copy of docs/sciforge/known-issues.md for AI models, made by tools/sciforge/make_ai_docs.py: edit the original, then run the script. -->
 
-# Known issues in SciForge 0.1.0-beta.2
+# Known issues in SciForge 0.1.0-beta.2.1
 
 This is a beta: it works, but it is not finished. These are the things you are most likely to
 run into, each with what you can do about it. The list is kept short on purpose and is updated

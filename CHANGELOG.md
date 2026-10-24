@@ -5,6 +5,22 @@ its own section of this file (the release notes are made from it), so every rele
 section here whose heading is exactly its version number, like `## 0.1.0-beta` below. Known
 problems are in [docs/sciforge/known-issues.md](docs/sciforge/known-issues.md).
 
+## 0.1.0-beta.2.1
+
+**A patch of 0.1.0-beta.2.** Only SciForge's own files changed: **Help > Check for Updates >
+Update now** installs it in about a minute.
+
+### Fixed
+
+- **Create Sketch on a face that a later step changed** (a Draft, a fillet or chamfer round
+  it, Press Pull) showed the face's outline from before that step, so the purple outline was
+  too big or in the wrong place. It now shows the face as it is. Suppressing or deleting that
+  step later leaves the sketch and what you built on it in place, and the outline follows.
+  Sketches made before this patch keep the outline they got: make them again to get the right
+  one. (In 0.1.0-beta too.)
+- **Hole > From Sketch** no longer drills at the circles of the face the sketch is on (a hole
+  already in the face, a boss standing on it), only at the points and circles you drew.
+
 ## 0.1.0-beta.2
 
 **The second beta.** Two new tabs, a complete SURFACE tab, a Data Panel like Fusion's, and a big

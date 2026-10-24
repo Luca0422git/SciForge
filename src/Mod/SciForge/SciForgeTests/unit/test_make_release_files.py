@@ -222,6 +222,15 @@ class Built(Fixture):
         self.assertIn("Get-FileHash", notes)
         self.assertTrue(notes.endswith("\n"))
 
+    def test_a_patch_release_says_so_first(self):
+        plain = self.build()["release-notes.md"]
+        self.assertNotIn("A patch release", plain)
+        notes = self.build(patch_of="0.0.9-beta")["release-notes.md"]
+        self.assertTrue(notes.startswith("**A patch release.**"))
+        self.assertIn("since 0.0.9-beta", notes)
+        self.assertIn("Update now", notes)
+        self.assertIn("First public beta.", notes)  # the changelog section follows
+
     def test_the_notes_of_the_smartscreen_text_come_from_the_file_given(self):
         notes = self.build(smartscreen="# Windows protected your PC\n\nA different sentence here.\n")["release-notes.md"]
         self.assertIn("A different sentence here.", notes)

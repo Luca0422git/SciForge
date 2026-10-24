@@ -1,4 +1,4 @@
-# Known issues in SciForge 0.1.0-beta.2
+# Known issues in SciForge 0.1.0-beta.2.1
 
 This is a beta: it works, but it is not finished. These are the things you are most likely to
 run into, each with what you can do about it. The list is kept short on purpose and is updated

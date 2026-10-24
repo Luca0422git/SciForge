@@ -122,6 +122,7 @@ Quick updates come from green "SciForge tests" runs on `develop`.
 | 2026-10-23 | Build Fusion's SHEET METAL and PLASTIC tabs and complete the SURFACE tab (Luca: "plan all the features that belong in those tabs, and then build them all. In one shot") | Plan `docs/sciforge/plan-sheet-metal-plastic-surface.md`, research `docs/sciforge/dev/research/`, wave 6 briefs |
 | 2026-10-09 | Until the branding pass lands, CI's Windows build ships the portable 7z only, no installer | The FreeCAD NSIS installer would install over / clash with a real FreeCAD install |
 | 2026-10-10 | Repository made public by Luca | Free GitHub Actions minutes for tests and full builds (was the open question on cost) |
+| 2026-10-24 | **Patch releases** for bug fixes in SciForge's own files (Luca: "4 hours to have a build ready is abismal ... I need a way to quick patch the software ... a quick update without extracting a zip"; a robotics team, college students and his manager are about to use the beta). Versions `0.1.0-beta.2.1`, `.2`...; full builds stay for real releases and core changes | `docs/sciforge/patch-release.md`; the in-app Update now already installs module-only releases |
 | 2026-10-20 | First public release is **0.1.0-beta**; no code signing (Luca: no money for it), so the GitHub page and release notes explain Windows SmartScreen; update check with an easy install; a minimal welcome ("dont overdo it") | Brief `docs/sciforge/dev/briefs/beta-release.md` (milestones R0-R5) |
 | 2026-10-20 | Branch `experimental` (from develop `ae1d3768`) for fixing Fusion workflows that do not work in SciForge yet; the first is Draft of curved faces. This work is pushed to `experimental`, not `develop` | Luca: "some of the workflows that id regularly do on fusion dont exactly work ... New branch time. Call it experimental. thats where youll do your work" |
 | 2026-10-21 | A value past what fits (fillet radius, chamfer, draft angle, shell wall, press pull ...) stops at the largest value that works, with a note, instead of an error; formulas are not rewritten (they keep the error). Deliberately differs from Fusion | Luca: "limit edits to stop at that limit ... add the functionality to any tool that can give that sort of error" |
@@ -1564,6 +1565,33 @@ Quick updates come from green "SciForge tests" runs on `develop`.
   default; Ruled's default type. Each guess is marked G in the parity docs.
 
 ## Session log
+
+### Session log: Patch release button (`develop`, 2026-10-24)
+
+Luca: "is there such thing as an in app update from a quick update? ... I dont have to wait 4
+hours every time i want to fix a bug ... this software has to be perfect. and if it isnt ... I
+need a way to quick patch the software ... there has to be a quick update without extracting a
+zip". The in-app half existed (Update now: same core id -> the module zip, `install_update.ps1`,
+restart; `update_core.plan`); what was missing was publishing a release without the build.
+
+- `.github/workflows/sciforge-patch-release.yml` (workflow_dispatch, always on `develop`'s newest
+  commit; a push to develop touching its files runs a trial). Jobs: prepare (VERSION/tag, core id,
+  `patch_release.py` picks the base = newest release with the same core and all four files and
+  refuses a version already released or not newer; CHANGELOG section; "SciForge tests" green on
+  the sha; `Release` is an ancestor; the quick update with `--core`), windows (base portable .7z
+  -> `repack_module.sh portable` -> `make_installer.sh` as in scenario-debug -> windows_golden on
+  it), linux (base AppImage -> `repack_module.sh appimage` with appimagetool,
+  APPIMAGE_EXTRACT_AND_RUN -> `run_tests.sh --only base` on it), release (make_release_files
+  `--require-all --patch-of`, `gh release create --target sha`, then Release moved with the git
+  refs API, force=false). Workflow-token tags start no other workflow (no full build).
+- `patch_release.py` + `SciForgeTests/unit/test_patch_release.py` (base choice, short core ids,
+  drafts, names `_v<base>-` -> `_v<new>-`, two-page `gh api --paginate` output, trial mode);
+  `make_release_files.py --patch-of` ("**A patch release.**" first in the notes, unit test).
+- The first patch: `0.1.0-beta.2.1` (VERSION, `_FALLBACK_VERSION`, README, known-issues title,
+  CHANGELOG "Fixed": sketch on a reshaped face, From Sketch holes and the face's circles).
+- **workflow_dispatch needs the workflow on the default branch (`Release`)**: the button shows
+  only after Release is moved to develop once (Luca's go). Docs for Luca:
+  `docs/sciforge/patch-release.md`; CLAUDE.md has the rule.
 
 ### Session log: Sketch on a reshaped face (`develop`, 2026-10-23, after the beta.2 release)
 

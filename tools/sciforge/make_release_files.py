@@ -11,6 +11,7 @@
 
   tools/sciforge/make_release_files.py --tag sciforge-v0.1.0-beta --core abc1234 \\
       --assets DIR --out DIR [--date YYYY-MM-DD] [--repo OWNER/NAME] [--require-all]
+      [--patch-of VERSION]   (a patch release: its notes start by saying so)
 
 --assets is searched (all sub-folders) for the installer (*-installer.exe), the portable build
 (*.7z), the AppImage (*.AppImage) and the quick update (SciForge-quick-update-*.zip).
@@ -145,8 +146,20 @@ def checksums_text(hashes):
     return "".join("%s  %s\n" % (hashes[name], name) for name in sorted(hashes))
 
 
-def release_notes(version, tag, section, smartscreen, names, hashes, repo=DEFAULT_REPO):
+def patch_note(version, base_version):
+    """The few lines a patch release adds at the top of its notes (patch_release.py)."""
+    return (
+        "**A patch release.** Only SciForge's own files changed since %s, so if you have %s "
+        "or a later patch, **Help > Check for Updates > Update now** installs %s in a minute "
+        "(a few MB, SciForge restarts by itself). The downloads below are %s's program with "
+        "%s's SciForge files in it." % (base_version, base_version, version, base_version, version)
+    )
+
+
+def release_notes(version, tag, section, smartscreen, names, hashes, repo=DEFAULT_REPO, patch_of=None):
     parts = [section.strip(), ""]
+    if patch_of:
+        parts = [patch_note(version, patch_of), ""] + parts
     parts.append("## Which file do I download?")
     parts.append("")
     if "installer" in names:
@@ -193,9 +206,10 @@ def release_notes(version, tag, section, smartscreen, names, hashes, repo=DEFAUL
     return "\n".join(parts).rstrip() + "\n"
 
 
-def build_all(tag, core, date, repo, files, changelog, smartscreen, require_all=False):
+def build_all(tag, core, date, repo, files, changelog, smartscreen, require_all=False, patch_of=None):
     """{file name: text} for the three generated files. ``files``: {role: path of a built
-    file}. Raises ReleaseFilesError with a plain sentence."""
+    file}; ``patch_of``: the version a patch release is built on. Raises ReleaseFilesError
+    with a plain sentence."""
     version = version_core.canonical(tag)
     if version is None or version_core.tag_for(version) != tag:
         raise ReleaseFilesError("%r is not a release tag like %s0.1.0-beta" % (tag, version_core.TAG_PREFIX))
@@ -221,7 +235,9 @@ def build_all(tag, core, date, repo, files, changelog, smartscreen, require_all=
     return {
         "sciforge-release.json": release_json(version, tag, core, date, repo, names, hashes),
         "SHA256SUMS.txt": checksums_text(hashes),
-        "release-notes.md": release_notes(version, tag, section, smartscreen, names, hashes, repo),
+        "release-notes.md": release_notes(
+            version, tag, section, smartscreen, names, hashes, repo, patch_of=patch_of
+        ),
     }
 
 
@@ -244,6 +260,7 @@ def main(argv=None):
     parser.add_argument("--changelog", default=CHANGELOG)
     parser.add_argument("--smartscreen", default=SMARTSCREEN)
     parser.add_argument("--require-all", action="store_true")
+    parser.add_argument("--patch-of", default="", help="a patch release: the version it is built on")
     parser.add_argument(
         "--list-file", default="", help="write the paths to attach to the GitHub release here, one per line"
     )
@@ -254,6 +271,7 @@ def main(argv=None):
         made = build_all(
             args.tag, args.core, date, args.repo, files,
             _read(args.changelog), _read(args.smartscreen), args.require_all,
+            patch_of=version_core.canonical(args.patch_of) if args.patch_of else None,
         )  # fmt: skip
     except ReleaseFilesError as exc:
         print("[SciForge] make_release_files: %s" % exc, file=sys.stderr)

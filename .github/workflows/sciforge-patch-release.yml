@@ -1,0 +1,358 @@
+# SPDX-License-Identifier: LGPL-2.1-or-later
+# SciForge: a PATCH release, without the hours-long build (docs/sciforge/patch-release.md).
+#
+# When only SciForge's own files changed since a full release (the same "core id",
+# tools/sciforge/core_id.sh), this publishes the newest commit of `develop` as a new version
+# in about half an hour: the earlier full release's Windows portable build and Linux AppImage
+# with the new SciForge module put in (tools/sciforge/repack_module.sh), a Windows installer
+# made from that portable build, and the quick update. Every SciForge with that core then
+# offers Update now, which installs the few MB of the module and restarts (update_core.plan).
+#
+# Luca starts it: GitHub > Actions > "SciForge patch release" > Run workflow (any branch in
+# "Use workflow from": it always takes develop's newest commit). It refuses, before doing
+# anything, when:
+#   - src/Mod/SciForge/VERSION is already released or not newer than every release,
+#   - CHANGELOG.md has no section for that version,
+#   - "SciForge tests" has not passed on that commit,
+#   - the compiled part changed since the last full release (then the full build is needed:
+#     push a tag sciforge-v<version>, sciforge-build.yml),
+#   - `Release` has a commit `develop` does not have.
+# Publishing creates the tag and the GitHub Release, then moves `Release` to the commit (a
+# fast-forward; CLAUDE.md: Release holds released builds only). Tags and pushes made here
+# with the workflow's own token start no other workflow (the full build is not started).
+#
+# Untick "publish" for a trial run: everything is built and checked, the notes and files are
+# in the run's summary and artifacts, nothing is published. A push to develop that changes this
+# machinery runs such a trial by itself.
+
+name: SciForge patch release
+
+on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: >-
+          Publish the patch (untick for a trial run that builds and checks everything and
+          publishes nothing)
+        type: boolean
+        default: true
+  push:
+    branches: [develop]
+    paths:
+      - .github/workflows/sciforge-patch-release.yml
+      - tools/sciforge/patch_release.py
+      - tools/sciforge/repack_module.sh
+
+concurrency:
+  group: sciforge-patch-release
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  PUBLISH: ${{ github.event_name == 'workflow_dispatch' && inputs.publish }}
+
+jobs:
+  # The checks, the base release, the new module (the quick update). A few minutes.
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    outputs:
+      sha: ${{ steps.what.outputs.sha }}
+      version: ${{ steps.what.outputs.version }}
+      tag: ${{ steps.what.outputs.tag }}
+      core: ${{ steps.what.outputs.core }}
+      base_tag: ${{ steps.base.outputs.base_tag }}
+      base_version: ${{ steps.base.outputs.base_version }}
+      base_portable: ${{ steps.base.outputs.base_portable }}
+      base_appimage: ${{ steps.base.outputs.base_appimage }}
+      new_portable: ${{ steps.base.outputs.new_portable }}
+      new_appimage: ${{ steps.base.outputs.new_appimage }}
+    steps:
+      - name: Checkout develop (all history, for the core id)
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: develop
+          fetch-depth: 0
+          filter: blob:none
+          submodules: false
+
+      - name: Version, tag and core id
+        id: what
+        run: |
+          sha="$(git rev-parse HEAD)"
+          version="$(tr -d '[:space:]' < src/Mod/SciForge/VERSION)"
+          core="$(tools/sciforge/core_id.sh)"
+          echo "sha=${sha}" >> "$GITHUB_OUTPUT"
+          echo "version=${version}" >> "$GITHUB_OUTPUT"
+          echo "tag=sciforge-v${version}" >> "$GITHUB_OUTPUT"
+          echo "core=${core}" >> "$GITHUB_OUTPUT"
+          echo "Patch ${version} from develop ${sha} (core ${core}), publish=${PUBLISH}"
+
+      - name: The base release (same compiled part) and a version not released yet
+        id: base
+        run: |
+          gh api "repos/${GITHUB_REPOSITORY}/releases?per_page=100" --paginate > releases.json
+          dry=""
+          if [ "${PUBLISH}" != "true" ]; then dry="--dry-run"; fi
+          python3 tools/sciforge/patch_release.py --releases releases.json \
+            --version "${{ steps.what.outputs.version }}" --core "${{ steps.what.outputs.core }}" \
+            --github-output "$GITHUB_OUTPUT" ${dry}
+
+      - name: CHANGELOG.md has a section for the version
+        run: |
+          python3 - "${{ steps.what.outputs.version }}" <<'PYEOF'
+          import importlib.util, sys
+          spec = importlib.util.spec_from_file_location("mrf", "tools/sciforge/make_release_files.py")
+          mrf = importlib.util.module_from_spec(spec); spec.loader.exec_module(mrf)
+          version = sys.argv[1]
+          if mrf.changelog_section(open("CHANGELOG.md", encoding="utf-8").read(), version) is None:
+              print("::error::CHANGELOG.md has no section '## %s' saying what the patch fixes." % version)
+              sys.exit(1)
+          print("CHANGELOG.md has a section for %s" % version)
+          PYEOF
+
+      - name: The tests passed on this commit
+        run: |
+          sha="${{ steps.what.outputs.sha }}"
+          green="$(gh api "repos/${GITHUB_REPOSITORY}/actions/workflows/sciforge-tests.yml/runs?head_sha=${sha}&per_page=20" \
+            --jq '[.workflow_runs[] | select(.conclusion == "success")] | length')"
+          if [ "${green:-0}" -gt 0 ]; then
+            echo "SciForge tests passed on ${sha}"
+          elif [ "${PUBLISH}" = "true" ]; then
+            echo "::error::SciForge tests have not passed on develop's newest commit (${sha:0:8}) yet. Wait until Actions > SciForge tests is green for it, then run this again."
+            exit 1
+          else
+            echo "::warning::(trial run) SciForge tests have not passed on ${sha:0:8} yet."
+          fi
+
+      - name: Release can move to this commit (a fast-forward)
+        run: |
+          git fetch -q origin Release
+          if git merge-base --is-ancestor origin/Release "${{ steps.what.outputs.sha }}"; then
+            echo "Release ($(git rev-parse --short origin/Release)) is behind develop: it can be moved"
+          else
+            echo "::error::The Release branch has a commit develop does not have, so it cannot simply move to develop. Ask Claude to look."
+            exit 1
+          fi
+
+      - name: The new module (quick update)
+        run: |
+          mkdir -p patch
+          tools/sciforge/make_quick_update.sh --out patch/quick \
+            --zip "patch/SciForge-quick-update-v${{ steps.what.outputs.version }}.zip" \
+            --commit "${{ steps.what.outputs.sha }}" --date "$(date -u +%Y-%m-%d)" \
+            --core "${{ steps.what.outputs.core }}"
+
+      - name: Upload the new module
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: patch-module
+          path: patch/
+          retention-days: 7
+
+  # Windows: the base's portable build with the new module, the installer made from it, and
+  # the golden models on it.
+  windows:
+    needs: prepare
+    runs-on: windows-2022
+    timeout-minutes: 75
+    permissions:
+      contents: read
+      actions: read
+    defaults:
+      run:
+        shell: bash
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NAME: ${{ needs.prepare.outputs.new_portable }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 1
+          submodules: false
+
+      - uses: prefix-dev/setup-pixi@82d477f15f3a381dbcc8adc1206ce643fe110fb7 # v0.9.3
+        with:
+          pixi-version: v0.59.0
+          cache: false
+          run-install: false
+          post-cleanup: false  # (EPERM on pixi.exe turned a green job red: sciforge-build.yml)
+
+      - name: The base's portable build with the new module
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name patch-module --dir patch
+          gh release download "${{ needs.prepare.outputs.base_tag }}" --repo "$GITHUB_REPOSITORY" \
+            --pattern "${{ needs.prepare.outputs.base_portable }}" --dir base
+          tools/sciforge/repack_module.sh portable --module patch/quick/SciForge \
+            --archive "base/${{ needs.prepare.outputs.base_portable }}" \
+            --name "${NAME}" --dir package/rattler-build/windows
+          rm -rf base
+
+      - name: The installer, made from it
+        working-directory: package/rattler-build
+        run: |
+          pixi run -e package bash -c 'cd windows && bash make_installer.sh "${NAME}"'
+          ls -la windows/*-installer.exe
+
+      - name: Golden models on it
+        run: bash tools/sciforge/windows_golden.sh --built package/rattler-build/windows test-output
+
+      - name: Upload the Windows files
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: patch-windows
+          path: |
+            package/rattler-build/windows/*.7z
+            package/rattler-build/windows/*-installer.exe
+          retention-days: 7
+          compression-level: 0
+
+      - name: Upload the test reports
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: patch-test-windows
+          path: test-output/
+          retention-days: 14
+
+  # Linux: the base's AppImage with the new module, then the tests a full build runs on its
+  # AppImage (unit, golden models, GUI smoke and journey).
+  linux:
+    needs: prepare
+    runs-on: ubuntu-22.04
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      IMAGE: ${{ needs.prepare.outputs.new_appimage }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 1
+          submodules: false
+
+      - name: The base's AppImage with the new module
+        run: |
+          gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name patch-module --dir patch
+          gh release download "${{ needs.prepare.outputs.base_tag }}" --repo "$GITHUB_REPOSITORY" \
+            --pattern "${{ needs.prepare.outputs.base_appimage }}" --dir base
+          tools/sciforge/repack_module.sh appimage --module patch/quick/SciForge \
+            --archive "base/${{ needs.prepare.outputs.base_appimage }}" --out "out/${IMAGE}"
+          rm -rf base
+
+      - name: Upload the AppImage
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: patch-linux
+          path: out/*.AppImage
+          retention-days: 7
+          compression-level: 0
+
+      - name: Test it (unit, golden models, GUI smoke and journey)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq xvfb xauth libgl1-mesa-dri
+          mkdir -p .sciforge-cache/sciforge
+          (cd .sciforge-cache/sciforge && "$GITHUB_WORKSPACE/out/${IMAGE}" --appimage-extract >/dev/null)
+          tools/sciforge/run_tests.sh --freecad .sciforge-cache/sciforge --out test-output --only base
+
+      - name: Upload the test reports
+        if: always()
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: patch-test-linux
+          path: test-output/
+          retention-days: 14
+
+  # The release: notes, sciforge-release.json, checksums; then (publish only) the tag, the
+  # GitHub Release and Release moved to the commit. The only job that may write.
+  release:
+    needs: [prepare, windows, linux]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      SHA: ${{ needs.prepare.outputs.sha }}
+      VERSION: ${{ needs.prepare.outputs.version }}
+      TAG: ${{ needs.prepare.outputs.tag }}
+      CORE: ${{ needs.prepare.outputs.core }}
+      BASE_TAG: ${{ needs.prepare.outputs.base_tag }}
+      BASE_VERSION: ${{ needs.prepare.outputs.base_version }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5.0.0
+        with:
+          ref: ${{ needs.prepare.outputs.sha }}
+          fetch-depth: 1
+          submodules: false
+
+      - name: Get the files
+        run: |
+          for name in patch-module patch-windows patch-linux; do
+            gh run download "$GITHUB_RUN_ID" --repo "$GITHUB_REPOSITORY" --name "$name" --dir "assets/$name"
+          done
+          rm -rf assets/patch-module/quick
+          find assets -type f -exec ls -la {} \;
+
+      - name: Notes, sciforge-release.json and SHA256SUMS.txt
+        run: |
+          python3 tools/sciforge/make_release_files.py --tag "$TAG" --core "$CORE" \
+            --assets assets --out release-files --list-file attach.txt --require-all \
+            --repo "$GITHUB_REPOSITORY" --patch-of "$BASE_VERSION"
+          {
+            echo "## Patch ${TAG} on ${BASE_TAG} ($( [ "${PUBLISH}" = "true" ] && echo "published" || echo "trial run: nothing published" ))"
+            echo
+            echo "develop ${SHA}, core id \`${CORE}\`"
+            echo
+            echo "### Release notes"
+            cat release-files/release-notes.md
+            echo
+            echo "### sciforge-release.json"
+            echo '```json'
+            cat release-files/sciforge-release.json
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "---- files to attach:"
+          cat attach.txt
+
+      - name: Upload the release files (trial run result)
+        uses: actions/upload-artifact@330a01c490aca151604b8cf639adc76d48f6c5d4 # v5.0.0
+        with:
+          name: release-files-${{ env.TAG }}
+          path: release-files/
+          retention-days: 30
+          compression-level: 0
+
+      # A pre-release when the version has a pre-release part (0.1.0-beta.2.1): the update
+      # check offers it to betas.
+      - name: Publish the GitHub Release (and its tag)
+        if: env.PUBLISH == 'true'
+        run: |
+          flags=()
+          case "${VERSION}" in *-*) flags+=(--prerelease) ;; esac
+          mapfile -t files < attach.txt
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --target "$SHA" \
+            --title "SciForge ${VERSION}" --notes-file release-files/release-notes.md \
+            "${flags[@]}" "${files[@]}"
+          echo "Published: https://github.com/${GITHUB_REPOSITORY}/releases/tag/${TAG}" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Move Release to the commit (a fast-forward)
+        if: env.PUBLISH == 'true'
+        run: |
+          gh api -X PATCH "repos/${GITHUB_REPOSITORY}/git/refs/heads/Release" -f sha="$SHA" -F force=false >/dev/null
+          echo "Release is now ${SHA}" >> "$GITHUB_STEP_SUMMARY"

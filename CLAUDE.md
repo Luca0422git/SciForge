@@ -15,6 +15,11 @@ Rules that are easy to forget:
 - `Release` holds released builds only: it is fast-forwarded to a tested `develop` commit, and
   tagged `sciforge-v<version>`, only when Luca gives the green light for that release. Never
   commit to it directly or force-push it (`docs/sciforge/dev/briefs/beta-release.md`).
+- Bug fixes in SciForge's own files go out as **patch releases** (no 4-hour build): set the next
+  number in `src/Mod/SciForge/VERSION` (`0.1.0-beta.2` -> `0.1.0-beta.2.1`) and its
+  `_FALLBACK_VERSION`, add its CHANGELOG section, push `develop`; when the tests are green Luca
+  runs Actions > SciForge patch release, which tags, publishes and moves `Release` itself
+  (`docs/sciforge/patch-release.md`).
 
 - New code goes in `src/Mod/SciForge/`. Any change to FreeCAD's own files gets a `SCIFORGE:`
   comment and an entry in `docs/sciforge/core-patches.md`.
