@@ -12,7 +12,8 @@ needed when the compiled program changes, or for a big release you want built fr
 
 1. Claude fixes the bug on `develop`, sets the new number in `src/Mod/SciForge/VERSION`
    (`0.1.0-beta.2` becomes `0.1.0-beta.2.1`, then `.2`, ...) and writes what was fixed in
-   `CHANGELOG.md`. Several fixes can go into one patch.
+   `CHANGELOG.md` (only a "### Fixed" list: the release notes say "A patch release" by
+   themselves). Several fixes can go into one patch.
 2. Wait until **Actions > SciForge tests** has a green tick for that commit (about 75
    minutes; Claude says when).
 3. On GitHub (the phone app or the website): **Actions > SciForge patch release > Run

@@ -1594,7 +1594,14 @@ restart; `update_core.plan`); what was missing was publishing a release without 
   portable repack 6 min, installer and golden models; release files). Not pushed until the
   patch is out (a new develop commit would need its own green tests first).
 - **workflow_dispatch needs the workflow on the default branch (`Release`)**: the button shows
-  only after Release is moved to develop once (Luca's go). Docs for Luca:
+  only after Release is moved to develop once (Luca's go).
+- **0.1.0-beta.2.1 published 2026-10-24 17:18 UTC** (Luca: "publish the patch"): CI #270 green on
+  1a511933; Release fast-forwarded fe50c786..1a511933 by this session; the workflow started with
+  the GitHub tools (run 40113941643, 21 minutes). Release page: prerelease, installer, .7z,
+  AppImage, quick update, sciforge-release.json (core fd4a01850d = beta.2's, so Update now from
+  beta.2 is the 7 MB module), SHA256SUMS. Small thing for next time: the notes say "A patch
+  release" twice (the generated first line and the CHANGELOG section's own intro): a patch's
+  CHANGELOG section needs only its "### Fixed" list (docs/sciforge/patch-release.md says so). Docs for Luca:
   `docs/sciforge/patch-release.md`; CLAUDE.md has the rule.
 
 ### Session log: Sketch on a reshaped face (`develop`, 2026-10-23, after the beta.2 release)
